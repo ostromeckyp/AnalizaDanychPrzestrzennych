@@ -193,8 +193,9 @@ def test_render_report_has_tables_and_m2_line(toy_df):
               "wiersze lądu"):
         assert s in md
     a = md.index("Tabela A")
-    rows = [l.split("|")[1].strip() for l in md[a:].splitlines()[4:9]]
-    assert rows == ["all-water", "Otsu", "SCL==6", "RF", "RF auto-only"]
+    rows = [l.split("|")[1].strip() for l in md[a:].splitlines()[4:10]]
+    assert rows == ["all-water", "Otsu", "SCL==6", "RF", "RF t*", "RF auto-only"]
+    assert "t* po foldach" in md
 
 
 # --- build_table na syntetycznych scenach ---------------------------------------------
@@ -254,3 +255,73 @@ def test_build_table_filters_rows(tmp_path):
     assert d.loc[0, "block"] == "744_584"       # x = 372055 -> 744, y = 292445 -> 584
     assert df.date.map(type).eq(str).all() and not df[FEATURES].isna().any().any()
     assert df.attrs["dropped"] == {"unlabelled_or_skip": 2, "not_usable": 1, "not_ok": 1, "nan": 0}
+
+
+# --- R18: zagnieżdżony jednostronny próg wody --------------------------------------------
+
+def test_choose_threshold_known_optimum():
+    # ląd human: P = .55, .62, .70 (te trzeba odrzucić progiem > .70); woda: .90, .95
+    p = np.array([.55, .62, .70, .90, .95])
+    y = np.array([0, 0, 0, 1, 1])
+    t = rf._choose_threshold(p, y, np.ones(5, bool))
+    assert t == 0.75        # pierwszy próg z siatki, przy którym BA = 1
+
+
+def test_choose_threshold_tie_gives_smallest():
+    p = np.array([.20, .95, .95])       # ląd i woda rozdzielone już przy 0,5
+    t = rf._choose_threshold(p, np.array([0, 1, 1]), np.ones(3, bool))
+    assert t == 0.5
+
+
+def test_choose_threshold_is_one_sided_and_on_grid():
+    assert min(rf.THRESHOLD_GRID) == 0.5 and max(rf.THRESHOLD_GRID) == 0.9 and len(rf.THRESHOLD_GRID) == 9
+    p = np.array([.1, .2, .9, .9])
+    assert rf._choose_threshold(p, np.array([0, 0, 1, 1]), np.ones(4, bool)) >= 0.5
+
+
+def test_choose_threshold_ignores_non_human_and_no_land_gives_half():
+    p = np.array([.6, .6, .9, .9])
+    y = np.array([0, 0, 1, 1])
+    only_water_human = np.array([False, False, True, True])
+    assert rf._choose_threshold(p, y, only_water_human) == 0.5      # brak lądu human
+    # wiersze nie-human nie wpływają na wybór
+    assert rf._choose_threshold(p, y, np.array([True, False, True, True])) == 0.65
+
+
+def test_threshold_choice_never_sees_outer_test_rows(toy_df, monkeypatch):
+    seen = []
+    orig = rf._oof_proba
+
+    def spy(d, *a, **k):
+        seen.append(set(d["id"]))
+        return orig(d, *a, **k)
+
+    monkeypatch.setattr(rf, "_oof_proba", spy)
+    res = grouped_cv(toy_df, "block")
+    assert len(seen) == len(res["folds"]) and len(res["thresholds"]) == len(res["folds"])
+    for ids, (tr, te) in zip(seen, res["folds"]):
+        assert ids == set(toy_df.id.iloc[tr])
+        assert ids.isdisjoint(set(toy_df.id.iloc[te]))
+
+
+def test_grouped_cv_reports_rf_t(toy_df):
+    res = grouped_cv(toy_df, "block")
+    assert all(t in rf.THRESHOLD_GRID for t in res["thresholds"])
+    assert {"oa", "bacc"} <= res["human"]["rf_t"].keys() and "rf_t" in res["oof"]
+
+
+def test_final_threshold_on_grid(toy_df):
+    assert rf.final_threshold(toy_df) in rf.THRESHOLD_GRID
+
+
+def test_load_model_defaults_threshold_and_predict_water_uses_it(tmp_path, toy_df):
+    model = train_final(toy_df)
+    save_model(model, tmp_path / "m.joblib")
+    b = load_model(tmp_path / "m.joblib")
+    assert b["water_threshold"] == 0.5
+    X = toy_df[FEATURES].to_numpy()
+    assert (rf.predict_water(b, X) == (model.predict_proba(X)[:, 1] >= 0.5)).all()
+    save_model(model, tmp_path / "m2.joblib", {"water_threshold": 0.9})
+    b2 = load_model(tmp_path / "m2.joblib")
+    assert b2["water_threshold"] == 0.9
+    assert rf.predict_water(b2, X).sum() <= rf.predict_water(b, X).sum()

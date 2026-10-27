@@ -73,6 +73,8 @@ def main():
     report = rf.render_report(res, imp, counts, imp_h)
 
     model = rf.train_final(df)
+    t_final = rf.final_threshold(df)
+    log.info("water_threshold (5-fold block OOF, wszystkie wiersze) = %.2f", t_final)
     h = res["by_block"]["human"]["rf"]
     human = df[df.source == "human"]
     meta = {"grid": {"crs": grid.crs, "transform": list(grid.transform)[:6], "width": grid.width,
@@ -80,12 +82,13 @@ def main():
             "labels_sha": rf.file_sha256(labels_path), "config_sha": rf.file_sha256(DEFAULT_CONFIG),
             "n_rows": int(len(df)), "n_human": int(len(human)),
             "label_counts": counts["rows_by_source_class"],
+            "water_threshold": t_final,
             "cv_human_by_block": {"oa": h["oa"], "bacc": h["bacc"], "kappa": h["kappa"]}}
     rf.save_model(model, out / "rf_model.joblib", _clean(meta))
 
     metrics = {"by_scene": _public(res["by_scene"]), "by_block": _public(res["by_block"]),
                "importance": imp.to_dict("records"),
-               "importance_human": imp_h.to_dict("records"), "counts": counts, "report_md": report}
+               "importance_human": imp_h.to_dict("records"), "counts": counts, "water_threshold": t_final, "report_md": report}
     (out / "rf_metrics.json").write_text(json.dumps(_clean(metrics), ensure_ascii=False, indent=1),
                                          encoding="utf-8")
     (out / "rf_report.md").write_text(report, encoding="utf-8")

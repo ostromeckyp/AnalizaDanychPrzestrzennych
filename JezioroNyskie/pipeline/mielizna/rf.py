@@ -15,7 +15,9 @@ Słowniczek (to jest rdzeń obrony ustnej)
   przy każdym podziale (`max_features='sqrt'`); klasa to głosowanie drzew. Zaleta: radzi sobie z nieliniowością i skorelowanymi pasmami, nie wymaga
   skalowania cech. `class_weight="balanced"` waży rzadszą klasę (ląd) tak, by nie była ignorowana,
   a `min_samples_leaf=2` zabrania liścia z jednym punktem (mniej zapamiętywania szumu).
-  Każde drzewo przy każdym podziale losuje podzbiór cech (`max_features='sqrt'`).
+- Próg decyzyjny wody t*: RF zwraca P(woda); domyślnie woda gdy P ≥ 0,5. Produkt używa progu
+  JEDNOSTRONNEGO t* ∈ {0,50; 0,55; …; 0,90} (nigdy poniżej 0,5), wybieranego zagnieżdżoną
+  walidacją krzyżową (patrz `_choose_threshold`). Wynik główny M2 zostaje przy t = 0,5.
 - Przeciek przestrzenny: sąsiednie piksele i piksele tej samej sceny są niemal identyczne. Losowy
   podział wierszy wrzuciłby „bliźniaki" do uczenia i do testu, a model wyglądałby na świetny,
   bo rozpoznaje znane miejsca, a nie uczy się wody. Dlatego walidujemy po GRUPACH: całe bloki
@@ -62,12 +64,14 @@ SEED = 42
 BLOCK_M = 500
 HEADLINE_STRATUM = "shore"
 N_BOOT = 2000
-METHODS = ("rf", "otsu", "scl", "all_water", "rf_auto")
+THRESHOLD_GRID = tuple(float(t) for t in np.round(np.arange(0.50, 0.9001, 0.05), 2))
+METHODS = ("rf", "rf_t", "otsu", "scl", "all_water", "rf_auto")
 TABLE_ORDER = ("all_water", "otsu", "scl", "rf", "rf_auto")   # kolejność wierszy w raporcie
+TABLE_ORDER_T = ("all_water", "otsu", "scl", "rf", "rf_t", "rf_auto")   # tabele A i C (z „RF t*")
 TABLE_COLUMNS = FEATURES + ["y", "date", "block", "otsu_pred", "scl_pred", "source", "stratum",
                             "id", "otsu_t"]
 METHOD_NAMES = {"all_water": "all-water", "otsu": "Otsu", "scl": "SCL==6", "rf": "RF",
-                "rf_auto": "RF auto-only"}
+                "rf_auto": "RF auto-only", "rf_t": "RF t*"}
 
 
 # --- tabela uczenia ---------------------------------------------------------------------
@@ -303,12 +307,109 @@ def make_model(seed: int = SEED) -> RandomForestClassifier:
                                   n_jobs=-1, random_state=seed)
 
 
+def _oof_proba(df: pd.DataFrame, n_splits: int = 5) -> np.ndarray:
+    """P(woda) poza próbą dla każdego wiersza: StratifiedGroupKFold po blokach, te same warstwy.
+
+    Co robi: dzieli wiersze `df` na `n_splits` foldów po `block` (warstwy klasa × źródło,
+      shuffle, seed 42), w każdym uczy `make_model()` na reszcie i zapisuje P(woda) dla foldu.
+    Dlaczego tak: próg wolno wybierać tylko z prawdopodobieństw, których model nie widział w
+      uczeniu; w przeciwnym razie RF (prawie zapamiętuje dane) dałby P bliskie 0/1 i próg byłby bez sensu.
+    Wejście → wyjście: tabela (z kolumnami y, source, block) → wektor P(woda) w kolejności wierszy.
+    Jak to obronić: ten sam podział i ten sam model co w głównej walidacji, tylko na mniejszym zbiorze.
+    """
+    d = df.reset_index(drop=True)
+    strata = d["y"].to_numpy() * 2 + (d["source"] == "human").to_numpy()
+    cv = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=SEED)
+    X, y = d[FEATURES].to_numpy(), d["y"].to_numpy()
+    proba = np.zeros(len(d))
+    for tr, te in cv.split(d, strata, d["block"]):
+        proba[te] = make_model().fit(X[tr], y[tr]).predict_proba(X[te])[:, 1]
+    return proba
+
+
+def _choose_threshold(proba: np.ndarray, y: np.ndarray, is_human: np.ndarray,
+                      grid: tuple = THRESHOLD_GRID) -> float:
+    """Próg t* ∈ siatce maksymalizujący BA na punktach `human` (woda iff P ≥ t, jednostronnie).
+
+    Co robi: dla każdego t z siatki liczy dokładność zrównoważoną (BA) na wierszach `human` z
+      przekazanych prawdopodobieństw OOF i zwraca t o największej BA. Remis → NAJMNIEJSZE t.
+      Brak lądu (albo wody) wśród punktów `human` → 0,5, czyli bez zmiany względem domyślnego.
+    Dlaczego tak: (1) Jednostronnie (t ≥ 0,5), bo błąd „ląd uznany za wodę" jest groźny: mielizna
+      wygląda na wodę, obniża się z_max = min h po obserwacjach wody i płytkie miejsca wychodzą
+      jako bezpieczne. Przesuwanie progu w górę wymaga większej pewności, że to woda, więc błędy
+      idą w stronę ostrożniejszych („niebezpiecznych") stref. (2) BA na `human`, bo to trudny brzeg,
+      a punkty `auto` są łatwe z konstrukcji. (3) Zagnieżdżenie (patrz `_nested_threshold`):
+      t* dla foldu testowego jest wybierane bez patrzenia na ten fold, więc wynik na teście nie jest
+      strojony na teście. (4) Remis → najmniejsze t, żeby bez dowodu nie odchodzić od 0,5.
+    Wejście → wyjście: P(woda) OOF, prawda 0/1, maska human → jeden float z siatki.
+    Jak to obronić: siatka (9 wartości) i kryterium są ustalone z góry (R18); koszt pomyłki to
+      więcej stref „niebezpiecznych", nie mniej.
+    """
+    proba, y = np.asarray(proba), np.asarray(y)
+    ph, yh = proba[is_human], y[is_human]
+    if not ((yh == 0).any() and (yh == 1).any()):
+        return 0.5
+    best_t, best_ba = grid[0], -1.0
+    for t in grid:
+        pred = (ph >= t).astype(int)
+        ba = ((pred[yh == 0] == 0).mean() + (pred[yh == 1] == 1).mean()) / 2
+        if ba > best_ba + 1e-12:
+            best_t, best_ba = t, ba
+    return float(best_t)
+
+
+def _human_mask(d: pd.DataFrame) -> np.ndarray:
+    strat = d["stratum"].to_numpy() if "stratum" in d else np.full(len(d), HEADLINE_STRATUM)
+    return ((d["source"] == "human").to_numpy()) & np.isin(strat, L.HUMAN_STRATA)
+
+
+def _nested_threshold(df: pd.DataFrame, train_idx: np.ndarray) -> float:
+    """t* dla jednego foldu zewnętrznego, wybrany WYŁĄCZNIE na jego wierszach uczących.
+
+    Co robi: bierze `df.iloc[train_idx]`, liczy na nich wewnętrzne P(woda) OOF (`_oof_proba`) i
+      wybiera próg regułą `_choose_threshold` na punktach `human` tego podzbioru.
+    Dlaczego tak: wiersze testowe foldu zewnętrznego nie biorą udziału w wyborze progu, więc ocena
+      na nich jest uczciwa (bez „podglądania" testu).
+    Wejście → wyjście: tabela i pozycje wierszy uczących → float.
+    Jak to obronić: test sprawdza, że do wyboru progu trafiają tylko indeksy uczące.
+    """
+    sub = df.iloc[train_idx]
+    p = _oof_proba(sub)
+    return _choose_threshold(p, sub["y"].to_numpy(), _human_mask(sub))
+
+
+def final_threshold(df: pd.DataFrame) -> float:
+    """t* modelu końcowego: ta sama reguła na P(woda) 5-krotnego OOF (po blokach) z całej tabeli.
+
+    Co robi: `_oof_proba` na wszystkich wierszach + `_choose_threshold` na punktach `human`.
+    Dlaczego tak: model końcowy widzi wszystkie etykiety, więc próg musi pochodzić z predykcji
+      poza próbą, nie z dopasowania, które zna swoje dane.
+    Wejście → wyjście: tabela z `build_table` → float (trafia do `bundle["water_threshold"]`).
+    Jak to obronić: identyczna reguła jak w walidacji zagnieżdżonej, tylko bez zewnętrznego testu.
+    """
+    return _choose_threshold(_oof_proba(df), df["y"].to_numpy(), _human_mask(df))
+
+
+def predict_water(bundle: dict, X) -> np.ndarray:
+    """Maska wody (bool) z progiem modelu: P(woda) ≥ bundle["water_threshold"] (domyślnie 0,5).
+
+    Co robi: `predict_proba` modelu z bundle i porównanie z zapisanym progiem t*.
+    Dlaczego tak: produkt ma stosować ten sam jednostronny próg, który wybrała walidacja; `predict`
+      ucięłoby na 0,5.
+    Wejście → wyjście: bundle z `load_model`, macierz cech (n × len(FEATURES)) → bool[n].
+    Jak to obronić: bez progu w bundle wynik jest identyczny z `predict` (0,5).
+    """
+    X = X.to_numpy() if hasattr(X, "to_numpy") else np.asarray(X)
+    return bundle["model"].predict_proba(X)[:, 1] >= bundle.get("water_threshold", 0.5)
+
+
 def _fit_predict(df: pd.DataFrame, tr: np.ndarray, te: np.ndarray, auto_only: bool) -> np.ndarray:
+    """P(woda) dla wierszy `te` z modelu uczonego na `tr` (z `auto_only`: tylko wiersze auto)."""
     train = df.iloc[tr]
     if auto_only:
         train = train[train.source == "auto"]
     m = make_model().fit(train[FEATURES].to_numpy(), train["y"].to_numpy())
-    return m.predict(df.iloc[te][FEATURES].to_numpy())
+    return m.predict_proba(df.iloc[te][FEATURES].to_numpy())[:, 1]
 
 
 def grouped_cv(df: pd.DataFrame, group_col: str, n_splits: int = 5) -> dict:
@@ -320,11 +421,12 @@ def grouped_cv(df: pd.DataFrame, group_col: str, n_splits: int = 5) -> dict:
     Dlaczego tak: (1) po grupach, nie po wierszach, bo sąsiednie piksele i piksele tej samej sceny
       są niemal kopiami: losowy podział przecieka i zawyża wynik. (2) `StratifiedGroupKFold` z
       warstwami klasa × źródło rozprowadza rzadkie punkty „human land" po foldach (zwykły
-      GroupKFold dawał fold bez lądu). (3) Miary z połączonych predykcji, bo fold ma 3–6 punktów
-      lądu, a średnia z takich foldów byłaby szumem. (4) Trening = wszystkie wiersze poza testem,
+      GroupKFold dawał fold bez lądu). (3) Miary z połączonych predykcji, bo fold ma tylko kilka
+      do kilkunastu punktów lądu `human`, a średnia z takich foldów byłaby szumem. (4) Trening = wszystkie wiersze poza testem,
       więc punkty `human` są zawsze oceniane poza próbą.
     Wejście → wyjście: tabela z `build_table`, nazwa kolumny grupy → słownik:
       miary dla wszystkich wierszy pod kluczami metod (`rf`, `otsu`, `scl`, `all_water`, `rf_auto`),
+      `rf_t` (RF z progiem t* wybranym zagnieżdżonie, osobno w każdym foldzie; t* w `thresholds`),
       `human` (warstwa `shore`, wynik główny: z CI i McNemarem), `per_stratum`, `human_pooled`
       (gdy jest `shore_low`), `folds` (lista (train_idx, test_idx)) i `oof` (predykcje).
       Zbyt mało grup albo fold bez lądu `human` rzucają ValueError (cichy zły podział jest gorszy
@@ -344,11 +446,16 @@ def grouped_cv(df: pd.DataFrame, group_col: str, n_splits: int = 5) -> dict:
         if not (human[te] & (df["y"].to_numpy()[te] == 0)).any():
             raise ValueError(f"fold {i} ({group_col}) nie zawiera lądu human; za mało punktów lub grup")
     n = len(df)
-    oof = {"rf": np.zeros(n, int), "rf_auto": np.zeros(n, int)}
+    oof = {"rf": np.zeros(n, int), "rf_auto": np.zeros(n, int), "rf_t": np.zeros(n, int)}
+    thresholds = []
     for tr, te in folds:
-        oof["rf"][te] = _fit_predict(df, tr, te, auto_only=False)
-        oof["rf_auto"][te] = _fit_predict(df, tr, te, auto_only=True)
-    preds = {"rf": oof["rf"], "rf_auto": oof["rf_auto"], "otsu": df["otsu_pred"].to_numpy(),
+        p = _fit_predict(df, tr, te, auto_only=False)
+        t = _nested_threshold(df, tr)
+        thresholds.append(t)
+        oof["rf"][te] = p >= 0.5
+        oof["rf_t"][te] = p >= t
+        oof["rf_auto"][te] = _fit_predict(df, tr, te, auto_only=True) >= 0.5
+    preds = {"rf": oof["rf"], "rf_t": oof["rf_t"], "rf_auto": oof["rf_auto"], "otsu": df["otsu_pred"].to_numpy(),
              "scl": df["scl_pred"].to_numpy(), "all_water": np.ones(n, int)}
     y = df["y"].to_numpy()
 
@@ -364,7 +471,7 @@ def grouped_cv(df: pd.DataFrame, group_col: str, n_splits: int = 5) -> dict:
     res["per_stratum"] = {s: sub(human & (strat == s), True) for s in sorted(set(strat[human]))}
     if "shore_low" in res["per_stratum"]:
         res["human_pooled"] = sub(human & np.isin(strat, L.HUMAN_STRATA), True)
-    res.update(folds=folds, oof=oof, group_col=group_col)
+    res.update(folds=folds, oof=oof, group_col=group_col, thresholds=thresholds)
     return res
 
 
@@ -465,6 +572,7 @@ def load_model(path: Path) -> dict:
     if bundle.get("sklearn_version") != sklearn.__version__:
         warnings.warn(f"Model trenowany w sklearn {bundle.get('sklearn_version')}, "
                       f"zainstalowany {sklearn.__version__}", UserWarning, stacklevel=2)
+    bundle.setdefault("water_threshold", 0.5)
     return bundle
 
 
@@ -535,7 +643,9 @@ def render_report(res: dict, importance: pd.DataFrame, counts: dict,
            f"{d.get('not_usable', 0)}, chmura/brak danych {d.get('not_ok', 0)}, NaN {d.get('nan', 0)}.", ""]
     h = bb["human"]
     out += ["## Tabela A — human `shore`, by_block (wynik główny)", "", _HEAD,
-            *_human_table(h), "", *_mcnemar_lines(h), "",
+            *_human_table(h, TABLE_ORDER_T), "", *_mcnemar_lines(h), "",
+            f"RF t*: próg jednostronny (woda iff P ≥ t*), wybrany zagnieżdżonym CV w każdym foldzie; t* po foldach "
+            f"(by_block): {bb['thresholds']}. Wynik główny M2 poniżej zostaje przy RF @ 0,5.", "",
             f"Macierz pomyłek RF [[tn, fp], [fn, tp]]: {h['rf']['confusion']}", ""]
     rfm, aw = h["rf"], h["all_water"]
     lo, hi = rfm["ci"]["oa"]
@@ -556,8 +666,8 @@ def render_report(res: dict, importance: pd.DataFrame, counts: dict,
     if "shore_low" in bb["per_stratum"]:
         out += ["## Tabela C — `shore_low` i human łącznie, by_block", "",
                 "| set " + _HEAD.replace("\n|---", "\n|---|---", 1),
-                *_human_table(bb["per_stratum"]["shore_low"], label="shore_low"),
-                *_human_table(bb["human_pooled"], label="shore ∪ shore_low"), "",
+                *_human_table(bb["per_stratum"]["shore_low"], TABLE_ORDER_T, label="shore_low"),
+                *_human_table(bb["human_pooled"], TABLE_ORDER_T, label="shore ∪ shore_low"), "",
                 *[f"McNemar (shore_low) " + s[len("McNemar "):] for s in _mcnemar_lines(bb["per_stratum"]["shore_low"])],
                 *[f"McNemar (łącznie) " + s[len("McNemar "):] for s in _mcnemar_lines(bb["human_pooled"])], "",
                 "OA na zbiorze łącznym nie jest porównywalne z M2 (inna mieszanka warstw). Każda warstwa jest "
