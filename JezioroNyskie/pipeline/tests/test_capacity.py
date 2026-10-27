@@ -18,3 +18,10 @@ def test_known_points():
     assert 194.5 <= capacity_to_level(45.62) <= 194.7  # interpelacja 12.09.2024
     assert np.isnan(capacity_to_level(10.0))
     assert abs(level_to_capacity(capacity_to_level(50.0)) - 50.0) < 1e-6
+
+
+def test_explicit_table_matches_default():
+    t = load_table()
+    assert capacity_to_level(65.69, table=t) == capacity_to_level(65.69)
+    assert level_to_capacity(195.0, table=t) == level_to_capacity(195.0)
+    assert np.isnan(capacity_to_level(10.0, table=t))

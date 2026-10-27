@@ -51,3 +51,18 @@ def test_etag_and_304(client, url, q):
     assert r.headers["etag"].startswith('W/"all-testver00001') and r.headers["cache-control"] == "public, max-age=3600"
     r2 = client.get(f"/api/{url}", params=q, headers={"If-None-Match": r.headers["etag"]})
     assert r2.status_code == 304
+
+
+def test_capacity_does_not_touch_environ(dataset, monkeypatch):
+    import os
+    from fastapi.testclient import TestClient
+    from app.data import load_products
+    from app.main import create_app
+    from app.settings import Settings
+    monkeypatch.delenv("MIELIZNA_DATA_DIR", raising=False)
+    p = load_products(dataset, "all")
+    assert "MIELIZNA_DATA_DIR" not in os.environ
+    c = TestClient(create_app(Settings(data_dir=dataset, live=False), p))
+    assert c.get("/api/capacity-to-level", params={"v": 65.69}).status_code == 200
+    assert c.get("/api/level-to-capacity", params={"h": 195.0}).status_code == 200
+    assert "MIELIZNA_DATA_DIR" not in os.environ
