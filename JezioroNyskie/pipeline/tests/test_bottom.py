@@ -267,3 +267,26 @@ def test_model_version_depends_on_inputs():
     assert len(a) == 12 and a == model_version(b"x", ["2020-01-01"])
     assert a != model_version(b"y", ["2020-01-01"]) and a != model_version(b"x", ["2020-01-02"])
     json.dumps(a)
+
+
+def test_r24_never_lowers_zmax_nor_zmin_vs_no_c_rule():
+    """Własność R24 na losowych danych (σ_C ≥ σ_nonC): reguła C tylko podnosi z_max i z_min."""
+    for seed in range(6):
+        rng = np.random.default_rng(300 + seed)
+        T = 25
+        m = rng.choice([0, 1, 255], size=(T, 20, 20), p=[.35, .4, .25]).astype(np.uint8)
+        h = np.round(rng.uniform(193, 197, T), 1)
+        isc = rng.random(T) < .4
+        sig = np.where(isc, rng.uniform(.3, .6, T), rng.uniform(.05, .3, T))
+        with_c = compute_bounds(m, h, sig, is_c=isc)
+        without = compute_bounds(m, h, sig, is_c=None)
+        # NaN = ±inf (brak granicy): z_max NaN → +inf, z_min NaN → -inf
+        zmax_c = np.where(np.isnan(with_c["z_max"]), np.inf, with_c["z_max"])
+        zmax_0 = np.where(np.isnan(without["z_max"]), np.inf, without["z_max"])
+        zmin_c = np.where(np.isnan(with_c["z_min"]), -np.inf, with_c["z_min"])
+        zmin_0 = np.where(np.isnan(without["z_min"]), -np.inf, without["z_min"])
+        fin = np.isfinite(zmax_0)
+        assert fin.any()
+        assert np.all(zmax_c[fin] >= zmax_0[fin] - 1e-12)
+        fin = np.isfinite(zmin_0)
+        assert np.all(zmin_c[fin] >= zmin_0[fin] - 1e-12)

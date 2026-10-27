@@ -30,15 +30,16 @@ FLAG_OUTSIDE = 255
 
 FLAG_MEANING = {
     "1": "ALWAYS_WATER: brak spójnego lądu, z_min=NaN (=-inf), z_max skończone",
-    "2": "ALWAYS_LAND: brak spójnej wody, z_max=NaN (=+inf), z_min skończone",
+    "2": "ALWAYS_LAND: brak spójnej wody (lub wodę widziały tylko sceny C, flaga 8), z_max=NaN (=+inf), z_min skończone",
     "4": "CONFLICT: n_conflict > 0 (część scen sprzeczna z progiem dna)",
-    "8": "C_WATER_IGNORED: piksel miał obserwacje wody ze scen wariantu C, które pominięto (R24: woda C = nieznane)",
+    "8": "C_WATER_IGNORED: piksel miał obserwacje wody ze scen wariantu C, które pominięto (R24: woda C = nieznane). "
+         "INFORMACYJNA, nie ostrzeżenie ani wada jakości; dotyczy ~58% px AOI; nie wpływa na strefy (efekt jest już w z_max)",
     "16": ("UNRESOLVED: obserwowany, ale obie granice puste: remis przy równych poziomach ALBO obserwacje sprzeczne "
            "na różnych poziomach (np. woda przy 193 m i ląd przy 197 m: CONFLICT+UNRESOLVED, obie granice NaN)"),
     "255": "poza obszarem modelu (AOI)",
 }
 NAN_SEMANTICS = ("W obszarze modelu (obs_count > 0): NaN w z_min znaczy -inf (brak dolnego ograniczenia dna), "
-                 "NaN w z_max znaczy +inf (piksel nigdy nie był spójnie wodą). obs_count == 0 lub flags == 255 "
+                 "NaN w z_max znaczy +inf (piksel nigdy nie był spójnie wodą (lub wodę widziały tylko sceny C, flaga 8)). obs_count == 0 lub flags == 255 "
                  "znaczy: poza obszarem modelu.")
 EVIDENCE = "rf_and_otsu_water; land = rf0 or otsu0; 255 in either = unknown"
 ZMAX_RULE = "R24: water observations of C scenes are unknown (255) for threshold and z_max; C land kept; flag 8 = C water ignored"
@@ -163,6 +164,8 @@ def compute_bounds(masks: np.ndarray, h: np.ndarray, h_sigma: np.ndarray, is_c: 
       CONFLICT+UNRESOLVED, obie granice NaN (żaden próg nie jest spójny z którąkolwiek obserwacją).
       Reguła C (R24): obserwacje WODY ze scen wariantu C (is_c) traktujemy jak 255 (nieznane) i w progu,
       i w z_max; obserwacje LĄDU z C zostają. Flaga 8 = piksel miał wodę z C, którą pominięto.
+      Przy R24 z_min też może się przesunąć, ale tylko w górę (minimalizator progu przesuwa się w górę);
+      to powiększa wyłącznie strefę TOO_SHALLOW, nigdy SAFE.
     Dlaczego tak: (1) najmniej błędów jest odporne na pojedyncze pomyłki klasyfikatora, a liczy się
       zwykłe zliczanie (bez wag 1/σ², bo błąd klasyfikacji nie zależy od σ poziomu). (2) Obwiednia przy
       remisie jest ostrożna: lądu uznajemy mniej (tylko poniżej każdego minimalnego progu), wody też mniej
@@ -274,7 +277,9 @@ def read_model(model_dir: Path) -> tuple[dict[str, np.ndarray], dict]:
     Wejście → wyjście: katalog modelu → (słownik tablic (H,W), meta). Klucze: z_min, z_max, z, unc
       (float32, NaN zachowane), obs_count i n_conflict (uint16, nodata 65535 poza AOI), flags (uint8,
       nodata 255 poza AOI). Nodata NIE jest podmieniane na NaN: backend sam maskuje piksele
-      `obs_count == 0 | flags == 255` jako „poza modelem". Reguła dla backendu wewnątrz modelu:
+      `obs_count == 0 | flags == 255` jako „poza modelem". flags to maska bitowa; strefy używają tylko
+      `flags == 255` (poza modelem); bity 1/2/4/8/16 są opisowe, a bit 8 zwłaszcza nie jest ostrzeżeniem.
+      Uwaga: 255 & k ≠ 0 dla każdego bitu, więc najpierw zamaskuj `flags == 255`, potem testuj bity. Reguła dla backendu wewnątrz modelu:
       NaN w z_min → −inf, NaN w z_max → +inf, np.where(isnan(z_min), -np.inf, z_min) itd. (patrz
       meta["nan_semantics"]); dopiero po tej zamianie liczy się D_lo = h − z_max, D_hi = h − z_min.
     Jak to obronić: test round-trip sprawdza typy, nodata i zachowanie NaN.
