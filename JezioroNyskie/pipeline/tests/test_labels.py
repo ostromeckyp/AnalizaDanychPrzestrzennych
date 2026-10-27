@@ -13,6 +13,7 @@ from geopandas.testing import assert_geodataframe_equal
 from shapely.geometry import Point
 
 from mielizna.grid import Grid
+from mielizna import labels
 from mielizna.labels import load, sample_candidates, save
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
@@ -174,3 +175,53 @@ def test_server_rejects_bad_label(server):
     with pytest.raises(urllib.error.HTTPError) as e:
         _post(base + "/api/label", {"id": 0, "label": "banana"})
     assert e.value.code == 400
+
+
+def test_server_unlabel_restores_point(server):
+    base, path = server
+    first = json.loads(_get(base + "/api/next")[2])
+    _post(base + "/api/label", {"id": first["id"], "label": "water"})
+    assert json.loads(_get(base + "/api/next")[2])["id"] != first["id"]
+    assert _post(base + "/api/unlabel", {"id": first["id"]}) == {"ok": True}
+    row = load(path).set_index("id").loc[first["id"]]
+    assert row.label is None and row.source == "auto"
+    assert json.loads(_get(base + "/api/next")[2])["id"] == first["id"]
+
+
+def test_server_unlabel_unknown_id(server):
+    base, _ = server
+    with pytest.raises(urllib.error.HTTPError) as e:
+        _post(base + "/api/unlabel", {"id": 999})
+    assert e.value.code == 404
+
+
+def test_next_reports_class_count(server):
+    base, _ = server
+    nxt = json.loads(_get(base + "/api/next")[2])
+    assert nxt["n_class"] == 0
+    _post(base + "/api/label", {"id": nxt["id"], "label": "water"})
+    nxt = json.loads(_get(base + "/api/next")[2])
+    assert nxt["n_class"] == 1
+    _post(base + "/api/label", {"id": nxt["id"], "label": "skip"})
+    assert json.loads(_get(base + "/api/next")[2])["n_class"] == 1
+
+
+def test_human_class_labels_excludes_skip_and_none():
+    assert labels.CLASS_LABELS == ("water", "land")
+    g = gpd.GeoDataFrame(
+        dict(label=["water", "land", "skip", None, "water", "land"],
+             source=["human", "human", "human", "auto", "auto", "auto"]),
+        geometry=[Point(0, 0)] * 6, crs="EPSG:2180")
+    assert list(labels.human_class_labels(g).index) == [0, 1]
+
+
+def test_set_label_save_error_leaves_memory_unchanged(server, monkeypatch):
+    base, path = server
+    first = json.loads(_get(base + "/api/next")[2])
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(labels, "save", boom)
+    with pytest.raises(urllib.error.HTTPError):
+        _post(base + "/api/label", {"id": first["id"], "label": "water"})
+    assert json.loads(_get(base + "/api/next")[2])["id"] == first["id"]

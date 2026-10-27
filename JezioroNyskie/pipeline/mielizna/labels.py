@@ -1,4 +1,15 @@
-"""Kandydaci do etykiet woda/ląd: losowanie punktów, zapis GeoPackage i maski ważności scen."""
+"""Kandydaci do etykiet woda/ląd: losowanie punktów, zapis GeoPackage i maski ważności scen.
+
+Co robi: wczytuje sceny COG, losuje punkty w trzech warstwach (`shore` do ręcznej oceny oraz
+  `auto_water` / `auto_land` z etykietą automatyczną), zapisuje i wczytuje etykiety w GeoPackage
+  (EPSG:2180) i wskazuje, które wiersze są ręcznymi etykietami klasowymi.
+Dlaczego tak: ręczna praca idzie tylko tam, gdzie brzeg się zmienia; łatwe piksele dostają etykiety
+  automatyczne. GPKG zamiast GeoJSON, bo trzyma układ EPSG:2180 i typy kolumn (ruling R2).
+Wejście → wyjście: data/processed/s2/{data}.tif, częstość wody, maska jeziora, siatka →
+  data/reference/labels.gpkg (kolumny `COLUMNS`); `human_class_labels` → podzbiór treningowy.
+Jak to obronić: stały seed, odstęp 30 m w scenie, etykiety auto z wielu scen, a zbiór scen
+  pochodzi z `s2.usable_dates` (CSV + config), nie z zawartości katalogu.
+"""
 import logging
 from pathlib import Path
 from typing import Callable
@@ -10,9 +21,9 @@ import rasterio
 from scipy.ndimage import distance_transform_edt
 from shapely.geometry import Point
 
-from mielizna.config import data_path, load_config
+from mielizna.config import data_path
 from mielizna.grid import Grid
-from mielizna.s2 import BANDS, cloud_mask, is_usable, valid_mask
+from mielizna.s2 import BANDS, cloud_mask, valid_mask
 
 log = logging.getLogger(__name__)
 LABELS_CRS = "EPSG:2180"
@@ -22,30 +33,21 @@ SHORE_FREQ = (0.05, 0.95)
 AUTO_WATER_MIN_FREQ = 0.98
 AUTO_WATER_EROSION_M = 200.0
 AUTO_LAND_MIN_DIST_M = 300.0
+CLASS_LABELS = ("water", "land")  # etykiety klasowe; "skip" (niepewne) nie jest klasą
 COLUMNS = ["id", "date", "row", "col", "x", "y", "stratum", "label", "source", "geometry"]
 
 
-def usable_dates(cfg: dict | None = None) -> list[str]:
-    """Daty scen użytecznych: wiersze scenes_candidates.csv przechodzące `is_usable` (wraz z
-    exclude_dates z configu) i mające gotowy COG; posortowane, bez powtórzeń.
-
-    Dlaczego tak: źródłem prawdy jest CSV + config, nie zawartość katalogu s2/ (reguła R11);
-      kolumna `usable` w CSV nie zna późniejszych wykluczeń zimowych, więc liczymy ją od nowa.
-    Wejście → wyjście: config → lista dat 'YYYY-MM-DD'. Data bez pliku COG jest pomijana z ostrzeżeniem.
-    Jak to obronić: ta sama funkcja `is_usable` filtruje sceny w całym pipeline.
-    """
-    cfg = cfg or load_config()
-    df = pd.read_csv(data_path("processed", "scenes_candidates.csv"), dtype={"date": str})
-    dates = sorted({r["date"] for r in df.to_dict("records") if is_usable(r, cfg)})
-    present = [d for d in dates if data_path("processed", "s2", f"{d}.tif").exists()]
-    if len(present) < len(dates):
-        log.warning("Brak COG dla %d użytecznych dat: %s", len(dates) - len(present),
-                    sorted(set(dates) - set(present)))
-    return present
-
-
 def load_scene(date: str, s2_dir: Path | None = None) -> tuple[dict[str, np.ndarray], np.ndarray]:
-    """Wczytuje COG sceny: ({pasmo: odbicie float32}, SCL uint8)."""
+    """Wczytuje COG sceny z dnia `date`: odbicia pasm i klasyfikację SCL.
+
+    Co robi: otwiera data/processed/s2/{date}.tif (7 pasm: 6 odbić z `BANDS` + SCL), dzieli je na
+      słownik pasm i osobną macierz SCL (NaN → 0).
+    Dlaczego tak: pipeline trzyma scenę jako jeden COG na datę (kolejność pasm = `BANDS`, SCL
+      ostatnie), a SCL jako uint8 jest potrzebny do masek chmur i ważności.
+    Wejście → wyjście: data 'YYYY-MM-DD' (opcjonalnie inny katalog) → ({pasmo: float32 (H, W)},
+      SCL uint8 (H, W)).
+    Jak to obronić: kolejność pasm jest ta sama co przy zapisie w 01_fetch_s2.py (`BANDS` + scl).
+    """
     path = (s2_dir or data_path("processed", "s2")) / f"{date}.tif"
     with rasterio.open(path) as ds:
         arr = ds.read()
@@ -53,9 +55,29 @@ def load_scene(date: str, s2_dir: Path | None = None) -> tuple[dict[str, np.ndar
 
 
 def load_ok_mask(date: str) -> np.ndarray:
-    """Piksele ważne i bez chmur (ważność SCL/pasm minus maska chmur z 2-px buforem i cieni)."""
+    """Maska pikseli ważnych i bez chmur w scenie `date`.
+
+    Co robi: wczytuje scenę i zwraca `valid_mask & ~cloud_mask` (chmury SCL z 2-px buforem
+      i cieniami).
+    Dlaczego tak: punkt do etykietowania ma sens tylko tam, gdzie scena naprawdę widzi
+      powierzchnię; ta sama maska służy do liczenia częstości wody.
+    Wejście → wyjście: data 'YYYY-MM-DD' → bool (H, W), True = piksel ważny i bez chmury.
+    Jak to obronić: maski pochodzą z `s2.valid_mask` / `s2.cloud_mask`, przetestowanych osobno.
+    """
     bands, scl = load_scene(date)
     return valid_mask(bands, scl) & ~cloud_mask(scl)
+
+
+def human_class_labels(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Wiersze z ręczną etykietą klasową (source == "human", label ∈ `CLASS_LABELS`).
+
+    Co robi: odfiltrowuje etykiety auto, `skip` i brak etykiety.
+    Dlaczego tak: tylko decyzje człowieka o wodzie/lądzie są danymi treningowymi i liczą się do
+      celu ≥150 etykiet (reguła R15); „skip” oznacza niepewność, nie klasę.
+    Wejście → wyjście: GeoDataFrame etykiet → jego podzbiór wierszy (indeks zachowany).
+    Jak to obronić: jedna definicja używana przez serwer, trening i walidację.
+    """
+    return gdf[(gdf["source"] == "human") & gdf["label"].isin(CLASS_LABELS)]
 
 
 def sample_candidates(scene_dates: list[str], water_freq: np.ndarray, lake: np.ndarray, grid: Grid,

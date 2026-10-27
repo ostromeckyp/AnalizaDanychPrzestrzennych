@@ -7,7 +7,7 @@ import pytest
 from mielizna.s2 import (cloud_mask, check_harmonized, dedupe_items, dn_to_reflectance,
                          drop_non_cog_items,
                          group_acquisitions, is_usable, mosaic_first_valid, reflectance_offset,
-                         resample_like_load_day, scene_quality, valid_mask)
+                         resample_like_load_day, scene_quality, usable_dates, valid_mask)
 
 CFG = {"scene_filter": {"min_valid_pct": 95, "max_local_cloud_pct": 5, "max_ice_pct": 1,
                         "exclude_dates": []}}
@@ -152,3 +152,38 @@ def test_drop_non_cog_items_keeps_cog_before_dedupe():
     assert [i.id for i in kept] == [cog.id]
     assert [i.id for i in dedupe_items(kept)] == [cog.id]
     assert [i.id for i in dedupe_items([legacy, cog])] == [legacy.id]  # why the filter must come first
+
+
+def _scene_tree(tmp_path, rows, rejected=None, cogs=()):
+    import pandas as pd
+    (tmp_path / "s2").mkdir()
+    pd.DataFrame(rows).to_csv(tmp_path / "scenes_candidates.csv", index=False)
+    if rejected is not None:
+        pd.DataFrame(rejected).to_csv(tmp_path / "scenes_pass2_rejected.csv", index=False)
+    for d in cogs:
+        (tmp_path / "s2" / f"{d}.tif").touch()
+
+
+def _row(date, acq=None, valid=100.0, cloud=0.0, ice=0.0):
+    return dict(date=date, acq_id=acq or f"{date}_sentinel-2a", valid_pct=valid,
+                local_cloud_pct=cloud, ice_pct=ice)
+
+
+def test_usable_dates_filters_csv_config_and_rejected(tmp_path):
+    rows = [_row("2021-06-01"), _row("2021-06-02", cloud=50), _row("2021-06-03"),
+            _row("2021-06-04"), _row("2021-06-05")]
+    rejected = [dict(date="2021-06-04", acq_id="2021-06-04_sentinel-2a", reason="guard")]
+    _scene_tree(tmp_path, rows, rejected, cogs=["2021-06-01", "2021-06-05"])
+    cfg = {"scene_filter": {**CFG["scene_filter"], "exclude_dates": [{"date": "2021-06-03", "reason": "ice"}]}}
+    assert usable_dates(cfg, tmp_path) == ["2021-06-01", "2021-06-05"]
+
+
+def test_usable_dates_without_rejected_file(tmp_path):
+    _scene_tree(tmp_path, [_row("2021-06-01")], cogs=["2021-06-01"])
+    assert usable_dates(CFG, tmp_path) == ["2021-06-01"]
+
+
+def test_usable_dates_missing_cog_raises(tmp_path):
+    _scene_tree(tmp_path, [_row("2021-06-01"), _row("2021-06-02")], cogs=["2021-06-01"])
+    with pytest.raises(FileNotFoundError, match="2021-06-02"):
+        usable_dates(CFG, tmp_path)

@@ -27,7 +27,7 @@
     oceniaj, czy punkt ze środka krzyżyka na scenie jest wodą w dniu sceny.</div>
 </header>
 <div class="keys">Klawisze:
-  <kbd>W</kbd>woda <kbd>L</kbd>ląd <kbd>?</kbd>pomiń (niepewne)</div>
+  <kbd>W</kbd>woda <kbd>L</kbd>ląd <kbd>?</kbd>pomiń (niepewne) <kbd>Backspace</kbd>/<kbd>U</kbd>cofnij</div>
 <main>
   <div class="panel">
     <h2>Sentinel-2: kolory naturalne (lewo) | SWIR16/NIR/G (prawo), 64×64 px, 4×</h2>
@@ -43,6 +43,8 @@
 const WMS = "https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/HighResolution";
 const HALF = 320; // 64 px * 10 m / 2
 let current = null, busy = false;
+const history = [];  // id-ki oznaczone w tej sesji (do cofania)
+const ORTO_TIMEOUT_MS = 5000;
 
 function ortoUrl(x, y) {
   const bbox = [x - HALF, y - HALF, x + HALF, y + HALF].join(",");
@@ -50,35 +52,73 @@ function ortoUrl(x, y) {
          `&SRS=EPSG:2180&BBOX=${bbox}&WIDTH=512&HEIGHT=512`;
 }
 
+// Resolves when the image fires load/error (or after timeoutMs, if given).
+function loadImage(img, src, timeoutMs) {
+  return new Promise(resolve => {
+    let timer = null;
+    const finish = () => { clearTimeout(timer); img.onload = img.onerror = null; resolve(); };
+    img.onload = img.onerror = finish;
+    if (timeoutMs) timer = setTimeout(finish, timeoutMs);
+    img.src = src;
+  });
+}
+
+// Keeps busy = true until the crop is shown (and the orthophoto, or 5 s passed).
 async function loadNext() {
-  const p = await (await fetch("/api/next")).json();
-  document.getElementById("counter").textContent = `oznaczono ${p.done} / ${p.total}`;
-  if (p.id === null) {
-    current = null;
-    document.getElementById("status").textContent = "Wszystkie punkty brzegowe obsłużone. Dziękuję!";
-    return;
+  busy = true;
+  try {
+    const p = await (await fetch("/api/next")).json();
+    document.getElementById("counter").textContent =
+      `oznaczono ${p.done} / ${p.total} · woda/ląd: ${p.n_class} (cel ≥150)`;
+    if (p.id === null) {
+      current = null;
+      document.getElementById("status").textContent = "Wszystkie punkty brzegowe obsłużone. Dziękuję!";
+      return;
+    }
+    current = p;
+    document.getElementById("date").textContent = p.date;
+    await Promise.all([
+      loadImage(document.getElementById("crop"), `/api/crop/${p.id}.png`),
+      loadImage(document.getElementById("orto"), ortoUrl(p.x, p.y), ORTO_TIMEOUT_MS),
+    ]);
+  } finally {
+    busy = false;
   }
-  current = p;
-  document.getElementById("date").textContent = p.date;
-  document.getElementById("crop").src = `/api/crop/${p.id}.png`;
-  document.getElementById("orto").src = ortoUrl(p.x, p.y);
+}
+
+async function post(url, payload) {
+  return fetch(url, {method: "POST", headers: {"Content-Type": "application/json"},
+                     body: JSON.stringify(payload)});
 }
 
 async function send(label) {
   if (!current || busy) return;
   busy = true;
-  const r = await fetch("/api/label", {method: "POST", headers: {"Content-Type": "application/json"},
-                                       body: JSON.stringify({id: current.id, label})});
-  document.getElementById("status").textContent = r.ok ? `zapisano: punkt ${current.id} = ${label}` : "BŁĄD zapisu!";
-  busy = false;
-  if (r.ok) await loadNext();
+  const id = current.id;
+  const r = await post("/api/label", {id, label});
+  document.getElementById("status").textContent = r.ok ? `zapisano: punkt ${id} = ${label}` : "BŁĄD zapisu!";
+  if (r.ok) history.push(id);
+  await loadNext();
+}
+
+async function undo() {
+  if (busy || !history.length) return;
+  busy = true;
+  const id = history[history.length - 1];
+  const r = await post("/api/unlabel", {id});
+  if (r.ok) history.pop();
+  document.getElementById("status").textContent = r.ok ? `cofnięto: punkt ${id}` : "BŁĄD cofania!";
+  await loadNext();
 }
 
 document.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+  if (busy) return;
   const k = e.key.toLowerCase();
   if (k === "w") send("water");
   else if (k === "l") send("land");
   else if (e.key === "?" || e.key === "/") send("skip");
+  else if (e.key === "Backspace" || k === "u") { e.preventDefault(); undo(); }
 });
 loadNext();
 </script>

@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pystac
 import pystac_client
 import rasterio
@@ -15,6 +16,7 @@ from odc.geo.geobox import GeoBox
 from rasterio.transform import Affine
 from scipy.ndimage import binary_dilation
 
+from mielizna.config import data_path
 from mielizna.grid import Grid
 
 log = logging.getLogger(__name__)
@@ -165,6 +167,31 @@ def is_usable(q: dict, cfg: dict) -> bool:
                 and q["local_cloud_pct"] < f["max_local_cloud_pct"]
                 and q["ice_pct"] <= f["max_ice_pct"]
                 and str(q["date"]) not in excluded)
+
+
+def usable_dates(cfg: dict, processed: Path | None = None) -> list[str]:
+    """Daty scen użytecznych dla całego pipeline'u (etykiety, trening, mapy).
+
+    Co robi: bierze wiersze scenes_candidates.csv, zostawia te z `is_usable` (progi + exclude_dates
+      z configu), odrzuca akwizycje z scenes_pass2_rejected.csv (po acq_id) i zwraca posortowane,
+      unikalne daty. Dla każdej zwróconej daty wymaga pliku s2/{data}.tif.
+    Dlaczego tak: kolumna `usable` w CSV nie zna późniejszych wykluczeń (lód zimowy, odrzucone
+      przez guard), a katalog s2/ może zawierać pliki nieużywane (reguła R11: scen nie wybieramy
+      przez glob). Jedna funkcja = jeden zbiór scen w 04a, w treningu i w mapach.
+    Wejście → wyjście: config (+ opcjonalnie katalog processed) → lista dat 'YYYY-MM-DD'.
+      Brak COG dla zwracanej daty rzuca FileNotFoundError (cicho pominięta scena zmieniłaby wyniki).
+    Jak to obronić: filtr jest ten sam co przy pobieraniu (`is_usable`), a brak pliku jest głośny.
+    """
+    processed = Path(processed) if processed else data_path("processed")
+    df = pd.read_csv(processed / "scenes_candidates.csv", dtype={"date": str})
+    rej_path = processed / "scenes_pass2_rejected.csv"
+    rejected = set(pd.read_csv(rej_path, dtype=str)["acq_id"]) if rej_path.exists() else set()
+    dates = sorted({r["date"] for r in df.to_dict("records")
+                    if is_usable(r, cfg) and r["acq_id"] not in rejected})
+    missing = [d for d in dates if not (processed / "s2" / f"{d}.tif").exists()]
+    if missing:
+        raise FileNotFoundError(f"Brak COG dla użytecznych dat: {missing}")
+    return dates
 
 
 # --- wczytanie na siatkę ----------------------------------------------------------

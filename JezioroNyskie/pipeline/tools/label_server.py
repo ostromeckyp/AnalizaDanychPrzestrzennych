@@ -40,10 +40,16 @@ def _stretch(a: np.ndarray, hi: float) -> np.ndarray:
 
 
 def render_crop(tif: Path, row: int, col: int) -> bytes:
-    """PNG: wycinek 64x64 px wokół piksela, RGB | false-color (SWIR16, NIR, G), 4x, krzyżyk w środku.
+    """PNG z wycinkiem sceny wokół piksela: kolory naturalne | false-color, z krzyżykiem w środku.
 
-    Brzegi poza rastrem są dopełnione NaN (czarne). Krzyżyk ma przerwę na środku, żeby nie
-    zasłaniać etykietowanego piksela."""
+    Co robi: czyta okno 64x64 px wokół (row, col), buduje dwa panele (RGB oraz SWIR16/NIR/G),
+      powiększa je 4x i rysuje czerwony krzyżyk z przerwą na środku; brzegi poza rastrem są czarne.
+    Dlaczego tak: false-color SWIR16/NIR/G odróżnia wodę od lądu tam, gdzie RGB jest niejednoznaczny
+      (płycizny, szuwary); przerwa w krzyżyku nie zasłania etykietowanego piksela.
+    Wejście → wyjście: ścieżka COG, wiersz i kolumna piksela → bajty PNG (512 x 256 px przy 4x).
+    Jak to obronić: wycinek pochodzi z tego samego COG i tej samej siatki co dane modelu, a
+      kolejność pasm bierze z `BAND_INDEX` (zgodnie z `BANDS` zapisanym w 01_fetch_s2.py).
+    """
     half = CROP_PX // 2
     win = Window(col - half, row - half, CROP_PX, CROP_PX)
     with rasterio.open(tif) as ds:
@@ -74,22 +80,34 @@ class _State:
         shore = self.gdf[self.gdf.stratum == "shore"]
         done = int(shore.label.notna().sum())
         todo = shore[shore.label.isna()]
-        out = {"done": done, "total": len(shore), "id": None}
+        out = {"done": done, "total": len(shore), "id": None,
+               "n_class": len(L.human_class_labels(self.gdf))}
         if len(todo):
             p = todo.iloc[0]
             lon, lat = _TO_WGS84.transform(p.x, p.y)
             out.update(id=int(p.id), date=str(p.date), x=float(p.x), y=float(p.y), lon=lon, lat=lat)
         return out
 
-    def set_label(self, pid: int, label: str) -> bool:
+    def _update(self, pid: int, label: str | None, source: str) -> bool:
+        """Zmienia etykietę na kopii, zapisuje plik i dopiero potem podmienia stan w pamięci."""
         with self.lock:
             hit = self.gdf.id == pid
             if not hit.any():
                 return False
-            self.gdf.loc[hit, "label"] = label
-            self.gdf.loc[hit, "source"] = "human"
-            L.save(self.gdf, self.path)
+            new = self.gdf.copy()
+            new.loc[hit, "label"] = label
+            new.loc[hit, "source"] = source
+            new["label"] = new["label"].astype(object).where(new["label"].notna(), None)
+            L.save(new, self.path)
+            self.gdf = new
             return True
+
+    def set_label(self, pid: int, label: str) -> bool:
+        return self._update(pid, label, "human")
+
+    def unlabel(self, pid: int) -> bool:
+        """Cofa etykietę punktu do stanu początkowego (label=None, source="auto")."""
+        return self._update(pid, None, "auto")
 
 
 def make_handler(state: _State):
@@ -123,16 +141,22 @@ def make_handler(state: _State):
                 self._json({"error": "nie znaleziono"}, 404)
 
         def do_POST(self):
-            if self.path != "/api/label":
+            if self.path not in ("/api/label", "/api/unlabel"):
                 return self._json({"error": "nie znaleziono"}, 404)
+            is_label = self.path == "/api/label"
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-                pid, label = int(body["id"]), body["label"]
+                pid = int(body["id"])
+                label = body["label"] if is_label else None
             except (ValueError, KeyError, TypeError):
-                return self._json({"error": "oczekiwano {id, label}"}, 400)
-            if label not in VALID_LABELS:
+                return self._json({"error": "oczekiwano {id, label}" if is_label else "oczekiwano {id}"}, 400)
+            if is_label and label not in VALID_LABELS:
                 return self._json({"error": f"label musi być jednym z {sorted(VALID_LABELS)}"}, 400)
-            if not state.set_label(pid, label):
+            try:
+                ok = state.set_label(pid, label) if is_label else state.unlabel(pid)
+            except OSError as e:
+                return self._json({"error": f"zapis nieudany: {e}"}, 500)
+            if not ok:
                 return self._json({"error": "nieznane id"}, 404)
             self._json({"ok": True})
 

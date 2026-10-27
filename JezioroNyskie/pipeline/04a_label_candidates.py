@@ -24,7 +24,7 @@ from mielizna.features import indices
 from mielizna.grid import reference_grid
 from mielizna.osm import aoi_mask, lake_mask
 from mielizna.otsu import otsu_mask, otsu_threshold
-from mielizna.s2 import cloud_mask, valid_mask
+from mielizna.s2 import cloud_mask, usable_dates, valid_mask
 
 MIN_OBSERVATIONS = 10  # pikseli z mniejszą liczbą ważnych scen nie losujemy jako brzeg
 log = logging.getLogger("04a_label_candidates")
@@ -63,7 +63,7 @@ def main():
     cfg = load_config()
     grid = reference_grid(cfg)
     aoi, lake = aoi_mask(grid), lake_mask(grid)
-    dates = L.usable_dates(cfg)
+    dates = usable_dates(cfg)
     log.info("Sceny użyteczne: %d", len(dates))
     freq, ok_masks, _ = water_frequency(dates, aoi)
     g = L.sample_candidates(dates, freq, lake, grid, ok_fn=ok_masks.__getitem__)
