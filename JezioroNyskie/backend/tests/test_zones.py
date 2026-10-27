@@ -1,8 +1,9 @@
+import geopandas as gpd
 import numpy as np
 import pytest
 
-from app.zones import (DANGER, NONE, RISK, SAFE, round_param, zone_classes, zone_stats,
-                       zone_warnings)
+from app.zones import (DANGER, NONE, RISK, SAFE, ZONE_NAMES, round_param, zone_classes, zone_stats,
+                       zone_warnings, zones_geojson)
 
 
 def arr(*v): return np.array(v, dtype=float).reshape(1, -1)
@@ -76,3 +77,34 @@ def test_warnings(products):
     assert zone_warnings(195.0, 1.2, 0.3, products) == []
     assert "h_out_of_range" in zone_warnings(198.5, 1.2, 0.3, products)
     assert "below_observed_bottom" in zone_warnings(194.0, 1.0, 0.3, products)
+
+
+def _first_coord(geometry):
+    """Pierwsza para (lon, lat) z geometrii (Multi)Polygon z GeoJSON."""
+    c = geometry["coordinates"]
+    while isinstance(c[0], (list, tuple)):
+        c = c[0]
+    return c[0], c[1]
+
+
+def test_zones_geojson_shape_and_crs(products):
+    c = zone_classes(195.0, 1.2, 0.3, products.z_lo, products.z_hi, products.in_model)
+    fc = zones_geojson(c, products.transform, products.crs)
+    assert fc["type"] == "FeatureCollection"
+    assert [f["properties"]["zone"] for f in fc["features"]] == sorted(
+        {ZONE_NAMES[v] for v in np.unique(c) if v}, key=["safe", "risk", "danger"].index)
+    lon, lat = _first_coord(fc["features"][0]["geometry"])
+    assert 17.0 < lon < 17.5 and 50.3 < lat < 50.6          # lon pierwsza (Review Focus 2)
+    area = gpd.GeoDataFrame.from_features(fc["features"], crs=4326).to_crs(2180).area.sum()
+    assert area == pytest.approx((c > 0).sum() * 100, rel=0.02)
+
+
+def test_zones_geojson_valid_rounded_and_empty(products):
+    c = zone_classes(195.0, 1.2, 0.3, products.z_lo, products.z_hi, products.in_model)
+    fc = zones_geojson(c, products.transform, products.crs)
+    gdf = gpd.GeoDataFrame.from_features(fc["features"], crs=4326)
+    assert gdf.is_valid.all()
+    lon, lat = _first_coord(fc["features"][0]["geometry"])
+    assert lon == round(lon, 6) and lat == round(lat, 6)
+    empty = zones_geojson(np.zeros_like(c), products.transform, products.crs)
+    assert empty == {"type": "FeatureCollection", "features": []}

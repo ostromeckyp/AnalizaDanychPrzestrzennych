@@ -497,6 +497,7 @@ dependencies = [
     { name = "pillow" },
     { name = "pyogrio" },
     { name = "pyproj" },
+    { name = "rasterio" },
     { name = "shapely" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -517,6 +518,7 @@ requires-dist = [
     { name = "pillow" },
     { name = "pyogrio" },
     { name = "pyproj" },
+    { name = "rasterio" },
     { name = "shapely" },
     { name = "uvicorn", extras = ["standard"] },
 ]
