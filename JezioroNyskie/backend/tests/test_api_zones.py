@@ -31,7 +31,7 @@ def test_if_none_match_304(client):
 
 
 @pytest.mark.parametrize("q", [{"h": 150, "draft": 1}, {"h": 195, "draft": 5}, {"h": 195, "draft": 1, "margin": 2},
-                               {"h": 199.5, "draft": 1}])
+                               {"h": 199.5, "draft": 1}, {"h": "nan", "draft": 1}, {"h": "inf", "draft": 1}])
 def test_validation_422(client, q):
     assert client.get("/api/zones", params=q).status_code == 422
 

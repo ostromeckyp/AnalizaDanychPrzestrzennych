@@ -119,7 +119,7 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
                                     lambda: build_meta(p).model_dump_json().encode())
 
     @app.get("/api/zones", response_model=ZonesResponse)
-    def zones(request: Request, h: float,
+    def zones(request: Request, h: float = Query(..., allow_inf_nan=False),
               draft: float = Query(DEFAULT_DRAFT, ge=DRAFT_LIMITS[0], le=DRAFT_LIMITS[1]),
               margin: float = Query(DEFAULT_MARGIN, ge=MARGIN_LIMITS[0], le=MARGIN_LIMITS[1])):
         p: Products = request.app.state.products
