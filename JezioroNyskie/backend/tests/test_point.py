@@ -55,3 +55,15 @@ def test_point_endpoint_json_has_no_infinity(client, products):
                                {"lon": 17.0, "lat": 50.4, "h": 195, "margin": 2}, {"lat": 50.4, "h": 195}])
 def test_point_validation_422(client, q):
     assert client.get("/api/point", params=q).status_code == 422
+
+
+def test_outside_model_obs_count_is_none(products):
+    for col in (25, 26, 27, 28, 29):                     # 25-27: obs 65535 w pliku, 28-29: obs 0
+        p = point_info(products, *lonlat_of(products, 5, col), 195.0, 1.2, 0.3)
+        assert p["kind"] == "outside" and p["obs_count"] is None
+    assert point_info(products, 21.0, 52.2, 195.0, 1.2, 0.3)["obs_count"] is None
+
+
+def test_point_h_out_of_slider_has_standard_422_body(client):
+    d = client.get("/api/point", params={"lon": 17.0, "lat": 50.4, "h": 150}).json()["detail"]
+    assert isinstance(d, list) and d[0]["loc"] == ["query", "h"]

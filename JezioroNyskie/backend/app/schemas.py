@@ -5,7 +5,8 @@ Co robi: opisuje kształt odpowiedzi `/api/meta`, `/api/zones`, `/api/point`, `/
 Dlaczego tak: front (React) generuje typy TypeScript z `openapi.json`, więc kontrakt ma być jawny i
   ścisły. Pola, które mogą być nieskończone lub NaN, mają typ `float | None` i serializują się jako
   `null` - JSON nigdy nie zawiera `NaN`/`Infinity`. Cechy GeoJSON niosą dodatkowe klucze (`id`, `bbox`),
-  dlatego typujemy je luźno (`dict[str, Any]`).
+  dlatego `GeoFeature` ma opcjonalne `id` i `bbox`, a geometria to luźne `dict[str, Any]`
+  (typy GeoJSON dla stref, linii brzegowej i przystani dzielą jedną bazę).
 Wejście → wyjście: słowniki z `app.main` → walidowane modele → JSON.
 Jak to obronić: zmiana modelu zmienia `openapi.json`, a test migawki wymusza jej świadome odświeżenie
   (`uv run python scripts/export_openapi.py`).
@@ -31,9 +32,40 @@ class ZoneStats(BaseModel):
     danger_pct: float
 
 
+class GeoFeature(BaseModel):
+    """Cecha GeoJSON (RFC 7946): wspólna baza dla stref, linii brzegowej i przystani."""
+    type: Literal["Feature"]
+    geometry: dict[str, Any]
+    id: str | int | None = None
+    bbox: list[float] | None = None
+
+
+class ZoneProperties(BaseModel):
+    zone: Literal["safe", "risk", "danger"]
+
+
+class ZoneFeature(GeoFeature):
+    properties: ZoneProperties
+
+
+class MarinaProperties(BaseModel):
+    osm_id: int | None
+    kind: str | None
+    name: str | None
+
+
+class MarinaFeature(GeoFeature):
+    properties: MarinaProperties
+
+
+class MarinasResponse(BaseModel):
+    type: Literal["FeatureCollection"]
+    features: list[MarinaFeature]
+
+
 class ZonesResponse(BaseModel):
-    type: str
-    features: list[dict[str, Any]]
+    type: Literal["FeatureCollection"]
+    features: list[ZoneFeature]
     stats: ZoneStats
     params: Params
     warnings: list[str]
@@ -152,6 +184,10 @@ class SceneOut(BaseModel):
     otsu_threshold: float | None
     local_cloud_pct: float | None
     lake_nodata_pct: float | None
+
+
+class ShorelineFeature(GeoFeature):
+    properties: SceneOut
 
 
 class CapacityToLevel(BaseModel):

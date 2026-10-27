@@ -49,9 +49,9 @@ def point_info(products: Products, lon: float, lat: float, h: float, draft: floa
     if px is None:
         return out
     r, c = px
-    out["obs_count"] = int(products.obs_count[r, c])
     if not products.in_model[r, c]:
-        return out
+        return out          # poza modelem obs_count zostaje None (0 i 65535 to wartości wartownicze)
+    out["obs_count"] = int(products.obs_count[r, c])
 
     z_lo, z_hi = float(products.z_lo[r, c]), float(products.z_hi[r, c])
     cls = zone_classes(h, draft, margin, np.array([[z_lo]]), np.array([[z_hi]]), np.array([[True]]))

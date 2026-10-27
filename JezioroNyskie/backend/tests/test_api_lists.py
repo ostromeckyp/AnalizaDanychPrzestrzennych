@@ -66,3 +66,17 @@ def test_capacity_does_not_touch_environ(dataset, monkeypatch):
     assert c.get("/api/capacity-to-level", params={"v": 65.69}).status_code == 200
     assert c.get("/api/level-to-capacity", params={"h": 195.0}).status_code == 200
     assert "MIELIZNA_DATA_DIR" not in os.environ
+
+
+def test_geojson_endpoints_match_schemas(client):
+    from app.schemas import MarinasResponse, ShorelineFeature
+    ShorelineFeature.model_validate(client.get("/api/shorelines", params={"date": "2026-10-20"}).json())
+    MarinasResponse.model_validate(client.get("/api/marinas").json())
+
+
+def test_openapi_documents_geojson_and_404(app):
+    paths = app.openapi()["paths"]
+    for url in ("/api/shorelines", "/api/marinas"):
+        assert paths[url]["get"]["responses"]["200"]["content"]["application/json"]["schema"] != {}
+    assert "404" in paths["/api/shorelines"]["get"]["responses"]
+    assert "2×" in paths["/api/layers/uncertainty.png"]["get"]["description"]

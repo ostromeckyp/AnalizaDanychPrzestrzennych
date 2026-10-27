@@ -214,9 +214,14 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/ShorelineFeature"
+        }
        }
       }
+     },
+     "404": {
+      "description": "brak opublikowanej linii brzegowej dla tej daty"
      },
      "422": {
       "description": "Validation Error",
@@ -240,7 +245,9 @@
       "description": "Successful Response",
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/MarinasResponse"
+        }
        }
       }
      }
@@ -393,7 +400,7 @@
   "/api/layers/uncertainty.png": {
    "get": {
     "summary": "Uncertainty Png",
-    "description": "Kropki niepewności (RGBA, 4× rozdzielczość, EPSG:3857).",
+    "description": "Kropki niepewności (RGBA, 2× rozdzielczość, EPSG:3857).",
     "operationId": "uncertainty_png_api_layers_uncertainty_png_get",
     "parameters": [
      {
@@ -949,6 +956,124 @@
     ],
     "title": "Limits"
    },
+   "MarinaFeature": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "Feature",
+      "title": "Type"
+     },
+     "geometry": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Geometry"
+     },
+     "id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "bbox": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "number"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bbox"
+     },
+     "properties": {
+      "$ref": "#/components/schemas/MarinaProperties"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "geometry",
+     "properties"
+    ],
+    "title": "MarinaFeature"
+   },
+   "MarinaProperties": {
+    "properties": {
+     "osm_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Osm Id"
+     },
+     "kind": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kind"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     }
+    },
+    "type": "object",
+    "required": [
+     "osm_id",
+     "kind",
+     "name"
+    ],
+    "title": "MarinaProperties"
+   },
+   "MarinasResponse": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "FeatureCollection",
+      "title": "Type"
+     },
+     "features": {
+      "items": {
+       "$ref": "#/components/schemas/MarinaFeature"
+      },
+      "type": "array",
+      "title": "Features"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "features"
+    ],
+    "title": "MarinasResponse"
+   },
    "MetaResponse": {
     "properties": {
      "model_version": {
@@ -1425,6 +1550,58 @@
     ],
     "title": "SceneOut"
    },
+   "ShorelineFeature": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "Feature",
+      "title": "Type"
+     },
+     "geometry": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Geometry"
+     },
+     "id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "bbox": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "number"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bbox"
+     },
+     "properties": {
+      "$ref": "#/components/schemas/SceneOut"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "geometry",
+     "properties"
+    ],
+    "title": "ShorelineFeature"
+   },
    "Slider": {
     "properties": {
      "min": {
@@ -1524,6 +1701,76 @@
     ],
     "title": "ValidationError"
    },
+   "ZoneFeature": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "Feature",
+      "title": "Type"
+     },
+     "geometry": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Geometry"
+     },
+     "id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "bbox": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "number"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bbox"
+     },
+     "properties": {
+      "$ref": "#/components/schemas/ZoneProperties"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "geometry",
+     "properties"
+    ],
+    "title": "ZoneFeature"
+   },
+   "ZoneProperties": {
+    "properties": {
+     "zone": {
+      "type": "string",
+      "enum": [
+       "safe",
+       "risk",
+       "danger"
+      ],
+      "title": "Zone"
+     }
+    },
+    "type": "object",
+    "required": [
+     "zone"
+    ],
+    "title": "ZoneProperties"
+   },
    "ZoneStats": {
     "properties": {
      "water_km2": {
@@ -1571,12 +1818,12 @@
     "properties": {
      "type": {
       "type": "string",
+      "const": "FeatureCollection",
       "title": "Type"
      },
      "features": {
       "items": {
-       "additionalProperties": true,
-       "type": "object"
+       "$ref": "#/components/schemas/ZoneFeature"
       },
       "type": "array",
       "title": "Features"

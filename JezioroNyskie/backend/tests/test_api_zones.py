@@ -36,6 +36,20 @@ def test_validation_422(client, q):
     assert client.get("/api/zones", params=q).status_code == 422
 
 
+@pytest.mark.parametrize("h", [150, 199.5])
+def test_zones_h_out_of_slider_has_standard_422_body(client, h):
+    d = client.get("/api/zones", params={"h": h, "draft": 1}).json()["detail"]
+    assert isinstance(d, list) and d[0]["loc"] == ["query", "h"] and d[0]["type"] == "value_error"
+    assert "suwaka" in d[0]["msg"]
+
+
+def test_zones_response_is_typed_geojson(client):
+    from app.schemas import ZonesResponse
+    j = client.get("/api/zones", params={"h": 195.0, "draft": 1.2}).json()
+    ZonesResponse.model_validate(j)
+    assert j["type"] == "FeatureCollection" and all(f["type"] == "Feature" for f in j["features"])
+
+
 def test_zones_cached(app, client):
     q = {"h": 195.0, "draft": 1.2}
     client.get("/api/zones", params=q)

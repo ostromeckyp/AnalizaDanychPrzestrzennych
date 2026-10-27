@@ -6,7 +6,8 @@ Co robi: szuka w STAC najnowszych akwizycji (ostatnie 30 dni), klasyfikuje je ws
   najnowszej przyjętej sceny na żywo i ostatniej opublikowanej sceny pipeline'u.
 Dlaczego tak: scena na żywo nie ma komunikatu RZGW, więc poziom (wariant „C_live") pochodzi wyłącznie z
   powierzchni wody, z niepewnością krzywej (+ dodatek przy ekstrapolacji). Odrzucenia też są zapisywane,
-  żeby nie pobierać drugi raz tej samej złej sceny. Zapisujemy tylko werdykty o danych (przyjęta, not_usable,
+  żeby nie pobierać drugi raz tej samej złej sceny - ale werdykt pamięta zbiór kafli (`items`) i gdy wyszukiwanie
+  zwróci inny zbiór (np. drugi kafel dotarł później), akwizycja jest oceniana od nowa. Zapisujemy tylko werdykty o danych (przyjęta, not_usable,
   radiometry, no_water, qc:*); błędy przejściowe (S3/GDAL, zapis pliku) i systemowe (ctx: brak modelu, zła
   siatka) trafiają do `last_error` bez pliku, więc akwizycja jest ponawiana. Błąd sieci nigdy nie wywraca API: zostaje fallback.
   Powierzchnia dla krzywej to Otsu, nigdy RF (RF przy niskiej wodzie nasyca się na mule → za wysoki poziom).
@@ -142,6 +143,11 @@ def stac_search(cfg: dict, start: date, end: date) -> dict:
     return s2.group_acquisitions(s2.search_items(cfg2, cache=None))
 
 
+def _item_ids(items) -> list[str]:
+    """Posortowane identyfikatory kafli akwizycji: `item.id`, a dla obiektów bez niego `str(item)`."""
+    return sorted(str(getattr(i, "id", None) or i) for i in items)
+
+
 def evaluate(items: list, date: str, ctx: SceneContext, load_fn=load_scene) -> "CurrentLevel | str":
     """Ocenia jedną akwizycję: `CurrentLevel` albo powód odrzucenia (str)."""
     bands, scl = load_fn(items, ctx.grid, ctx.cfg)
@@ -199,6 +205,13 @@ class CurrentLevelService:
         tmp.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
         os.replace(tmp, path)
 
+    def _stored_items(self, name: str) -> list[str] | None:
+        """Zbiór kafli zapisany w werdykcie akwizycji; None, gdy brak pliku, nieczytelny lub bez klucza `items`."""
+        try:
+            return json.loads((self.cache_dir / f"{name}.json").read_text(encoding="utf-8")).get("items")
+        except (OSError, ValueError):
+            return None
+
     def refresh(self) -> None:
         with self._lock:
             if self._refreshing:
@@ -225,8 +238,15 @@ class CurrentLevelService:
             return
         with self._lock:
             self._last_error = None
-        todo = [k for k in sorted(found, key=lambda k: k[0], reverse=True)
-                if not (self.cache_dir / f"{k[0]}_{k[1]}.json").exists()][:MAX_CHECKS]
+        def needs_check(k) -> bool:
+            # nowa akwizycja albo zmienił się zbiór kafli (drugi kafel pojawił się po odrzuceniu częściowej sceny)
+            path = self.cache_dir / f"{k[0]}_{k[1]}.json"
+            if not path.exists():
+                return True
+            stored = self._stored_items(f"{k[0]}_{k[1]}")
+            return stored is not None and stored != _item_ids(found[k])
+
+        todo = [k for k in sorted(found, key=lambda k: k[0], reverse=True) if needs_check(k)][:MAX_CHECKS]
         if not todo:
             return
         if self._ctx is None:
@@ -240,13 +260,16 @@ class CurrentLevelService:
         for (day, platform) in todo:
             name = f"{day}_{platform}"
             try:
+                ids = _item_ids(found[(day, platform)])
                 res = evaluate(found[(day, platform)], day, self._ctx, self.load_fn)
                 if isinstance(res, str):
-                    self._write(name, {"rejected": res, "checked_at": _now()})
+                    self._write(name, {"rejected": res, "checked_at": _now(), "items": ids})
+                    with self._lock:
+                        self._accepted.pop(name, None)      # nowy werdykt zastępuje wcześniejsze przyjęcie
                 else:
                     res = dataclasses.replace(res, acq_id=name)
                     acc = dataclasses.asdict(res)
-                    self._write(name, {"accepted": acc})
+                    self._write(name, {"accepted": acc, "items": ids})
                     with self._lock:
                         self._accepted[name] = acc
             except Exception as e:  # noqa: BLE001 - błąd przejściowy: nie zapisujemy, ponowimy przy następnym odświeżeniu

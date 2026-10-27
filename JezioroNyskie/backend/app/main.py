@@ -27,16 +27,17 @@ from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.exceptions import RequestValidationError
 from mielizna.config import load_config
 from pyproj import Transformer
 
 from app import current
 from app.cache import TTLStore
 from app.data import Products, capacity_to_level, level_to_capacity, load_products
-from app.layers import UNC_MIN, layer_coordinates, bottom_breaks, render_bottom_png, render_uncertainty_png
+from app.layers import RENDER_VERSION, UNC_MIN, layer_coordinates, bottom_breaks, render_bottom_png, render_uncertainty_png
 from app.point import point_info
-from app.schemas import (CapacityToLevel, CurrentLevelResponse, Layers, LevelToCapacity, MetaResponse, PointResponse, SceneOut,
-                         ZonesResponse)
+from app.schemas import (CapacityToLevel, CurrentLevelResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
+                         SceneOut, ShorelineFeature, ZonesResponse)
 from app.settings import Settings, get_settings
 from app.zones import (round_param, zone_classes, zone_stats, zone_warnings, zones_geojson)
 
@@ -81,6 +82,12 @@ def cached_response(request: Request, etag: str, build, cache_control: str = CAC
 def cached_json_response(request: Request, etag: str, build, cache_control: str = CACHE_CONTROL) -> Response:
     """`cached_response` dla JSON."""
     return cached_response(request, etag, build, cache_control)
+
+
+def h_out_of_range(lo: float, hi: float) -> RequestValidationError:
+    """422 w standardowym kształcie `HTTPValidationError` (`detail` = lista `{loc, msg, type}`), zgodnym z openapi."""
+    return RequestValidationError([{"loc": ("query", "h"), "type": "value_error",
+                                    "msg": f"h poza zakresem suwaka [{lo}, {hi}]"}])
 
 
 def slider_range(products: Products) -> tuple[float, float]:
@@ -200,7 +207,7 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
         lo, hi = slider_range(p)
         h, draft, margin = round_param(h), round_param(draft), round_param(margin)
         if not (lo <= h <= hi):
-            raise HTTPException(422, f"h poza zakresem suwaka [{lo}, {hi}]")
+            raise h_out_of_range(lo, hi)
         etag = f'W/"{p.version}-{h:.2f}-{draft:.2f}-{margin:.2f}"'
         key = ("zones", h, draft, margin, p.version)
         cache: TTLStore = request.app.state.cache
@@ -231,7 +238,7 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
         lo, hi = slider_range(p)
         h, draft, margin = round_param(h), round_param(draft), round_param(margin)
         if not (lo <= h <= hi):
-            raise HTTPException(422, f"h poza zakresem suwaka [{lo}, {hi}]")
+            raise h_out_of_range(lo, hi)
         body = PointResponse(**point_info(p, lon, lat, h, draft, margin))
         return Response(content=body.model_dump_json(), media_type="application/json")
 
@@ -245,7 +252,8 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
         return static_json(request, "", lambda: json.dumps(
             [scene_out(s).model_dump() for s in p.scenes], ensure_ascii=False).encode())
 
-    @app.get("/api/shorelines")
+    @app.get("/api/shorelines", response_model=ShorelineFeature,
+             responses={404: {"description": "brak opublikowanej linii brzegowej dla tej daty"}})
     def shorelines(request: Request, date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$")):
         p: Products = request.app.state.products
         scene = next((s for s in p.scenes if s["date"] == date), None)   # tylko sceny opublikowane
@@ -258,7 +266,7 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
                                "properties": scene_out(scene).model_dump()}, ensure_ascii=False).encode()
         return static_json(request, f"-shore-{date}", build)
 
-    @app.get("/api/marinas")
+    @app.get("/api/marinas", response_model=MarinasResponse)
     def marinas(request: Request):
         p: Products = request.app.state.products
 
@@ -297,7 +305,7 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
     def layer_png(request: Request, name: str, theme: str) -> Response:
         p: Products = request.app.state.products
         cache: TTLStore = request.app.state.cache
-        key = ("layer", name, theme, p.version)
+        key = ("layer", name, theme, p.version, RENDER_VERSION)
 
         def build() -> bytes:
             body = cache.get(key)
@@ -306,7 +314,7 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
                 cache.set(key, body)
             return body
 
-        return cached_response(request, f'W/"{p.version}-{name}-{theme}"', build, LAYER_CACHE_CONTROL, "image/png")
+        return cached_response(request, f'W/"{p.version}-{name}-{theme}-r{RENDER_VERSION}"', build, LAYER_CACHE_CONTROL, "image/png")
 
     @app.get("/api/layers/bottom.png", response_class=Response, responses={200: {"content": {"image/png": {}}}})
     def bottom_png(request: Request, theme: Literal["light", "dark"] = Query(...)):
@@ -316,7 +324,7 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
     @app.get("/api/layers/uncertainty.png", response_class=Response,
              responses={200: {"content": {"image/png": {}}}})
     def uncertainty_png(request: Request, theme: Literal["light", "dark"] = Query(...)):
-        """Kropki niepewności (RGBA, 4× rozdzielczość, EPSG:3857)."""
+        """Kropki niepewności (RGBA, 2× rozdzielczość, EPSG:3857)."""
         return layer_png(request, "uncertainty", theme)
 
     return app

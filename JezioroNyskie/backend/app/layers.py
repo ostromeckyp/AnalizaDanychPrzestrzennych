@@ -27,6 +27,7 @@ from rasterio.warp import Resampling, calculate_default_transform, reproject
 MERCATOR = "EPSG:3857"
 RESOLUTION_M = 10
 UNC_MIN = 0.5                      # m; od tej niepewności rysujemy kropkę
+RENDER_VERSION = 2                 # R9 = drugi render; podbić po zmianie kolorów/stylu, by unieważnić cache przeglądarek
 UNC_SCALE = 2                      # obraz niepewności powiększony 2×
 N_CLASSES = 5
 BOTTOM_COLORS = {                  # (najpłycej, najgłębiej), brief §16.3

@@ -6,7 +6,7 @@ import rasterio
 from PIL import Image
 from pyproj import Transformer
 
-from app.layers import (bottom_breaks, image_coordinates, render_bottom_png, render_uncertainty_png,
+from app.layers import (RENDER_VERSION, bottom_breaks, image_coordinates, render_bottom_png, render_uncertainty_png,
                         to_web_mercator)
 
 
@@ -86,11 +86,18 @@ def test_meta_has_layers(client):
     assert len(L["uncertainty"]["coordinates"]) == 4
 
 
+def test_layer_render_version_in_etag_and_cache_key(app, client):
+    assert RENDER_VERSION == 2
+    r = client.get("/api/layers/bottom.png?theme=light")
+    assert r.headers["etag"] == f'W/"all-testver00001-bottom-light-r{RENDER_VERSION}"'
+    assert app.state.cache.get(("layer", "bottom", "light", "all-testver00001", RENDER_VERSION)) is not None
+
+
 def test_layer_endpoint_png_etag_and_304(client):
     r = client.get("/api/layers/bottom.png?theme=dark")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     assert r.headers["cache-control"] == "public, max-age=86400"
-    assert r.headers["etag"].endswith('-bottom-dark"') and _img(r.content).mode == "RGBA"
+    assert r.headers["etag"].endswith(f'-bottom-dark-r{RENDER_VERSION}"') and _img(r.content).mode == "RGBA"
     r2 = client.get("/api/layers/bottom.png?theme=dark", headers={"If-None-Match": r.headers["etag"]})
     assert r2.status_code == 304 and r2.content == b""
     assert client.get("/api/layers/uncertainty.png?theme=light").status_code == 200

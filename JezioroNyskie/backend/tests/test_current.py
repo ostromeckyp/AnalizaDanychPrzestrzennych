@@ -59,7 +59,7 @@ def corrupt_scene(items, grid, cfg):
 
 
 def one_acq(d, platform="Sentinel-2A"):
-    return lambda a, b: {(d, platform): [object()]}
+    return lambda a, b: {(d, platform): ["tile-33UXR"]}
 
 
 @pytest.fixture
@@ -179,3 +179,39 @@ def test_get_without_refresh_is_fallback(service_factory):
     assert r["last_checked"] is None and r["refreshing"] is False
     assert r["shoreline"]["type"] in ("LineString", "MultiLineString")
     assert r["h"] == 193.5 and r["h_method"] == "B" and not math.isnan(r["h_sigma"])
+
+
+def test_partial_ingest_rejection_is_reevaluated_when_second_tile_appears(service_factory, tmp_path):
+    calls = []
+    tiles = [["33UXR"]]
+    s = service_factory(search=lambda a, b: {("2026-10-26", "Sentinel-2A"): list(tiles[0])},
+                        load=cloudy_scene(calls))
+    s.refresh(); s.refresh()
+    path = next(tmp_path.glob("current/2026-10-26_*.json"))
+    stored = json.loads(path.read_text())
+    assert len(calls) == 1 and stored["rejected"] == "not_usable" and stored["items"] == ["33UXR"]
+    tiles[0] = ["33UXS", "33UXR"]                       # drugi kafel dotarł po pierwszym sprawdzeniu
+    s.refresh()
+    assert len(calls) == 2 and json.loads(path.read_text())["items"] == ["33UXR", "33UXS"]
+    s.refresh()
+    assert len(calls) == 2                              # ten sam zbiór kafli: bez ponownej oceny
+
+
+def test_item_ids_prefer_id_attribute(service_factory, tmp_path):
+    class Item:
+        def __init__(self, id): self.id = id
+    s = service_factory(search=lambda a, b: {("2026-10-26", "Sentinel-2A"): [Item("b"), Item("a")]})
+    s.refresh()
+    assert json.loads(next(tmp_path.glob("current/2026-10-26_*.json")).read_text())["items"] == ["a", "b"]
+
+
+def test_reevaluation_replaces_earlier_acceptance(service_factory, tmp_path):
+    tiles = [["33UXR"]]
+    loads = [good_scene]
+    s = service_factory(search=lambda a, b: {("2026-10-26", "Sentinel-2A"): list(tiles[0])},
+                        load=lambda i, g, c: loads[0](i, g, c))
+    s.refresh()
+    assert s.get()["source"] == "satellite"
+    tiles[0], loads[0] = ["33UXR", "33UXS"], (lambda i, g, c: _scene(scl_class=9))
+    s.refresh()
+    assert s.get()["source"] == "pipeline"

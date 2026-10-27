@@ -82,6 +82,8 @@ def load_products(data_dir: Path, period: str = "all") -> Products:
     scenes = [s for s in json.loads((proc / "scenes.json").read_text(encoding="utf-8"))
               if s["qc_ok"] and s["h_t"] is not None]
     scenes.sort(key=lambda s: s["date"])
+    if not scenes:
+        raise ValueError("brak opublikowanych scen (qc_ok z h_t) w scenes.json - backend nie ruszy bez fallbacku pipeline")
     dates = {s["date"] for s in scenes}
 
     shorelines = gpd.read_file(proc / "shorelines.gpkg")

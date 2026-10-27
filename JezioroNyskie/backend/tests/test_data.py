@@ -21,3 +21,15 @@ def test_fixture_outside_model_contract(dataset, products):
     assert (raw["flags"][:, 25:28] == 255).all() and (raw["obs_count"][:, 25:28] == 65535).all()
     assert (raw["obs_count"][:, 28:] == 0).all()
     assert not products.in_model[:, 25:].any()
+
+
+def test_load_products_without_published_scenes_fails_at_startup(dataset):
+    import json
+    from app.data import load_products
+    f = dataset / "processed" / "scenes.json"
+    scenes = json.loads(f.read_text(encoding="utf-8"))
+    for s in scenes:
+        s["qc_ok"] = False
+    f.write_text(json.dumps(scenes), encoding="utf-8")
+    with pytest.raises(ValueError, match="brak opublikowanych scen"):
+        load_products(dataset, "all")
