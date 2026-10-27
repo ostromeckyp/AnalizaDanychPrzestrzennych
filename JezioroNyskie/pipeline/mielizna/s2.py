@@ -1,5 +1,6 @@
 """Sentinel-2 L2A (Earth Search): wyszukanie, odbicie, filtr scen, wczytanie na siatkę wzorcową."""
 import datetime as dt
+import logging
 import re
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -16,11 +17,12 @@ from scipy.ndimage import binary_dilation
 
 from mielizna.grid import Grid
 
+log = logging.getLogger(__name__)
 BANDS = ["blue", "green", "red", "nir", "swir16", "swir22"]
 STAC_URL = "https://earth-search.aws.element84.com/v1"
 COLLECTION = "sentinel-2-l2a"
 SCALE = 1e-4
-HARMONIZED_WATER_SWIR16_MAX_DN = 500
+HARMONIZED_WATER_SWIR16_P5_MAX_DN = 900
 LOAD_KW = dict(nodata=0, dtype="uint16", groupby="id",
                resampling={"*": "bilinear", "scl": "nearest"}, fail_on_error=True)
 
@@ -40,6 +42,11 @@ def _version_key(item: pystac.Item) -> tuple:
     base = tuple(int(p) for p in str(item.properties.get("s2:processing_baseline", "0")).split("."))
     m = re.search(r"_(\d+)_L2A$", item.id)
     return (base, int(m.group(1)) if m else -1)
+
+
+def drop_non_cog_items(items: list[pystac.Item]) -> list[pystac.Item]:
+    """Odrzuca itemy bez SCL jako .tif (stare jp2 na s3://sentinel-s2-l2a); przed dedupe_items."""
+    return [i for i in items if "scl" in i.assets and i.assets["scl"].href.lower().endswith(".tif")]
 
 
 def dedupe_items(items: list[pystac.Item]) -> list[pystac.Item]:
@@ -77,14 +84,26 @@ def search_items(cfg: dict, cache: Path | None = None, refresh: bool = False) ->
         if cache is not None:
             cache.parent.mkdir(parents=True, exist_ok=True)
             pystac.ItemCollection(items).save_object(str(cache))
-    return dedupe_items(items)
+    kept = drop_non_cog_items(items)
+    if len(kept) < len(items):
+        log.info("Odrzucono %d itemów bez SCL .tif (stare jp2)", len(items) - len(kept))
+    return dedupe_items(kept)
 
 
 # --- odbicie ----------------------------------------------------------------------
 
 def reflectance_offset(item: pystac.Item) -> float:
-    """Earth Search v1 COGs are harmonized to the pre-04.00 convention for every baseline
-    (measured 2026-10-27, see task-4-decisions.md). Never read raster:bands.offset."""
+    """Zawsze 0.0 - offset odbicia Sentinel-2 w Earth Search v1.
+
+    Co robi: zwraca stałą poprawkę dodawaną do dn*1e-4 (zawsze 0.0), niezależnie od baseline'u itemu.
+    Dlaczego tak: COG-i Earth Search v1 są zharmonizowane do konwencji sprzed baseline'u 04.00 dla
+      każdego baseline'u (pomiar 2026-10-27: DN SWIR16 czystej wody 9-58 we wszystkich okresach,
+      przetworzone ponownie kopie 05.00 zgadzają się z oryginałami 02.14/03.01); metadane
+      raster:bands.offset = -0.1 i flaga boa_offset_applied są mylące, więc nie są czytane.
+    Wejście → wyjście: pystac.Item → float (0.0). Zabezpieczenie: check_harmonized.
+    Jak to obronić: to nie założenie, tylko pomiar nad wodą w każdym okresie, a ewentualny błąd
+      (offset +1000 DN) wyłapie check_harmonized po p5 SWIR16 nad wodą.
+    """
     return 0.0
 
 
@@ -96,13 +115,13 @@ def dn_to_reflectance(dn: np.ndarray, offset: float) -> np.ndarray:
 
 
 def check_harmonized(swir16_dn: np.ndarray, scl: np.ndarray, item_id: str) -> None:
-    """ValueError, gdy mediana SWIR16 DN nad pikselami SCL==6 > 500 (wymaga >= 100 pikseli wody,
-    inaczej nic nie robi). Odbicie wody w SWIR16 to ~0.00-0.06, więc mediana > 500 DN oznacza,
-    że w danych został offset +1000."""
+    """ValueError, gdy 5. percentyl SWIR16 DN nad pikselami SCL==6 > 900 (wymaga >= 100 pikseli wody,
+    inaczej nic nie robi). Nieusunięty offset +1000 podnosi podłogę (najciemniejsze piksele wody)
+    do ~1000 DN, a zamglona woda podnosi tylko medianę - dlatego patrzymy na p5, nie na medianę."""
     dn = swir16_dn[(scl == 6) & (swir16_dn > 0)]
-    if dn.size >= 100 and np.median(dn) > HARMONIZED_WATER_SWIR16_MAX_DN:
-        raise ValueError(f"{item_id}: mediana SWIR16 nad wodą = {np.median(dn):.0f} DN "
-                         f"(> {HARMONIZED_WATER_SWIR16_MAX_DN}); dane wyglądają na bez harmonizacji")
+    if dn.size >= 100 and (p5 := np.percentile(dn, 5)) > HARMONIZED_WATER_SWIR16_P5_MAX_DN:
+        raise ValueError(f"{item_id}: SWIR16 floor ~1000 DN over water: unharmonized product "
+                         f"(offset not removed); p5 = {p5:.0f} DN")
 
 
 # --- maski i jakość sceny ---------------------------------------------------------

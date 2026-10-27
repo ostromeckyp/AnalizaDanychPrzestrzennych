@@ -5,6 +5,7 @@ import pystac
 import pytest
 
 from mielizna.s2 import (cloud_mask, check_harmonized, dedupe_items, dn_to_reflectance,
+                         drop_non_cog_items,
                          group_acquisitions, is_usable, mosaic_first_valid, reflectance_offset,
                          resample_like_load_day, scene_quality, valid_mask)
 
@@ -13,11 +14,12 @@ CFG = {"scene_filter": {"min_valid_pct": 95, "max_local_cloud_pct": 5, "max_ice_
 
 
 def item(id="S2A_33UXR_20210601_0_L2A", date="2021-06-01", platform="sentinel-2a", tile="MGRS-33UXR",
-         baseline="03.01", applied=False, raster_offset=None):
+         baseline="03.01", applied=False, raster_offset=None, scl_ext="tif"):
     d = dt.datetime.fromisoformat(date + "T10:00:00+00:00")
     it = pystac.Item(id, None, None, d, {"platform": platform, "grid:code": tile,
                                          "s2:processing_baseline": baseline,
                                          "earthsearch:boa_offset_applied": applied})
+    it.add_asset("scl", pystac.Asset(f"https://example.test/{id}/SCL.{scl_ext}"))
     if raster_offset is not None:
         it.add_asset("swir16", pystac.Asset("x.tif", extra_fields={
             "raster:bands": [{"offset": raster_offset}]}))
@@ -42,8 +44,16 @@ def test_offset_rule():  # Earth Search harmonizes all baselines; flag and raste
 def test_check_harmonized():
     scl = np.full((20, 20), 6, np.uint8)
     check_harmonized(np.full((20, 20), 40, np.uint16), scl, "ok")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="SWIR16 floor ~1000 DN over water"):
         check_harmonized(np.full((20, 20), 1040, np.uint16), scl, "bad")
+
+
+def test_check_harmonized_bright_water_median_passes():
+    # hazy scene: median ~550 DN but a dark tail (p5 ~ 400) -> real water, not an offset floor
+    scl = np.full((40, 40), 6, np.uint8)
+    dn = np.linspace(400, 700, 1600).reshape(40, 40).astype(np.uint16)
+    assert np.median(dn) > 500
+    check_harmonized(dn, scl, "hazy")
 
 
 def test_check_harmonized_few_water_pixels_is_noop():
@@ -133,3 +143,12 @@ def test_mosaic_first_valid():
     assert np.allclose(bands["nir"], [[1, 1, 2]]) and scl.tolist() == [[6, 6, 4]]
     bands, scl = mosaic_first_valid([b1], [s1], [np.array([[True, False, False]])])
     assert np.isnan(bands["nir"][0, 1:]).all() and scl.tolist() == [[6, 0, 0]]
+
+
+def test_drop_non_cog_items_keeps_cog_before_dedupe():
+    legacy = item("S2A_33UXR_20200701_1_L2A", "2020-07-01", scl_ext="jp2")
+    cog = item("S2A_33UXR_20200701_0_L2A", "2020-07-01")
+    kept = drop_non_cog_items([legacy, cog])
+    assert [i.id for i in kept] == [cog.id]
+    assert [i.id for i in dedupe_items(kept)] == [cog.id]
+    assert [i.id for i in dedupe_items([legacy, cog])] == [legacy.id]  # why the filter must come first

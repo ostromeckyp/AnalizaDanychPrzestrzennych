@@ -105,43 +105,75 @@ def write_cog(path, bands, scl):
                        nodata=np.nan) as ds:
         ds.write(stack)
         ds.descriptions = tuple(s2.BANDS + ["scl"])
-    rasterio.shutil.copy(tmp_gtiff, tmp_cog, driver="COG", compress="deflate", predictor=3)
+    rasterio.shutil.copy(tmp_gtiff, tmp_cog, driver="COG", compress="deflate", predictor=3,
+                    overview_resampling="nearest")  # SCL kategoryczne: bez uśredniania klas
     tmp_gtiff.unlink()
     tmp_cog.replace(path)
 
 
+def _reject(rejected_path, r, reason, q=None):
+    """Dopisuje akwizycję do scenes_pass2_rejected.csv (nie będzie pobierana ponownie)."""
+    row = {"date": r["date"], "acq_id": r["acq_id"], "reason": reason,
+           "valid_pct": round(q["valid_pct"], 3) if q else "",
+           "local_cloud_pct": round(q["local_cloud_pct"], 3) if q else ""}
+    pd.DataFrame([row]).to_csv(rejected_path, mode="a", header=not rejected_path.exists(), index=False)
+
+
+def _try_acquisition(r, by_id, cfg, grid, aoi, lake, out_dir, rejected_path):
+    """Wczytuje i zapisuje jedną akwizycję; True, gdy powstał COG. Odrzucenia trafiają do CSV."""
+    date = r["date"]
+    try:
+        items = [by_id[i] for i in r["items"].split(";")]
+        bands, scl = s2.load_day(items, grid, cfg, pool=6)
+    except ValueError as e:  # m.in. check_harmonized
+        log.warning("%s %s: odrzucona (%s)", date, r["acq_id"], e)
+        _reject(rejected_path, r, f"guard: {e}")
+        return False
+    except Exception as e:  # błąd sieci itp. -> bez wpisu, kolejny start ponowi próbę
+        log.error("%s %s: %s: %s", date, r["acq_id"], type(e).__name__, e)
+        return False
+    q = s2.scene_quality(date, scl, s2.valid_mask(bands, scl), aoi, lake)
+    if not s2.is_usable(q, cfg):
+        log.warning("%s %s: po pełnej walidacji nieużyteczna (valid %.1f, chmury %.1f)",
+                    date, r["acq_id"], q["valid_pct"], q["local_cloud_pct"])
+        _reject(rejected_path, r, "validation", q)
+        return False
+    write_cog(out_dir / f"{date}.tif", bands, scl)
+    return True
+
+
 def pass2(by_id, cfg, grid, aoi, lake, csv_path, out_dir, rejected_path, max_days):
-    """Przebieg 2: 6 pasm dla najlepszej użytecznej akwizycji każdego dnia."""
-    df = pd.read_csv(csv_path, dtype={"date": str, "platform": str})
+    """Przebieg 2: 6 pasm dla najlepszej użytecznej akwizycji każdego dnia (z awaryjnym wyborem
+    kolejnej akwizycji tego samego dnia) oraz usunięcie stosów dat z exclude_dates."""
+    for e in cfg["scene_filter"].get("exclude_dates") or []:
+        d = e["date"] if isinstance(e, dict) else e
+        if (out_dir / f"{d}.tif").exists():
+            (out_dir / f"{d}.tif").unlink()
+            log.info("%s: usunięto stos (exclude_dates)", d)
+    df = pd.read_csv(csv_path, dtype={"date": str, "platform": str, "acq_id": str})
     df["usable"] = [s2.is_usable(r, cfg) for r in df.to_dict("records")]  # uwzględnia exclude_dates
-    rejected = set(pd.read_csv(rejected_path, dtype=str)["date"]) if rejected_path.exists() else set()
-    best = (df[df["usable"]].sort_values(["date", "valid_pct", "local_cloud_pct"],
-                                         ascending=[True, False, True]).groupby("date").head(1))
-    todo = [r for r in best.to_dict("records")
-            if not (out_dir / f"{r['date']}.tif").exists() and r["date"] not in rejected]
+    rejected = (set(pd.read_csv(rejected_path, dtype=str)["acq_id"])
+                if rejected_path.exists() else set())
+    ranked = df[df["usable"]].sort_values(["date", "valid_pct", "local_cloud_pct"],
+                                          ascending=[True, False, True])
+    by_date = {d: g.to_dict("records") for d, g in ranked.groupby("date")}
+    todo = [d for d, rs in by_date.items() if not (out_dir / f"{d}.tif").exists()
+            and any(r["acq_id"] not in rejected for r in rs)]
     if max_days:
         todo = todo[:max_days]
-    log.info("Przebieg 2: %d dni użytecznych, %d do zapisu", len(best), len(todo))
+    log.info("Przebieg 2: %d dni użytecznych, %d do zapisu", len(by_date), len(todo))
     t0 = time.time()
-    for n, r in enumerate(todo, 1):
-        date = r["date"]
-        try:
-            items = [by_id[i] for i in r["items"].split(";")]
-            bands, scl = s2.load_day(items, grid, cfg, pool=6)
-            q = s2.scene_quality(date, scl, s2.valid_mask(bands, scl), aoi, lake)
-            if not s2.is_usable(q, cfg):
-                log.warning("%s: po pełnej walidacji nieużyteczna (valid %.1f, chmury %.1f) - pomijam",
-                            date, q["valid_pct"], q["local_cloud_pct"])
-                pd.DataFrame([{"date": date, "valid_pct": q["valid_pct"],
-                               "local_cloud_pct": q["local_cloud_pct"]}]).to_csv(
-                    rejected_path, mode="a", header=not rejected_path.exists(), index=False)
+    for n, date in enumerate(todo, 1):
+        ok = False
+        for r in by_date[date]:
+            if r["acq_id"] in rejected:
                 continue
-            write_cog(out_dir / f"{date}.tif", bands, scl)
-        except Exception as e:  # bez pliku -> kolejny start ponowi próbę
-            log.error("%s: %s: %s", date, type(e).__name__, e)
-            continue
+            if _try_acquisition(r, by_id, cfg, grid, aoi, lake, out_dir, rejected_path):
+                ok = True
+                break
         el = time.time() - t0
-        log.info("P2 %d/%d %s zapisano (~%.0f s do końca)", n, len(todo), date, el / n * (len(todo) - n))
+        log.info("P2 %d/%d %s %s (~%.0f s do końca)", n, len(todo), date,
+                 "zapisano" if ok else "brak pliku", el / n * (len(todo) - n))
     log.info("Przebieg 2 zakończony")
 
 

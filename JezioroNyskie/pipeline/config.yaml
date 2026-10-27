@@ -19,7 +19,21 @@ scene_filter:
   min_valid_pct: 95
   max_ice_pct: 1
   buffer_m: 500
-  exclude_dates: []
+  exclude_dates:
+    - {date: "2017-02-27", reason: "ice sheet over eastern and central lake (cracked ice texture), open water only in west"}
+    - {date: "2019-02-15", reason: "ice sheet on eastern basin and along south/east shoreline"}
+    - {date: "2019-02-17", reason: "ice sheet on eastern basin and ice rim along south/east shoreline"}
+    - {date: "2021-03-03", reason: "drifting ice floes in east and broken ice along south and west shorelines"}
+    - {date: "2021-12-03", reason: "uncertain: sharp-edged pale sheet in SW basin and pale rim on south shore, possible thin ice"}
+    - {date: "2022-01-15", reason: "bright ice rim along SE shoreline"}
+    - {date: "2023-02-09", reason: "brash ice / floe streaks across the whole lake incl. north shore"}
+    - {date: "2023-12-18", reason: "white snow/ice patches on SW and E shoreline at waterline"}
+    - {date: "2025-01-19", reason: "uncertain: white patches in southern marsh inlets at shoreline, possible ice/snow"}
+    - {date: "2025-12-12", reason: "uncertain: textured pale patch with small bright floes near south shore, possible thin ice"}
+    - {date: "2026-02-28", reason: "lake mostly ice-covered (east and centre), open water only in west"}
+    - {date: "2026-03-02", reason: "lake mostly ice-covered (east and centre)"}
+    - {date: "2026-03-05", reason: "residual ice sheet over eastern half and NE shore"}
+    - {date: "2026-03-07", reason: "residual ice floes in NE basin near the dam shore"}
 
 periods:
   all: ["2017-01-01", "2026-12-31"]

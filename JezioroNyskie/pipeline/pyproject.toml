@@ -35,4 +35,4 @@ packages = ["mielizna"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-filterwarnings = ["ignore::PendingDeprecationWarning", "ignore::DeprecationWarning:odc"]
+filterwarnings = ["ignore::PendingDeprecationWarning:odc", "ignore::DeprecationWarning:odc"]
