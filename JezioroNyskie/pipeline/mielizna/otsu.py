@@ -2,6 +2,9 @@
 import numpy as np
 from skimage.filters import threshold_otsu
 
+from mielizna.features import indices
+from mielizna.s2 import cloud_mask, valid_mask
+
 
 def otsu_threshold(mndwi: np.ndarray, aoi: np.ndarray) -> float:
     """Próg Otsu MNDWI liczony na pikselach `aoi` (skończonych).
@@ -32,3 +35,15 @@ def otsu_mask(mndwi: np.ndarray, threshold: float) -> np.ndarray:
     out = (mndwi > threshold).astype(np.uint8)
     out[np.isnan(mndwi)] = 255
     return out
+
+
+def scene_threshold(bands: dict[str, np.ndarray], scl: np.ndarray, aoi: np.ndarray) -> float:
+    """Próg Otsu MNDWI sceny: `aoi & valid & ~cloud` (ta sama reguła co w 04a).
+
+    Co robi: liczy MNDWI z pasm i zwraca próg Otsu z pikseli AOI, które są ważne i bez chmur.
+    Dlaczego tak: jedna definicja dla etykiet (04a), treningu i predykcji, żeby cecha
+      `mndwi_minus_otsu` nie rozjechała się między nimi.
+    Wejście → wyjście: pasma {nazwa: (H, W)}, SCL (H, W), maska AOI → float.
+    Jak to obronić: tylko składa przetestowane części (`indices`, `valid_mask`, `cloud_mask`).
+    """
+    return otsu_threshold(indices(bands)["mndwi"], aoi & valid_mask(bands, scl) & ~cloud_mask(scl))

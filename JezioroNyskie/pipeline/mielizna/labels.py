@@ -34,7 +34,11 @@ AUTO_WATER_MIN_FREQ = 0.98
 AUTO_WATER_EROSION_M = 200.0
 AUTO_LAND_MIN_DIST_M = 300.0
 CLASS_LABELS = ("water", "land")  # etykiety klasowe; "skip" (niepewne) nie jest klasą
-COLUMNS = ["id", "date", "row", "col", "x", "y", "stratum", "label", "source", "geometry"]
+HUMAN_STRATA = ("shore", "shore_low")  # warstwy ręcznie oceniane przez autora
+LOW_FREQ = (0.05, 0.30)                # shore_low: rzadko mokre piksele (częstość wody)
+SUSPECT_MARGIN = -0.3                  # MNDWI − Otsu poniżej tej wartości = „woda” wygląda jak ląd
+COLUMNS = ["id", "date", "row", "col", "x", "y", "stratum", "label", "source", "label_v1", "review",
+           "geometry"]
 
 
 def load_scene(date: str, s2_dir: Path | None = None) -> tuple[dict[str, np.ndarray], np.ndarray]:
@@ -148,7 +152,94 @@ def sample_candidates(scene_dates: list[str], water_freq: np.ndarray, lake: np.n
     g = g.sample(frac=1, random_state=seed).reset_index(drop=True)
     g.insert(0, "id", np.arange(len(g)))
     g["label"] = g["label"].astype(object).where(g["label"].notna(), None)
+    g["label_v1"] = pd.Series([None] * len(g), dtype=object)
+    g["review"] = False
     return g[COLUMNS]
+
+
+def sample_extra(existing: gpd.GeoDataFrame, scene_dates: list[str], water_freq: np.ndarray,
+                 lake: np.ndarray, grid: Grid, n: int = 100, stratum: str = "shore_low",
+                 freq_range: tuple[float, float] = LOW_FREQ, seed: int = 43,
+                 ok_fn: Callable[[str], np.ndarray] = load_ok_mask) -> gpd.GeoDataFrame:
+    """Dolosowuje `n` nowych punktów warstwy `stratum` (domyślnie `shore_low`) bez ruszania istniejących.
+
+    Co robi: pula = piksele z `water_freq` ∈ (lo, hi] (NaN = brak obserwacji/poza AOI odpada),
+      których (row, col) nie ma jeszcze w `existing`. Każdy piksel dostaje losową scenę, w której
+      jest ważny i bez chmury, z odstępem 30 m od WSZYSTKICH punktów tej sceny (starych i nowych).
+      Nowe id zaczynają się od `existing.id.max() + 1`; etykieta None, source „auto”.
+    Dlaczego tak: w warstwie `shore` jest za mało lądu (21 punktów); piksele rzadko mokre (5–30%)
+      to pula, gdzie ląd jest częsty, a wybór NIE zależy od wyniku Otsu, więc porównanie RF–Otsu nie
+      jest obciążone. Dopisywanie zamiast losowania od nowa zostawia etykiety autora nietknięte.
+    Wejście → wyjście: istniejące etykiety, daty scen, `water_freq` (H, W), maska jeziora (nieużywana
+      poza spójnością z `sample_candidates`), siatka → GeoDataFrame TYLKO z nowymi wierszami (`COLUMNS`).
+    Jak to obronić: stały `seed` 43 (inny niż 42, by nie powielać losowania `shore`), ta sama
+      procedura odstępu co w `sample_candidates`.
+    """
+    rng = np.random.default_rng(seed)
+    masks: dict[str, np.ndarray] = {}
+
+    def ok(date: str) -> np.ndarray:
+        if date not in masks:
+            masks[date] = ok_fn(date)
+        return masks[date]
+
+    lo, hi = freq_range
+    finite = np.isfinite(water_freq)
+    wf = np.where(finite, water_freq, -1.0)
+    pool = finite & (wf > lo) & (wf <= hi)
+    pool[existing.row.to_numpy(), existing.col.to_numpy()] = False
+    taken: dict[str, list[tuple[float, float]]] = {}
+    for d, s in existing.groupby("date"):
+        taken[str(d)] = list(zip(s.x.astype(float), s.y.astype(float)))
+    first_id = int(existing.id.max()) + 1
+    rows = []
+    for flat in rng.permutation(np.flatnonzero(pool)):
+        if len(rows) >= n:
+            break
+        r, c = divmod(int(flat), grid.width)
+        x, y = grid.xy(r, c)
+        for date in rng.permutation(scene_dates):
+            if not ok(date)[r, c]:
+                continue
+            prev = taken.get(date, [])
+            if prev and np.min(np.hypot(np.array(prev)[:, 0] - x, np.array(prev)[:, 1] - y)) < MIN_SPACING_M:
+                continue
+            taken.setdefault(date, []).append((x, y))
+            rows.append(dict(id=first_id + len(rows), date=str(date), row=r, col=c, x=x, y=y,
+                             stratum=stratum, label=None, source="auto", label_v1=None, review=False,
+                             geometry=Point(x, y)))
+            break
+    if len(rows) < n:
+        log.warning("Warstwa %s: %d z %d żądanych punktów (za mała pula)", stratum, len(rows), n)
+    g = gpd.GeoDataFrame(rows, columns=COLUMNS, geometry="geometry", crs=LABELS_CRS)
+    g["label"] = g["label"].astype(object)
+    g["label_v1"] = g["label_v1"].astype(object)
+    return g
+
+
+def mark_suspect(gdf: gpd.GeoDataFrame, margin: pd.Series,
+                 threshold: float = SUSPECT_MARGIN) -> tuple[gpd.GeoDataFrame, list[int]]:
+    """Oddaje do ślepej ponownej oceny ręczne „water” o MNDWI − Otsu < `threshold`.
+
+    Co robi: dla wszystkich wierszy ręcznych kopiuje etykietę do `label_v1`; dla ręcznych „water”
+      z `margin` < `threshold` zeruje etykietę (None, source „auto”) i ustawia `review=True`.
+      Pozostałe wiersze dostają `review=False`. Zwraca (kopię tabeli, posortowane id podejrzanych).
+    Dlaczego tak: 24 etykiety „woda” wyglądają spektralnie jak ląd (mokry muł, zalana roślinność?);
+      autor ocenia je ponownie bez podglądu starej etykiety, a `label_v1` zostaje, by policzyć odsetek
+      zmian (szum etykiet) i niczego nie tracić.
+    Wejście → wyjście: etykiety, Series MNDWI − Otsu indeksowana jak `gdf` → (etykiety, lista id).
+    Jak to obronić: reguła jest mechaniczna (próg −0,3), niezależna od modelu; stare etykiety zostają.
+    """
+    out = gdf.copy()
+    human = out["source"] == "human"
+    out["label_v1"] = pd.Series(np.where(human, out["label"], None), index=out.index, dtype=object)
+    out["review"] = False
+    bad = human & (out["label"] == "water") & (margin.reindex(out.index) < threshold)
+    out.loc[bad, "label"] = None
+    out.loc[bad, "source"] = "auto"
+    out.loc[bad, "review"] = True
+    out["label"] = out["label"].astype(object).where(out["label"].notna(), None)
+    return out, sorted(int(i) for i in out.loc[bad, "id"])
 
 
 def save(gdf: gpd.GeoDataFrame, path: Path) -> None:
@@ -172,4 +263,8 @@ def load(path: Path) -> gpd.GeoDataFrame:
     """Wczytuje etykiety zapisane przez `save` (brak etykiety = None)."""
     g = gpd.read_file(path, layer=LAYER)
     g["label"] = g["label"].astype(object).where(g["label"].notna(), None)
+    if "label_v1" not in g:                      # pliki z rundy 1 nie mają nowych kolumn
+        g["label_v1"] = None
+    g["label_v1"] = g["label_v1"].astype(object).where(g["label_v1"].notna(), None)
+    g["review"] = g["review"].fillna(False).astype(bool) if "review" in g else False
     return g

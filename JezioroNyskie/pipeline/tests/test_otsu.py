@@ -25,3 +25,19 @@ def test_otsu_empty_aoi_raises():
 
 def test_otsu_mask_nan_is_nodata():
     assert otsu_mask(np.array([np.nan, .5, -.5]), 0.0).tolist() == [255, 1, 0]
+
+
+def test_scene_threshold_matches_manual_rule():
+    from mielizna.features import indices
+    from mielizna.otsu import scene_threshold
+    from mielizna.s2 import BANDS, cloud_mask, valid_mask
+    rng = np.random.default_rng(2)
+    shape = (40, 40)
+    bands = {b: rng.uniform(0.02, 0.3, shape).astype("float32") for b in BANDS}
+    bands["green"][:, :20] = 0.25   # woda: duże MNDWI
+    bands["swir16"][:, :20] = 0.02
+    scl = np.full(shape, 4, np.uint8)
+    scl[:3, :3] = 9                 # chmura nie wchodzi do histogramu
+    aoi = np.ones(shape, bool)
+    expected = otsu_threshold(indices(bands)["mndwi"], aoi & valid_mask(bands, scl) & ~cloud_mask(scl))
+    assert scene_threshold(bands, scl, aoi) == expected

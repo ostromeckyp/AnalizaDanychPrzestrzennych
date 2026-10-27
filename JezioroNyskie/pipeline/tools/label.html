@@ -69,7 +69,7 @@ async function loadNext() {
   try {
     const p = await (await fetch("/api/next")).json();
     document.getElementById("counter").textContent =
-      `oznaczono ${p.done} / ${p.total} · woda/ląd: ${p.n_class} (cel ≥150)`;
+      `oznaczono ${p.done} / ${p.total} · woda/ląd: ${p.n_class} (cel ≥150) · do przeglądu: ${p.n_review}`;
     if (p.id === null) {
       current = null;
       document.getElementById("status").textContent = "Wszystkie punkty brzegowe obsłużone. Dziękuję!";

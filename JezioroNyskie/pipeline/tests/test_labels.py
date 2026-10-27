@@ -6,6 +6,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import pytest
 import rasterio
 from affine import Affine
@@ -225,3 +226,144 @@ def test_set_label_save_error_leaves_memory_unchanged(server, monkeypatch):
     with pytest.raises(urllib.error.HTTPError):
         _post(base + "/api/label", {"id": first["id"], "label": "water"})
     assert json.loads(_get(base + "/api/next")[2])["id"] == first["id"]
+
+
+# --- runda 2: shore_low, podejrzane punkty, kolejność w serwerze -------------------------
+
+def _human_gdf(rows):
+    """rows: (id, stratum, label, source, review) -> GeoDataFrame z kolumnami rundy 2."""
+    recs = []
+    for i, st, lab, src, rev in rows:
+        recs.append(dict(id=i, date="2020-01-01", row=100 + i, col=100, x=float(i), y=0.0, stratum=st,
+                         label=lab, source=src, label_v1=None, review=rev, geometry=Point(i, 0)))
+    return gpd.GeoDataFrame(recs, geometry="geometry", crs="EPSG:2180")
+
+
+def test_sample_extra_appends_only_new_rows(synthetic):
+    old = sample_candidates(**synthetic)
+    kw = dict(scene_dates=DATES, water_freq=np.where(np.hypot(*(np.mgrid[:N, :N] - N / 2)) > 90, 0.1, synthetic["water_freq"]),
+              lake=synthetic["lake"], grid=GRID, ok_fn=_ok)
+    new = labels.sample_extra(old, n=15, **kw)
+    assert len(new) == 15 and (new.stratum == "shore_low").all()
+    assert list(new.id) == list(range(old.id.max() + 1, old.id.max() + 16))
+    assert new.label.isna().all() and (new.source == "auto").all()
+    f = kw["water_freq"][new.row.to_numpy(), new.col.to_numpy()]
+    assert ((f > 0.05) & (f <= 0.30)).all()
+    used = set(zip(old.row, old.col))
+    assert not used & set(zip(new.row, new.col))
+    # odstęp 30 m względem WSZYSTKICH punktów tej samej sceny (starych i nowych)
+    both = pd.concat([old, new])
+    for _, s in both.groupby("date"):
+        pts = list(s.geometry)
+        for i, a in enumerate(pts):
+            for b in pts[i + 1:]:
+                assert a.distance(b) >= 30
+    for d, s in new.groupby("date"):
+        assert _ok(d)[s.row.to_numpy(), s.col.to_numpy()].all()
+    again = labels.sample_extra(old, n=15, **kw)
+    assert_geodataframe_equal(new, again)
+
+
+def test_sample_extra_leaves_existing_rows_identical(tmp_path, synthetic):
+    old = sample_candidates(**synthetic)
+    save(old, tmp_path / "old.gpkg")
+    old = load(tmp_path / "old.gpkg")
+    wf = np.full((N, N), 0.1)
+    new = labels.sample_extra(old, scene_dates=DATES, water_freq=wf, lake=synthetic["lake"], grid=GRID,
+                              n=10, ok_fn=_ok)
+    merged = pd.concat([old, new], ignore_index=True)
+    save(merged, tmp_path / "m.gpkg")
+    back = load(tmp_path / "m.gpkg")
+    assert_geodataframe_equal(back.iloc[:len(old)].reset_index(drop=True), old, check_dtype=False)
+
+
+def test_mark_suspect_resets_only_low_human_water():
+    g = _human_gdf([(0, "shore", "water", "human", False),   # podejrzany
+                    (1, "shore", "water", "human", False),   # OK
+                    (2, "shore", "land", "human", False),    # land: bez zmian
+                    (3, "shore", "skip", "human", False),
+                    (4, "auto_water", "water", "auto", False),
+                    (5, "shore", None, "auto", False)])
+    margin = pd.Series({0: -0.5, 1: -0.1, 2: -0.9, 3: -0.9, 4: -0.9, 5: -0.9})
+    out, ids = labels.mark_suspect(g, margin)
+    assert ids == [0]
+    r = out.set_index("id")
+    assert r.loc[0, "label"] is None and r.loc[0, "source"] == "auto"
+    assert r.loc[0, "label_v1"] == "water" and bool(r.loc[0, "review"])
+    assert r.loc[1, "label"] == "water" and r.loc[1, "label_v1"] == "water" and not r.loc[1, "review"]
+    assert r.loc[2, "label"] == "land" and r.loc[2, "label_v1"] == "land"
+    assert r.loc[3, "label_v1"] == "skip"
+    assert r.loc[4, "label_v1"] is None and r.loc[5, "label_v1"] is None
+    assert not r.loc[[1, 2, 3, 4, 5], "review"].any()
+    assert g.loc[0, "label"] == "water"   # wejście nie jest mutowane
+
+
+def test_save_load_roundtrip_new_columns(tmp_path):
+    g = _human_gdf([(0, "shore", None, "auto", True), (1, "shore", "land", "human", False)])
+    g.loc[0, "label_v1"] = "water"
+    save(g, tmp_path / "r.gpkg")
+    back = load(tmp_path / "r.gpkg")
+    assert back.review.tolist() == [True, False] and back.review.dtype == bool
+    assert back.label_v1.tolist() == ["water", None]
+    assert back.label.tolist() == [None, "land"]
+
+
+def test_load_old_file_without_new_columns(tmp_path, synthetic):
+    g = sample_candidates(**synthetic).drop(columns=["label_v1", "review"])
+    g.to_file(tmp_path / "old.gpkg", layer="labels", driver="GPKG")
+    back = load(tmp_path / "old.gpkg")
+    assert back.review.dtype == bool and not back.review.any()
+    assert back.label_v1.isna().all()
+
+
+@pytest.fixture
+def server2(tmp_path):
+    s2dir = tmp_path / "s2"
+    s2dir.mkdir()
+    with rasterio.open(s2dir / "2020-01-01.tif", "w", driver="GTiff", width=N, height=N, count=7,
+                       dtype="float32", crs="EPSG:2180", transform=GRID.transform, nodata=np.nan) as ds:
+        ds.write(np.full((7, N, N), 0.1, "float32"))
+    g = _human_gdf([(0, "shore_low", None, "auto", False), (1, "shore", None, "auto", False),
+                    (2, "shore", None, "auto", True), (3, "shore_low", None, "auto", True),
+                    (4, "auto_land", "land", "auto", False)])
+    g.loc[2, "label_v1"] = "water"
+    g.loc[3, "label_v1"] = "land"
+    path = tmp_path / "labels.gpkg"
+    save(g, path)
+    srv = label_server.serve(port=0, labels_path=path, s2_dir=s2dir)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}", path
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_next_order_review_then_shore_then_shore_low(server2):
+    base, _ = server2
+    seen = []
+    for _ in range(4):
+        nxt = json.loads(_get(base + "/api/next")[2])
+        assert "label_v1" not in nxt and "label" not in nxt     # stara etykieta nie trafia na stronę
+        seen.append(nxt["id"])
+        _post(base + "/api/label", {"id": nxt["id"], "label": "water"})
+    assert seen == [2, 3, 1, 0]
+    nxt = json.loads(_get(base + "/api/next")[2])
+    assert nxt["id"] is None and nxt["n_review"] == 0
+
+
+def test_next_reports_remaining_review_and_unchanged_n_class(server2):
+    base, path = server2
+    nxt = json.loads(_get(base + "/api/next")[2])
+    assert nxt["n_review"] == 2 and nxt["n_class"] == 0 and nxt["total"] == 4
+    _post(base + "/api/label", {"id": nxt["id"], "label": "land"})
+    nxt = json.loads(_get(base + "/api/next")[2])
+    assert nxt["n_review"] == 1 and nxt["n_class"] == 1
+    row = load(path).set_index("id").loc[2]
+    assert row.label == "land" and row.source == "human" and bool(row.review) and row.label_v1 == "water"
+
+
+def test_unlabel_returns_review_point_to_queue(server2):
+    base, _ = server2
+    _post(base + "/api/label", {"id": 2, "label": "land"})
+    _post(base + "/api/unlabel", {"id": 2})
+    nxt = json.loads(_get(base + "/api/next")[2])
+    assert nxt["id"] == 2 and nxt["n_review"] == 2

@@ -77,13 +77,19 @@ class _State:
         self.gdf = L.load(self.path)
 
     def next_point(self) -> dict:
-        shore = self.gdf[self.gdf.stratum == "shore"]
-        done = int(shore.label.notna().sum())
-        todo = shore[shore.label.isna()]
-        out = {"done": done, "total": len(shore), "id": None,
-               "n_class": len(L.human_class_labels(self.gdf))}
+        """Następny punkt: najpierw do przeglądu (`review`), potem shore, potem shore_low.
+
+        Stara etykieta (`label_v1`) nigdy nie trafia do odpowiedzi – ocena ma być ślepa.
+        """
+        pool = self.gdf[self.gdf.stratum.isin(L.HUMAN_STRATA)]
+        todo = pool[pool.label.isna()]
+        n_review = int(todo.review.sum())
+        out = {"done": int(pool.label.notna().sum()), "total": len(pool), "id": None,
+               "n_class": len(L.human_class_labels(self.gdf)), "n_review": n_review}
         if len(todo):
-            p = todo.iloc[0]
+            rank = todo.review.map({True: 0, False: 1}) * 10 + todo.stratum.map(
+                {s: i for i, s in enumerate(L.HUMAN_STRATA)})
+            p = todo.loc[rank.sort_values(kind="stable").index[0]]
             lon, lat = _TO_WGS84.transform(p.x, p.y)
             out.update(id=int(p.id), date=str(p.date), x=float(p.x), y=float(p.y), lon=lon, lat=lat)
         return out
