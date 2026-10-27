@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Etykietowanie brzegu – Jezioro Nyskie</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #1b1e23; color: #e8e8e8; }
+  header { padding: 10px 16px; background: #2a2f37; }
+  header .warn { color: #ffcc66; font-size: 0.9em; }
+  main { padding: 16px; display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  .panel h2 { font-size: 0.95em; margin: 0 0 6px; font-weight: 600; }
+  #crop { width: 1024px; max-width: 100%; image-rendering: pixelated; display: block; }
+  .orto { position: relative; width: 512px; height: 512px; }
+  .orto img { width: 512px; height: 512px; display: block; }
+  .orto::before, .orto::after { content: ""; position: absolute; background: #ff3030; }
+  .orto::before { left: 255px; top: 0; width: 2px; height: 100%; opacity: .6; }
+  .orto::after { top: 255px; left: 0; height: 2px; width: 100%; opacity: .6; }
+  .keys { padding: 10px 16px; font-size: 1.05em; }
+  kbd { background: #444; border-radius: 4px; padding: 2px 8px; margin: 0 4px 0 12px; }
+  #status { padding: 0 16px 16px; color: #9fd29f; }
+</style>
+</head>
+<body>
+<header>
+  <strong id="counter">oznaczono – / –</strong> · scena: <strong id="date">–</strong>
+  <div class="warn">Uwaga: ortofotomapa pochodzi z innej daty niż scena Sentinel-2 (poziom wody mógł być inny) –
+    oceniaj, czy punkt ze środka krzyżyka na scenie jest wodą w dniu sceny.</div>
+</header>
+<div class="keys">Klawisze:
+  <kbd>W</kbd>woda <kbd>L</kbd>ląd <kbd>?</kbd>pomiń (niepewne)</div>
+<main>
+  <div class="panel">
+    <h2>Sentinel-2: kolory naturalne (lewo) | SWIR16/NIR/G (prawo), 64×64 px, 4×</h2>
+    <img id="crop" alt="wycinek sceny">
+  </div>
+  <div class="panel">
+    <h2>Ortofotomapa (GUGiK), ten sam obszar 640 × 640 m</h2>
+    <div class="orto"><img id="orto" alt="ortofotomapa"></div>
+  </div>
+</main>
+<div id="status"></div>
+<script>
+const WMS = "https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/HighResolution";
+const HALF = 320; // 64 px * 10 m / 2
+let current = null, busy = false;
+
+function ortoUrl(x, y) {
+  const bbox = [x - HALF, y - HALF, x + HALF, y + HALF].join(",");
+  return `${WMS}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=Raster&STYLES=&FORMAT=image/jpeg` +
+         `&SRS=EPSG:2180&BBOX=${bbox}&WIDTH=512&HEIGHT=512`;
+}
+
+async function loadNext() {
+  const p = await (await fetch("/api/next")).json();
+  document.getElementById("counter").textContent = `oznaczono ${p.done} / ${p.total}`;
+  if (p.id === null) {
+    current = null;
+    document.getElementById("status").textContent = "Wszystkie punkty brzegowe obsłużone. Dziękuję!";
+    return;
+  }
+  current = p;
+  document.getElementById("date").textContent = p.date;
+  document.getElementById("crop").src = `/api/crop/${p.id}.png`;
+  document.getElementById("orto").src = ortoUrl(p.x, p.y);
+}
+
+async function send(label) {
+  if (!current || busy) return;
+  busy = true;
+  const r = await fetch("/api/label", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({id: current.id, label})});
+  document.getElementById("status").textContent = r.ok ? `zapisano: punkt ${current.id} = ${label}` : "BŁĄD zapisu!";
+  busy = false;
+  if (r.ok) await loadNext();
+}
+
+document.addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === "w") send("water");
+  else if (k === "l") send("land");
+  else if (e.key === "?" || e.key === "/") send("skip");
+});
+loadNext();
+</script>
+</body>
+</html>
