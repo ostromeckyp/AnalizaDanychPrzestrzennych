@@ -164,3 +164,24 @@ class LevelToCapacity(BaseModel):
     h: float
     v: float | None
     in_table: bool
+
+
+class CurrentLevelResponse(BaseModel):
+    source: Literal["satellite", "pipeline"]
+    scene_date: str
+    acq_id: str | None
+    h: float
+    h_sigma: float
+    h_method: str
+    extrapolated: bool
+    area_biased: bool
+    ice_unverified: bool
+    local_cloud_pct: float | None
+    area_otsu_km2: float | None
+    shoreline: dict | None
+    computed_at: str
+    age_days: int
+    stale: bool
+    refreshing: bool
+    last_checked: str | None
+    last_error: str | None

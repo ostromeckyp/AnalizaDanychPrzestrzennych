@@ -331,6 +331,25 @@
     }
    }
   },
+  "/api/current-level": {
+   "get": {
+    "summary": "Current Level",
+    "description": "Bieżący poziom (najnowsza scena S2 albo pipeline); odpowiedź natychmiastowa, zawsze 200.",
+    "operationId": "current_level_api_current_level_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CurrentLevelResponse"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/layers/bottom.png": {
    "get": {
     "summary": "Bottom Png",
@@ -669,6 +688,151 @@
      "in_table"
     ],
     "title": "CapacityToLevel"
+   },
+   "CurrentLevelResponse": {
+    "properties": {
+     "source": {
+      "type": "string",
+      "enum": [
+       "satellite",
+       "pipeline"
+      ],
+      "title": "Source"
+     },
+     "scene_date": {
+      "type": "string",
+      "title": "Scene Date"
+     },
+     "acq_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Acq Id"
+     },
+     "h": {
+      "type": "number",
+      "title": "H"
+     },
+     "h_sigma": {
+      "type": "number",
+      "title": "H Sigma"
+     },
+     "h_method": {
+      "type": "string",
+      "title": "H Method"
+     },
+     "extrapolated": {
+      "type": "boolean",
+      "title": "Extrapolated"
+     },
+     "area_biased": {
+      "type": "boolean",
+      "title": "Area Biased"
+     },
+     "ice_unverified": {
+      "type": "boolean",
+      "title": "Ice Unverified"
+     },
+     "local_cloud_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Local Cloud Pct"
+     },
+     "area_otsu_km2": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Area Otsu Km2"
+     },
+     "shoreline": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shoreline"
+     },
+     "computed_at": {
+      "type": "string",
+      "title": "Computed At"
+     },
+     "age_days": {
+      "type": "integer",
+      "title": "Age Days"
+     },
+     "stale": {
+      "type": "boolean",
+      "title": "Stale"
+     },
+     "refreshing": {
+      "type": "boolean",
+      "title": "Refreshing"
+     },
+     "last_checked": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Checked"
+     },
+     "last_error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Error"
+     }
+    },
+    "type": "object",
+    "required": [
+     "source",
+     "scene_date",
+     "acq_id",
+     "h",
+     "h_sigma",
+     "h_method",
+     "extrapolated",
+     "area_biased",
+     "ice_unverified",
+     "local_cloud_pct",
+     "area_otsu_km2",
+     "shoreline",
+     "computed_at",
+     "age_days",
+     "stale",
+     "refreshing",
+     "last_checked",
+     "last_error"
+    ],
+    "title": "CurrentLevelResponse"
    },
    "DraftPreset": {
     "properties": {

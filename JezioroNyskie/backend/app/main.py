@@ -12,23 +12,30 @@ Wejście → wyjście: `create_app(settings, products, *, search_fn, load_fn)` �
   `GET /api/layers/{bottom,uncertainty}.png?theme=light|dark` → PNG (ETag, 304);
   `GET /api/scenes` → `list[SceneOut]`; `GET /api/shorelines?date=` → GeoJSON `Feature` (EPSG:4326, 404 gdy brak);
   `GET /api/marinas` → `FeatureCollection`; `GET /api/capacity-to-level?v=` / `/api/level-to-capacity?h=` → `{v, h, in_table}`.
-  `search_fn` i `load_fn` (wstrzykiwane wyszukiwanie STAC / wczytanie sceny) zostaną użyte w kolejnych zadaniach.
+  `GET /api/current-level` → `CurrentLevelResponse` (zawsze 200, `no-cache`; z `settings.live` odświeżane w tle).
+  `search_fn` i `load_fn` (wstrzykiwane wyszukiwanie STAC / wczytanie sceny) trafiają do `CurrentLevelService`;
+  pętla `refresh_loop` działa w `lifespan` i jest anulowana przy zamknięciu.
 Jak to obronić: wynik stref jest czystą funkcją (wersja modelu, h, draft, margin) po zaokrągleniu do
   0,05 m, więc klucz cache, ETag i treść zawsze się zgadzają.
 """
+import asyncio
+import functools
 import json
+import logging
 import math
 from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
+from mielizna.config import load_config
 from pyproj import Transformer
 
+from app import current
 from app.cache import TTLStore
 from app.data import Products, capacity_to_level, level_to_capacity, load_products
 from app.layers import UNC_MIN, layer_coordinates, bottom_breaks, render_bottom_png, render_uncertainty_png
 from app.point import point_info
-from app.schemas import (CapacityToLevel, Layers, LevelToCapacity, MetaResponse, PointResponse, SceneOut,
+from app.schemas import (CapacityToLevel, CurrentLevelResponse, Layers, LevelToCapacity, MetaResponse, PointResponse, SceneOut,
                          ZonesResponse)
 from app.settings import Settings, get_settings
 from app.zones import (round_param, zone_classes, zone_stats, zone_warnings, zones_geojson)
@@ -39,6 +46,7 @@ STATIC_CACHE_CONTROL = "public, max-age=3600"   # sceny, linie, przystanie, poje
 CAPACITY_MAX_MLN_M3 = 200.0
 LEVEL_LIMITS = (180.0, 210.0)                   # rozsądny zakres rzędnej [m n.p.m.] dla /api/level-to-capacity
 SLIDER_STEP = 0.05
+log = logging.getLogger(__name__)
 DEFAULT_DRAFT, DEFAULT_MARGIN = 1.20, 0.30
 DRAFT_LIMITS, MARGIN_LIMITS = (0.10, 3.00), (0.00, 1.00)
 # brief §16.4: wartości zanurzenia „do potwierdzenia" - front pokazuje je jako wstępne
@@ -131,21 +139,52 @@ def build_meta(products: Products) -> MetaResponse:
         layers=build_layers(products))
 
 
+async def refresh_loop(service: current.CurrentLevelService, interval_s: float) -> None:
+    """Odświeża bieżący poziom w wątku roboczym co `interval_s`; żaden wyjątek nie przerywa pętli."""
+    while True:
+        try:
+            await asyncio.to_thread(service.refresh)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - pętla ma trwać mimo błędu
+            log.exception("current-level refresh failed")
+        await asyncio.sleep(interval_s)
+
+
 def create_app(settings: Settings | None = None, products: Products | None = None, *,
                search_fn=None, load_fn=None) -> FastAPI:
     settings = settings or get_settings()
+
+    def build_service() -> current.CurrentLevelService:
+        p = app.state.products
+        return current.CurrentLevelService(
+            p, settings.data_dir / "processed" / "current",
+            search_fn or functools.partial(current.stac_search, load_config()),
+            load_fn or current.load_scene,
+            lambda: current.SceneContext.build(p, settings.data_dir),
+            fresh_days=settings.fresh_days)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if app.state.products is None:           # leniwe ładowanie: tylko gdy nie podano produktów
             app.state.products = load_products(settings.data_dir, settings.period)
-        yield
+        if app.state.current is None:
+            app.state.current = build_service()
+        task = (asyncio.create_task(refresh_loop(app.state.current, settings.refresh_hours * 3600))
+                if settings.live else None)
+        try:
+            yield
+        finally:
+            if task is not None:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
 
     app = FastAPI(title="Mielizna API", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.products = products
     app.state.cache = TTLStore()
     app.state.search_fn, app.state.load_fn = search_fn, load_fn
+    app.state.current = build_service() if products is not None else None   # inaczej w lifespan, po załadowaniu produktów
 
     @app.get("/api/meta", response_model=MetaResponse)
     def meta(request: Request):
@@ -245,6 +284,13 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
         v = finite_or_none(level_to_capacity(p, h))
         return static_json(request, f"-l2c-{h:g}", lambda: LevelToCapacity(
             h=h, v=v, in_table=v is not None).model_dump_json().encode())
+
+    @app.get("/api/current-level", response_model=CurrentLevelResponse)
+    def current_level(request: Request):
+        """Bieżący poziom (najnowsza scena S2 albo pipeline); odpowiedź natychmiastowa, zawsze 200."""
+        body = CurrentLevelResponse(**request.app.state.current.get())
+        return Response(content=body.model_dump_json(), media_type="application/json",
+                        headers={"Cache-Control": "no-cache"})
 
     layer_renderers = {"bottom": render_bottom_png, "uncertainty": render_uncertainty_png}
 
