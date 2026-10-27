@@ -39,7 +39,7 @@ pozasezonowe niosą niskie poziomy, które mierzą płycizny. R22 zostaje (ostro
 
 ## 1a. Decyzje planu 2 (backend)
 
-Źródło: `.superpowers/sdd/2026-10-27-plan2-backend-api/progress.md` (rozstrzygnięcia R1–R11 tego planu; numeracja niezależna od planu 1).
+Źródło: `.superpowers/sdd/2026-10-27-plan2-backend-api/progress.md` (rozstrzygnięcia R1–R12 tego planu; numeracja niezależna od planu 1).
 
 - **B-R1** `create_app(settings=None, products=None, *, search_fn=None, load_fn=None)`: testy muszą wstrzykiwać wyszukiwanie i wczytanie scen, żeby nie łączyć się z siecią.
 - **B-R2** Praca na gałęzi `feat/backend` bez osobnego worktree: `data/processed` (3,2 GB, poza git) jest potrzebne do testów `real`.
@@ -52,8 +52,9 @@ pozasezonowe niosą niskie poziomy, które mierzą płycizny. R22 zostaje (ostro
 - **B-R9** PNG niepewności: skala 2× z kropką 1 px na komórkę 2×2, nie 4×: po dekodowaniu ≈ 26 MB zamiast ≈ 100 MB (pamięć telefonu).
 - **B-R10** Do pliku trafiają tylko werdykty danych (przyjęta, `not_usable`, radiometria, brak wody, `qc:*`); wyjątki przejściowe (sieć, brak modelu) idą do `last_error` i są ponawiane, `refresh()` nigdy nie rzuca — chwilowa awaria S3 nie może na stałe wyłączyć poziomu na żywo.
 - **B-R11** Fallback z pipeline'u ma `ice_unverified = False`: sceny pipeline'u przeszły przegląd lodu (`exclude_dates`).
+- **B-R12** `/api/zones` nie jest przycinane do obrysu jeziora OSM: AOI modelu (obrys + bufor) to misa zbiornika, a przy wysokich poziomach woda wychodzi poza obrys OSM (ok. 995 px bezpiecznych przy h 195,5, m 0).
 
-Wynik kontroli `real` (zadanie 11): obrys jeziora vs cały model w `safe_km2` — patrz `M5-backend.md` §6; nie zmieniono granic testu, tylko dopasowano definicję obszaru do ledgera.
+Wynik kontroli `real` (zadanie 11): ledger planu 1 liczył `safe_km2` z zapasem m = 0,3 w całym modelu; po R25 128 901 px = 12,890 km², API daje to samo, a przy m = 0 129 880 px = 12,988 km² — patrz `M5-backend.md` §6.
 
 ## 2. Znane ograniczenia / do zrobienia (z listy „minor (deferred)" w ledgerze)
 

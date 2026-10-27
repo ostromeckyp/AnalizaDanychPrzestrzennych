@@ -51,11 +51,10 @@ po dekodowaniu ≈ 26 MB zamiast ≈ 100 MB, co ma znaczenie na telefonie.
 |---|---|
 | `/api/zones` zimny start (h 195,5, d 1,0, m 0,3; świeża aplikacja, pusty cache) | **0,09 s** (budżet < 1 s) |
 | `/api/meta`: `n_scenes`, `h_min_obs`, `z_max_floor`, wersja modelu | 218; 192,9; 193,05; `…311e18c951a8` |
-| bezpieczna strefa h 195,5, d 1,0, m 0 | **12,8885 km²** w obrysie jeziora OSM (128 885 px); całe API: 12,988 km² (129 880 px) |
+| bezpieczna strefa h 195,5, d 1,0 | m = 0,3: **12,890 km²** (128 901 px); m = 0: **12,988 km²** (129 880 px) |
 | `SceneContext.build` na prawdziwych danych | siatka = `reference_grid()`, RF i `lake.gpkg` się ładują |
 
-Różnica 128 885 px (nasz wynik w obrysie jeziora) wobec 128 908 px z ledgera planu 1: ledger liczył w obrysie jeziora OSM przed R25; R25 mogło tylko zmniejszyć, i zmniejszyło o 23 px.
-API liczy cały model (AOI), a 995 px bezpiecznej strefy leży poza obrysem OSM (woda poza poligonem, np. brzeg i zatoki), stąd 12,988 km² w odpowiedzi.
+Ledger planu 1 liczył z zapasem m = 0,3 w całym modelu: 128 908 px przed R25, po R25 128 901 px = 12,890 km²; API daje to samo. Przy m = 0 jest 129 880 px = 12,988 km² (też liczba z ledgera planu 1).
 
 ## 7. Bieżący poziom — sprawdzenie na żywo (2026-10-27, Earth Search + publiczne COG na S3)
 
@@ -88,8 +87,8 @@ RF nasyca powierzchnię przy niskiej wodzie; krzywa uczona na Otsu i stosowana d
 **5. Skąd wiadomo, że zimny `/api/zones` mieści się w sekundzie?**
 Test `real` buduje świeżą aplikację (pusty cache) i mierzy pierwsze zapytanie: 0,09 s. Kolejne trafiają w cache.
 
-**6. Czemu `safe_km2` z API (12,988) różni się od 12,891 z planu 1?**
-Ledger liczył w obrysie jeziora OSM; w tym obrysie mamy 12,8885 (po R25 o 23 px mniej). API liczy cały model, a ~1000 px bezpiecznej strefy leży poza obrysem OSM.
+**6. Czemu `safe_km2` z API zależy tak od zapasu (12,890 przy m = 0,3, 12,988 przy m = 0)?**
+Ledger planu 1 liczył z zapasem m = 0,3 w całym modelu; po R25 128 901 px = 12,890 km², API daje to samo. Przy m = 0 jest 129 880 px = 12,988 km². Dlatego test pilnuje obu wartości.
 
 **7. Czy aplikacja sama łączy się z siecią w testach?**
 Nie. Wyszukiwanie STAC i wczytanie sceny są wstrzykiwane; tylko ręczne sprawdzenie z §7 używa sieci.

@@ -13,9 +13,6 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from mielizna.grid import reference_grid
-from mielizna.osm import lake_mask
-
 from app.current import SceneContext
 from app.data import load_products
 from app.main import create_app
@@ -53,16 +50,15 @@ def test_real_meta_numbers(real_client):
     assert m["model_version"].endswith("311e18c951a8")
 
 
-def test_safe_area_matches_plan1(real_client, real_products):
-    s = real_client.get("/api/zones", params={"h": 195.5, "draft": 1.0, "margin": 0.0}).json()["stats"]
-    print(f"\nsafe_km2 (cały model) = {s['safe_km2']}")
-    # Ledger planu 1 (w. 133) liczył 128 908 px w obrębie jeziora OSM (lake.gpkg) przed R25; R25 może tylko
-    # zmniejszyć. API liczy cały model (AOI), a ~1000 px bezpiecznej strefy leży poza obrysem OSM.
-    lake = lake_mask(reference_grid(), path=DATA / "processed" / "lake.gpkg")
-    in_lake_km2 = float(((real_products.z_hi <= 195.5 - 1.0 + 1e-6) & lake).sum()) * 1e-4
-    print(f"safe_km2 (w obrysie jeziora) = {in_lake_km2}")
-    assert 12.70 <= in_lake_km2 <= 12.891
-    assert s["safe_km2"] >= in_lake_km2 and s["safe_km2"] - in_lake_km2 < 0.15   # reszta: woda poza obrysem OSM
+def test_safe_area_matches_plan1(real_client):
+    # Ledger planu 1 liczył z zapasem m = 0,3 w całym modelu: 128 908 px przed R25, 128 901 px po R25 (12,890 km²).
+    q = {"h": 195.5, "draft": 1.0}
+    s = real_client.get("/api/zones", params={**q, "margin": 0.3}).json()["stats"]
+    print(f"\nsafe_km2 m=0.3: {s['safe_km2']}")
+    assert 12.70 <= s["safe_km2"] <= 12.891
+    s0 = real_client.get("/api/zones", params={**q, "margin": 0.0}).json()["stats"]
+    print(f"safe_km2 m=0.0: {s0['safe_km2']}")
+    assert s0["safe_km2"] == pytest.approx(12.988, abs=0.001)    # 129 880 px (ledger planu 1: bez zapasu)
 
 
 def test_scene_context_builds_on_real_data(real_products):
