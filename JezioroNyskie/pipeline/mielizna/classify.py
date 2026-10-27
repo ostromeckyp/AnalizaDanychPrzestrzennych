@@ -132,8 +132,15 @@ def classify_scene(bands: dict, scl: np.ndarray, date, bundle: dict, aoi: np.nda
     Co robi: `classify_scene_full` bez mapy P(woda); powierzchnia = liczba pikseli == 1 × 100 m².
     Dlaczego tak: interfejs dla backendu - jedna funkcja pakietu, wynik identyczny ze skryptem 04.
     Wejście → wyjście: pasma, SCL, data, bundle, AOI, rdzeń → (uint8 (H, W), float, float).
-    Uwaga dla backendu: po tym wywołaniu trzeba wywołać `scene_qc` (z maską Otsu z `otsu_scene_mask`)
-      i NIE publikować powierzchni ani linii brzegowej, gdy `qc_ok` jest False.
+    Uwaga dla backendu (kolejność i pułapki):
+      (a) przed klasyfikacją wywołać `s2.check_radiometry(bands, valid_mask(bands, scl) & aoi, date)`;
+      (b) wejściem krzywej powierzchnia-rzędna jest powierzchnia OTSU:
+          `(otsu_scene_mask(...) == 1).sum() * PIXEL_KM2`, NIGDY powierzchnia RF zwracana tutaj (RF przy
+          niskiej wodzie nasyca się na mule, więc h wyszłoby za wysokie, czyli w niebezpiecznym kierunku);
+      (c) krzywa jest dopasowana na scenach z lake_nodata_pct <= 1: scena bardziej zachmurzona ma dostać
+          area_biased, jak w `levels.variant_c`;
+      (d) po wywołaniu trzeba wywołać `scene_qc` (z maską Otsu z `otsu_scene_mask`) i NIE publikować
+          powierzchni ani linii brzegowej, gdy `qc_ok` jest False.
     Jak to obronić: patrz `classify_scene_full`.
     """
     mask, _, t = classify_scene_full(bands, scl, date, bundle, aoi, core)

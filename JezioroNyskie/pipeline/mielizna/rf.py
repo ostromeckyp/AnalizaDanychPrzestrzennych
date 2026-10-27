@@ -606,10 +606,12 @@ def save_model(model: RandomForestClassifier, path: Path, meta: dict | None = No
 def load_model(path: Path) -> dict:
     """Wczytuje bundle; sprawdza zgodność cech i ostrzega o innej wersji sklearn.
 
-    Co robi: `joblib.load`, potem walidacja. Inna kolejność/zestaw cech = ValueError (model
+    Co robi: `joblib.load`, potem walidacja. Inna kolejność/zestaw cech lub opis maski chmur = ValueError (model
       dawałby cicho błędne wyniki); inna wersja sklearn = ostrzeżenie (model zwykle działa,
       ale nie ma gwarancji).
     Dlaczego tak: model z innymi cechami dałby cicho błędne mapy, więc to błąd, a nie ostrzeżenie.
+      Tak samo opis maski chmur (bundle["cloud_mask"]): inna reguła chmur niż w treningu zmienia, które
+      piksele model w ogóle widzi.
     Wejście → wyjście: ścieżka → słownik bundle.
     Jak to obronić: kolejność cech jest jedyną rzeczą, której RF nie sprawdzi sam; test pokrywa
       obie ścieżki (ValueError i ostrzeżenie).
@@ -620,6 +622,8 @@ def load_model(path: Path) -> dict:
     if bundle.get("sklearn_version") != sklearn.__version__:
         warnings.warn(f"Model trenowany w sklearn {bundle.get('sklearn_version')}, "
                       f"zainstalowany {sklearn.__version__}", UserWarning, stacklevel=2)
+    if bundle.get("cloud_mask") != cloud_mask_description():
+        raise ValueError("cloud_mask w modelu różni się od mielizna.s2.cloud_mask_description(); wytrenuj model ponownie")
     bundle.setdefault("water_threshold", 0.5)
     return bundle
 

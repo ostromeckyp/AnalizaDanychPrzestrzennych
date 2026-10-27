@@ -192,7 +192,11 @@ def save_area_level_curve(curve: AreaLevelCurve, path: Path) -> None:
 
 
 def load_area_level_curve(path: Path) -> AreaLevelCurve:
-    """Wczytuje krzywą zapisaną przez `save_area_level_curve`."""
+    """Wczytuje krzywą zapisaną przez `save_area_level_curve`.
+
+    Uwaga dla backendu: wejściem krzywej jest powierzchnia OTSU (`area_source`), nigdy powierzchnia RF
+    (RF nasyca się na odsłoniętym mule i zawyżyłby h). Patrz `classify.classify_scene`.
+    """
     d = json.loads(Path(path).read_text(encoding="utf-8"))
     return AreaLevelCurve(d["area_km2"], d["h"], d["rmse_loo"], d.get("n_obs", 0),
                           d.get("rmse_loyo", float("nan")) if d.get("rmse_loyo") is not None else float("nan"))
@@ -315,8 +319,8 @@ def write_scenes_json(df: pd.DataFrame, path: Path) -> None:
     Co robi: wybiera pola kontraktu, NaN zamienia na null, liczy `capacity_mln_m3` z h_t
       (null gdy brak rzędnej) i dodaje qc_ok oraz qc_reason (kontrakt z Taskiem 8).
     Dlaczego tak: frontend i backend czytają ten plik, więc schemat jest sztywny i bez NaN.
-    Wejście → wyjście: DataFrame (date, tiles, h_t, h_method, h_source, h_sigma, h_datum, area_km2,
-      lake_nodata_pct, otsu_threshold, local_cloud_pct, qc_ok, qc_reason) -> plik JSON.
+    Wejście → wyjście: DataFrame (date, tiles, h_t, h_method, h_source, h_sigma, h_datum, area_km2 (RF),
+      area_otsu_km2 (wejście krzywej powierzchnia-rzędna; patrz `load_area_level_curve`), lake_nodata_pct, otsu_threshold, local_cloud_pct, qc_ok, qc_reason) -> plik JSON.
     Jak to obronić: test sprawdza dokładny zbiór kluczy.
     """
     def num(v, nd):
@@ -329,6 +333,7 @@ def write_scenes_json(df: pd.DataFrame, path: Path) -> None:
         out.append({"date": str(r.date), "tiles": r.tiles, "h_t": h, "h_method": r.h_method,
                     "h_source": r.h_source, "h_sigma": num(r.h_sigma, 2),
                     "h_datum": None if h is None else r.h_datum, "area_km2": num(r.area_km2, 3),
+                    "area_otsu_km2": num(r.area_otsu_km2, 3),
                     "lake_nodata_pct": num(r.lake_nodata_pct, 3), "otsu_threshold": num(r.otsu_threshold, 3),
                     "local_cloud_pct": num(r.local_cloud_pct, 3), "capacity_mln_m3": cap,
                     "qc_ok": bool(r.qc_ok), "qc_reason": r.qc_reason})

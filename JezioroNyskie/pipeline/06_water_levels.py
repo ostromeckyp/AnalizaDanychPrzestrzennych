@@ -88,6 +88,7 @@ def main(argv=None) -> int:
         nodata_pct={d: gdf.loc[i, "lake_nodata_pct"] for d, i in key.items()})
     curve = lv.attrs["curve"]
     df = build_scene_table(gdf, cand, lv)
+    df["area_otsu_km2"] = [otsu[d] for d in df.date]
 
     # gpkg: tylko h_t i h_method (kolumny QC bez zmian)
     gdf["h_t"] = [float(df.set_index("date").h_t[d]) for d in dates]

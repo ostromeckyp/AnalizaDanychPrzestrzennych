@@ -3,8 +3,12 @@
 #
 # Cel = plik wynikowy + nazwa "ludzka" (phony). Make porównuje daty plików, więc `make bottom`
 # na gotowych danych NIE trenuje RF i NIE pobiera Sentinel-2 ponownie. Wymuszenie kroku:
-#   make -B rf          (przelicz ten cel i jego zależności)
-#   make -W <plik> ...  (uznaj plik za zmieniony)
+#   make -W ../data/reference/labels.gpkg rf   (uznaj etykiety za zmienione -> retrening RF; `make -B rf` NIE
+#                                               działa: 04a odmawia nadpisania etykiet)
+#   make clean-model rf                         (usuń model RF i wytrenuj od nowa)
+#   make -W <plik> ...                          (uznaj dowolny plik za zmieniony)
+# Po zmianie config.yaml (np. exclude_dates) `make s2` ponownie uruchamia 01 (config.yaml jest zależnością
+# CSV scen), a dalsze kroki kaskadowo; sam RF nie jest od CSV zależny (retrening tylko po zmianie etykiet).
 # Skrypty same są też wznawialne (01: CSV + COG; 04: pomija gotowe sceny; 06a: cache PDF).
 
 UV      ?= uv run python
@@ -41,7 +45,7 @@ $(LAKE):                                   # 03: obrys jeziora, AOI, przystanie 
 	$(UV) 03_fetch_osm.py
 
 s2: $(S2CSV)
-$(S2CSV): | $(LAKE)                        # 01: wyszukiwanie STAC, scenes_candidates.csv, s2/*.tif (wznawialne)
+$(S2CSV): config.yaml | $(LAKE)            # 01: wyszukiwanie STAC, scenes_candidates.csv, s2/*.tif (wznawialne)
 	$(UV) 01_fetch_s2.py
 
 labels: label-candidates                   # alias (R4): `labels` tylko generuje kandydatów
@@ -58,7 +62,7 @@ check-labels: $(LABELS)
 	|| { echo "ZA MAŁO ETYKIET: uruchom 'make label-ui', oznacz punkty, potem 'make all'."; exit 1; }
 
 rf: $(RFMODEL)
-$(RFMODEL): $(LABELS) $(S2CSV)             # 04b: trening i ocena RF (długi: ok. 550 dopasowań)
+$(RFMODEL): $(LABELS)                      # 04b: trening i ocena RF (długi: ok. 550 dopasowań)
 	$(MAKE) check-labels
 	$(UV) 04b_train_rf.py
 

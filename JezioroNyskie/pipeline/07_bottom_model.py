@@ -144,6 +144,9 @@ def verify_period(name, sel, rf_s, ev, is_c, res, version, aoi, lake, core, dist
              "%+.3f m), niżej o >0.05 m: %s; na południu (wiersze>450) %s dodatnich", int(both.sum()),
              pct((d[both] > .05).mean()), float(d[both & (d > .05)].mean()), pct((d[both] < -.05).mean()),
              pct((np.argwhere(both & (d > .05))[:, 0] > 450).mean()))
+    zi = lambda z: np.where(np.isnan(z), np.inf, z)          # NaN w z_max = +inf
+    n_lower = int((aoi & (zi(res["z_max_raw"]) < zi(rf_only["z_max_raw"]) - 1e-9)).sum())
+    check(n_lower == 0, f"R25: z_max (RF∧Otsu) nigdzie nie niższe niż z_max (tylko RF), px niżej: {n_lower}")
     plot_map(np.where(both, d, np.nan), qc / "bottom_zmax_vs_rf_all.png",
              "z_max (RF∧Otsu) - z_max (tylko RF) [m]", "RdBu_r", -0.6, 0.6)
     meds = []
@@ -185,6 +188,26 @@ def compare_periods(pre, post, aoi) -> None:
              s1.h_t.min(), s0.h_t.min())
 
 
+def finish(fails: list[str], proc, periods: list[str]) -> int:
+    """Kod wyjścia; po porażce asercji usuwa model_meta.json okresów z tego wywołania.
+
+    Co robi: bez porażek zwraca 0. Przy porażkach kasuje `model/{okres}/model_meta.json` (cel Make `bottom`),
+      żeby kolejne `make bottom` ponowiło krok zamiast uznać niezweryfikowany model za gotowy, i zwraca 1.
+    Dlaczego tak: rastery zostają do oględzin, ale znacznik „zbudowano" znika (M1). Nie używamy
+      .DELETE_ON_ERROR, bo kasowałoby też poprawne rastery.
+    Wejście → wyjście: lista komunikatów porażek, katalog processed, nazwy okresów → 0 lub 1.
+    Jak to obronić: test symuluje porażkę i sprawdza brak meta oraz kod 1.
+    """
+    if not fails:
+        return 0
+    log.error("NIEPOWODZENIE asercji: %s", fails)
+    for name in periods:
+        meta = proc / "model" / name / "model_meta.json"
+        meta.unlink(missing_ok=True)
+        log.error("usunięto %s (model niezweryfikowany; make go odbuduje)", meta)
+    return 1
+
+
 def main(argv=None) -> int:
     cfg = load_config()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -219,7 +242,7 @@ def main(argv=None) -> int:
     for name in periods:
         span = cfg["periods"][name]
         sel, rf_s, ev, is_c, res = run_period(name, span, scenes, aoi)
-        version = bottom.model_version(scenes_bytes, sel.date.tolist())
+        version = bottom.model_version(scenes_bytes, sel.date.tolist(), sha)
         meta = bottom.build_meta(name, tuple(span), sel, res, aoi, version, 1.0, sha, thr)
         out = proc / "model" / name
         bottom.write_model(res, grid, out, meta, aoi)
@@ -239,10 +262,7 @@ def main(argv=None) -> int:
     if "pre_flood" in results and "post_flood" in results:
         compare_periods(results["pre_flood"], results["post_flood"], aoi)
     log.info("9. kontrola QGIS (nałożenie bottom_z.tif na ortofotomapę) - ręczna, poza skryptem")
-    if fails:
-        log.error("NIEPOWODZENIE asercji: %s", fails)
-        return 1
-    return 0
+    return finish(fails, proc, periods)
 
 
 if __name__ == "__main__":

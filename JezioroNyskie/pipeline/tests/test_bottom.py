@@ -59,9 +59,35 @@ def test_never_observed_is_nan():
 
 
 def test_combine_evidence():
-    rf = np.array([1, 1, 0, 0, 255, 1], np.uint8)
-    ot = np.array([1, 0, 1, 0, 1, 255], np.uint8)
-    assert combine_evidence(rf, ot).tolist() == [1, 0, 0, 0, 255, 255]
+    rf = np.array([1, 1, 0, 0, 255, 1, 0, 255, 255], np.uint8)
+    ot = np.array([1, 0, 1, 0, 1, 255, 255, 0, 255], np.uint8)
+    # R25: woda tylko gdy obie = 1; lad gdy KTORAKOLWIEK = 0 (nawet gdy druga to 255); inaczej 255
+    assert combine_evidence(rf, ot).tolist() == [1, 0, 0, 0, 255, 255, 0, 0, 255]
+
+
+def test_combine_evidence_otsu_255_does_not_erase_rf_land():
+    """R25: Otsu 255 + RF 0 -> lad (wczesniej 255, co mogło obnizyc z_max wzgledem samego RF)."""
+    assert combine_evidence(np.array([0], np.uint8), np.array([255], np.uint8)).tolist() == [0]
+    assert combine_evidence(np.array([255], np.uint8), np.array([0], np.uint8)).tolist() == [0]
+
+
+def test_r25_combined_never_lowers_zmax_vs_rf_only():
+    """Dowod: RF∧Otsu-woda ⊆ RF-woda, RF-lad ⊆ polaczony-lad => wzgledem samego RF tylko usuwamy wode lub
+    dokladamy lad => z_max (NaN = +inf) nie spada (przy sigma_C >= sigma_nonC)."""
+    for seed in range(8):
+        rng = np.random.default_rng(500 + seed)
+        T = 25
+        rf = rng.choice([0, 1, 255], size=(T, 20, 20), p=[.3, .45, .25]).astype(np.uint8)
+        ot = rng.choice([0, 1, 255], size=(T, 20, 20), p=[.3, .45, .25]).astype(np.uint8)
+        h = np.round(rng.uniform(193, 197, T), 1)
+        isc = rng.random(T) < .3
+        sig = np.where(isc, rng.uniform(.3, .6, T), rng.uniform(.05, .3, T))
+        comb = compute_bounds(combine_evidence(rf, ot), h, sig, is_c=isc)
+        base = compute_bounds(rf, h, sig, is_c=isc)
+        zc = np.where(np.isnan(comb["z_max"]), np.inf, comb["z_max"])
+        zb = np.where(np.isnan(base["z_max"]), np.inf, base["z_max"])
+        assert np.isfinite(zb).any()
+        assert np.all(zc >= zb - 1e-12)
 
 
 def test_c_water_is_unknown_for_threshold_and_zmax():
@@ -263,9 +289,10 @@ def test_write_model_roundtrip(tmp_path):
 
 
 def test_model_version_depends_on_inputs():
-    a = model_version(b"x", ["2020-01-01"])
-    assert len(a) == 12 and a == model_version(b"x", ["2020-01-01"])
-    assert a != model_version(b"y", ["2020-01-01"]) and a != model_version(b"x", ["2020-01-02"])
+    a = model_version(b"x", ["2020-01-01"], "sha1")
+    assert len(a) == 12 and a == model_version(b"x", ["2020-01-01"], "sha1")
+    assert a != model_version(b"y", ["2020-01-01"], "sha1") and a != model_version(b"x", ["2020-01-02"], "sha1")
+    assert a != model_version(b"x", ["2020-01-01"], "sha2")
     json.dumps(a)
 
 

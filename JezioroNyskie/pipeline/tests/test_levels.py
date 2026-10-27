@@ -92,11 +92,11 @@ def test_assign_levels_order_and_qc_exclusion():
 
 def sample_df():
     return pd.DataFrame([{"date": date(2020, 1, 8), "tiles": "33UXR;33UXS", "h_t": 193.123, "h_method": "B",
-                          "h_source": "s", "h_sigma": 0.15, "h_datum": "d", "area_km2": 12.34567,
+                          "h_source": "s", "h_sigma": 0.15, "h_datum": "d", "area_km2": 12.34567, "area_otsu_km2": 11.23456,
                           "lake_nodata_pct": 0.5, "otsu_threshold": 0.1, "local_cloud_pct": 1.0,
                           "qc_ok": True, "qc_reason": ""},
                          {"date": date(2019, 1, 1), "tiles": "33UXR", "h_t": np.nan, "h_method": "qc_excluded",
-                          "h_source": "", "h_sigma": np.nan, "h_datum": None, "area_km2": 11.0,
+                          "h_source": "", "h_sigma": np.nan, "h_datum": None, "area_km2": 11.0, "area_otsu_km2": 10.0,
                           "lake_nodata_pct": 0.5, "otsu_threshold": 0.1, "local_cloud_pct": 1.0,
                           "qc_ok": False, "qc_reason": "x"}])
 
@@ -106,10 +106,10 @@ def test_scenes_json_schema(tmp_path):
     rows = json.loads((tmp_path / "s.json").read_text())
     s = rows[1]
     assert set(s) == {"date", "tiles", "h_t", "h_method", "h_source", "h_sigma", "h_datum", "area_km2",
-                      "lake_nodata_pct", "otsu_threshold", "local_cloud_pct", "capacity_mln_m3",
+                      "area_otsu_km2", "lake_nodata_pct", "otsu_threshold", "local_cloud_pct", "capacity_mln_m3",
                       "qc_ok", "qc_reason"}
     assert [r["date"] for r in rows] == ["2019-01-01", "2020-01-08"]  # posortowane
-    assert s["h_t"] == 193.12 and s["area_km2"] == 12.346 and 18 < s["capacity_mln_m3"] < 40
+    assert s["h_t"] == 193.12 and s["area_km2"] == 12.346 and s["area_otsu_km2"] == 11.235 and 18 < s["capacity_mln_m3"] < 40
     assert rows[0]["h_t"] is None and rows[0]["capacity_mln_m3"] is None and rows[0]["qc_ok"] is False
 
 

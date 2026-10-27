@@ -332,6 +332,7 @@ name = "mielizna"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "affine" },
     { name = "geopandas" },
     { name = "joblib" },
     { name = "matplotlib" },
@@ -358,6 +359,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "affine" },
     { name = "geopandas" },
     { name = "joblib" },
     { name = "matplotlib" },

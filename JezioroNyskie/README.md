@@ -17,7 +17,10 @@ Dane surowe (`data/raw/`) i przetworzone (`data/processed/`) nie są w git; wyj�
 ## Pipeline krok po kroku
 
 Wszystko z katalogu `pipeline/`. `make help` wypisuje cele. Make porównuje daty plików, więc `make bottom` na gotowych
-danych niczego nie trenuje i nie pobiera (ok. 20 s: tylko model dna). Wymuszenie kroku: `make -B rf` albo `make -W <plik> <cel>`.
+danych niczego nie trenuje i nie pobiera (ok. 20 s: tylko model dna). Wymuszenie kroku: `make -W ../data/reference/labels.gpkg rf` (albo `make clean-model rf`) lub ogólnie `make -W <plik> <cel>`.
+(`make -B rf` nie działa: `04a` odmawia nadpisania etykiet.) Po edycji `exclude_dates` lub innych pól `config.yaml` uruchom
+`make s2` (potem `make classify` itd. albo od razu `make bottom`): `config.yaml` jest zależnością `scenes_candidates.csv`, więc
+zmiana kaskadowo odświeża dalsze kroki, ale nie retrenuje RF (RF zależy tylko od etykiet).
 
 | cel | skrypt | wejście → wyjście (w `data/processed/`, o ile nie podano inaczej) |
 |---|---|---|

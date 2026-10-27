@@ -184,6 +184,16 @@ def test_load_model_checks_features_and_warns_on_sklearn(tmp_path, toy_df):
         load_model(path)
 
 
+def test_load_model_rejects_changed_cloud_mask(tmp_path, toy_df):
+    path = tmp_path / "m.joblib"
+    save_model(train_final(toy_df), path, {"n_rows": len(toy_df)})
+    b = joblib.load(path)
+    b["cloud_mask"] = {**b["cloud_mask"], "px": b["cloud_mask"]["px"] + 1}
+    joblib.dump(b, path)
+    with pytest.raises(ValueError, match="cloud_mask"):
+        load_model(path)
+
+
 def test_render_report_has_tables_and_m2_line(toy_df):
     res = {"by_block": grouped_cv(toy_df, "block"), "by_scene": grouped_cv(toy_df, "date")}
     imp = permutation_importance_table(toy_df, res["by_block"]["folds"])

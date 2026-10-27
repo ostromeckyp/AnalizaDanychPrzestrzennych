@@ -33,7 +33,7 @@ FLAG_MEANING = {
     "2": "ALWAYS_LAND: brak spójnej wody (lub wodę widziały tylko sceny C, flaga 8), z_max=NaN (=+inf), z_min skończone",
     "4": "CONFLICT: n_conflict > 0 (część scen sprzeczna z progiem dna)",
     "8": "C_WATER_IGNORED: piksel miał obserwacje wody ze scen wariantu C, które pominięto (R24: woda C = nieznane). "
-         "INFORMACYJNA, nie ostrzeżenie ani wada jakości; dotyczy ~58% px AOI; nie wpływa na strefy (efekt jest już w z_max)",
+         "INFORMACYJNA, nie ostrzeżenie ani wada jakości; udział px w counts.c_water_ignored_px (model_meta.json); nie wpływa na strefy (efekt jest już w z_max)",
     "16": ("UNRESOLVED: obserwowany, ale obie granice puste: remis przy równych poziomach ALBO obserwacje sprzeczne "
            "na różnych poziomach (np. woda przy 193 m i ląd przy 197 m: CONFLICT+UNRESOLVED, obie granice NaN)"),
     "255": "poza obszarem modelu (AOI)",
@@ -41,7 +41,7 @@ FLAG_MEANING = {
 NAN_SEMANTICS = ("W obszarze modelu (obs_count > 0): NaN w z_min znaczy -inf (brak dolnego ograniczenia dna), "
                  "NaN w z_max znaczy +inf (piksel nigdy nie był spójnie wodą (lub wodę widziały tylko sceny C, flaga 8)). obs_count == 0 lub flags == 255 "
                  "znaczy: poza obszarem modelu.")
-EVIDENCE = "rf_and_otsu_water; land = rf0 or otsu0; 255 in either = unknown"
+EVIDENCE = "R25: water = rf1 and otsu1; land = rf0 or otsu0 (even if the other is 255); else unknown (255)"
 ZMAX_RULE = "R24: water observations of C scenes are unknown (255) for threshold and z_max; C land kept; flag 8 = C water ignored"
 NODATA_U16 = 65535
 _MAX_STRIP_ELEMENTS = 8_000_000
@@ -50,12 +50,16 @@ _MAX_STRIP_ELEMENTS = 8_000_000
 def combine_evidence(rf: np.ndarray, otsu: np.ndarray) -> np.ndarray:
     """Łączy maski RF i Otsu jednej sceny w jedną obserwację {1 woda, 0 ląd, 255 nieznane}.
 
-    Co robi: woda tylko tam, gdzie RF i Otsu obie mówią „woda"; ląd wszędzie indziej, gdzie obie znają
-      klasę (wystarczy, że jedna z nich mówi „ląd"); 255 w którejkolwiek masce daje 255.
+    Co robi (R25): woda tylko tam, gdzie RF == 1 i Otsu == 1; ląd, gdy którakolwiek maska mówi „ląd"
+      (== 0), także gdy druga to 255; w pozostałych przypadkach 255 (nieznane).
     Dlaczego tak: decyzja U1 (ostrożniej). RF bywa fałszywie „woda" na jasnym mule przy brzegu, co
-      zaniżałoby z_max (niebezpieczny kierunek). Wymóg zgody obu metod usuwa ten błąd; ląd z jednej
-      metody dokłada obserwacji lądu, które tylko podnoszą próg dna (dowód: dodanie lądu nie zmniejsza
-      z_max). Pod chmurą lądu nie zmyślamy - tam zostaje 255.
+      zaniżałoby z_max (niebezpieczny kierunek). Wymóg zgody obu metod usuwa ten błąd.
+      Dowód, że względem samego RF z_max nie spada: (1) woda RF∧Otsu ⊆ woda RF; (2) ląd RF ⊆ ląd
+      połączony (ląd, gdy któraś maska == 0). Zatem każda zmiana względem dowodów RF-only to: woda →
+      ląd, woda → nieznane albo nieznane → ląd; nigdy ląd → woda ani ląd → nieznane. Usunięcie wody lub
+      dodanie lądu nie obniża z_max (z zastrzeżeniem σ_C ≥ σ_nonC przy dodawaniu lądu ze sceny C, jak w
+      `compute_bounds`; woda C jest i tak ignorowana, R24). Test własności na losowych maskach.
+      Wcześniejsza wersja dawała 255, gdy Otsu == 255 a RF == 0 - kasowała ląd RF i w 0,2% px obniżała z_max.
     Wejście → wyjście: dwie tablice uint8 {0,1,255} dowolnego kształtu → uint8 tego samego kształtu.
       Uwaga (R24): wodę ze scen wariantu C zamienia na 255 dopiero `compute_bounds` (ma is_c), nie ta funkcja.
     Jak to obronić: RF∧Otsu ma na etykietach ręcznych recall lądu 47/50 wobec 36/50 samego RF; koszt
@@ -63,9 +67,9 @@ def combine_evidence(rf: np.ndarray, otsu: np.ndarray) -> np.ndarray:
     """
     rf = np.asarray(rf)
     otsu = np.asarray(otsu)
-    out = np.zeros(rf.shape, np.uint8)
+    out = np.full(rf.shape, 255, np.uint8)
+    out[(rf == 0) | (otsu == 0)] = 0
     out[(rf == 1) & (otsu == 1)] = 1
-    out[(rf == 255) | (otsu == 255)] = 255
     return out
 
 
@@ -213,19 +217,20 @@ def compute_bounds(masks: np.ndarray, h: np.ndarray, h_sigma: np.ndarray, is_c: 
     return {k: np.concatenate([p[k] for p in parts], axis=0) for k in parts[0]}
 
 
-def model_version(scenes_bytes: bytes, dates: list[str]) -> str:
-    """Skrót wersji modelu: sha256 z scenes.json i nazw plików masek wybranych dat (12 znaków).
+def model_version(scenes_bytes: bytes, dates: list[str], rf_model_sha: str) -> str:
+    """Skrót wersji modelu: sha256 z scenes.json, nazw plików masek wybranych dat i rf_model_sha (12 znaków).
 
     Co robi: skleja bajty scenes.json z posortowaną listą nazw `masks/{d}.tif` i `masks_otsu/{d}.tif`
-      i bierze 12 pierwszych znaków sha256.
+      oraz sha modelu RF i bierze 12 pierwszych znaków sha256.
     Dlaczego tak: wersja ma się zmieniać, gdy zmienia się zestaw scen, ich poziomy (scenes.json) albo
       maski; backend używa jej do unieważniania cache. Nazwy zamiast zawartości masek: tanio, a zmiana
-      masek zmienia model klasyfikatora (rf_model_sha w meta).
-    Wejście → wyjście: bajty scenes.json, lista dat ISO → ciąg 12 znaków hex (nie zależy od kolejności dat).
+      masek zmienia model klasyfikatora, więc jego sha wchodzi do skrótu wprost (S5).
+    Wejście → wyjście: bajty scenes.json, lista dat ISO, rf_model_sha → ciąg 12 znaków hex (nie zależy od
+      kolejności dat).
     Jak to obronić: test sprawdza determinizm i wrażliwość na oba wejścia.
     """
     names = sorted([f"masks/{d}.tif" for d in dates] + [f"masks_otsu/{d}.tif" for d in dates])
-    return hashlib.sha256(scenes_bytes + "\n".join(names).encode()).hexdigest()[:12]
+    return hashlib.sha256(scenes_bytes + "\n".join(names).encode() + b"\n" + rf_model_sha.encode()).hexdigest()[:12]
 
 
 _RASTERS = {  # klucz wyniku -> (plik, dtype, nodata poza AOI)
