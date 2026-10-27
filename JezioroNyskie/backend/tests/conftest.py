@@ -52,12 +52,14 @@ def make_dataset(root: Path) -> Path:
     z_min[:, 0:10], z_max[:, 0:10], z[:, 0:10], unc[:, 0:10] = 193.0, 194.0, 193.5, 0.2
     z_max[:, 10:20], z[:, 10:20], unc[:, 10:20] = 193.05, 193.0, 0.3   # zawsze woda: z_min NaN
     z_min[:, 20:25], z[:, 20:25], unc[:, 20:25] = 196.0, 196.5, 0.3    # zawsze ląd: z_max NaN
-    obs[:, 25:], flags[:, 25:] = 0, 255                                # poza modelem
+    obs[:, 25:] = 0                                                    # poza modelem (kol. 28-29: obs 0 w AOI)
+    aoi = np.ones((H, W), bool)
+    aoi[:, 25:28] = False                                              # kol. 25-27: write_model da obs 65535, flags 255
     result = {"z_min": z_min, "z_max": z_max, "z": z, "unc": unc, "obs_count": obs,
               "n_conflict": np.zeros((H, W), np.uint16), "flags": flags}
     meta = {"version": "testver00001", "period": "all", "period_dates": ["2017-01-01", "2026-12-31"],
             "n_scenes": 3, "n_scenes_by_method": {"B": 2, "C": 1}, "h_min_obs": 192.9, "h_max_obs": 197.92}
-    write_model(result, grid, model / "all", meta, np.ones((H, W), bool))
+    write_model(result, grid, model / "all", meta, aoi)
 
     save_area_level_curve(AreaLevelCurve([10.5, 12.0, 14.0], [192.9, 194.0, 197.0], 0.4, 10, 0.45),
                           model / "area_level_curve.json")
