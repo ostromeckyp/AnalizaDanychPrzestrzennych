@@ -41,7 +41,7 @@ def zone_classes(h: float, draft: float, margin: float, z_lo: np.ndarray, z_hi: 
 
 
 def zone_stats(classes: np.ndarray, h: float, z_lo: np.ndarray, in_model: np.ndarray) -> dict:
-    """Powierzchnie stref [km²] i ich udział [%] w akwenie (akwen = in_model & h > z_lo)."""
+    """Powierzchnie stref [km²] i udział [%] pikseli akwenu (in_model & h > z_lo) w każdej strefie; suma = 100."""
     with np.errstate(invalid="ignore"):
         water = np.asarray(in_model, bool) & (h > z_lo)
     water_km2 = float(water.sum()) * PIXEL_KM2
@@ -49,7 +49,8 @@ def zone_stats(classes: np.ndarray, h: float, z_lo: np.ndarray, in_model: np.nda
     for code, name in ZONE_NAMES.items():
         km2 = float((classes == code).sum()) * PIXEL_KM2   # cały model, ląd wliczony do danger
         out[f"{name}_km2"] = km2
-        out[f"{name}_pct"] = km2 / water_km2 * 100.0 if water_km2 > 0 else 0
+        in_water_km2 = float(((classes == code) & water).sum()) * PIXEL_KM2
+        out[f"{name}_pct"] = in_water_km2 / water_km2 * 100.0 if water_km2 > 0 else 0
     return out
 
 

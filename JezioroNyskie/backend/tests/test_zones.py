@@ -62,6 +62,14 @@ def test_stats_counts_and_pct():
     assert s["safe_km2"] == pytest.approx(1e-4) and s["risk_km2"] == pytest.approx(2e-4)
     assert s["danger_km2"] == pytest.approx(1e-4)
     assert s["safe_pct"] == pytest.approx(100 / 3) and s["risk_pct"] == pytest.approx(200 / 3)
+    assert s["danger_pct"] == 0          # ląd (danger) nie należy do akwenu
+
+
+def test_pct_sums_to_100_on_products(products):
+    c = zone_classes(195.0, 1.2, 0.3, products.z_lo, products.z_hi, products.in_model)
+    s = zone_stats(c, 195.0, products.z_lo, products.in_model)
+    assert s["water_km2"] > 0
+    assert s["safe_pct"] + s["risk_pct"] + s["danger_pct"] == pytest.approx(100)
 
 
 def test_warnings(products):
