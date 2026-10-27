@@ -1,0 +1,33 @@
+# Konfiguracja pipeline'u Mielizna (Jezioro Nyskie)
+bbox_wgs84: [17.20, 50.425, 17.32, 50.485]  # lon_min, lat_min, lon_max, lat_max
+
+grid:
+  crs: "EPSG:2180"
+  xmin: 372000
+  ymin: 285500
+  xmax: 381000
+  ymax: 292500
+  res: 10
+
+period:
+  start: "2017-01-01"
+  end: "2026-12-31"
+
+scene_filter:
+  max_tile_cloud: 30
+  max_local_cloud_pct: 5
+  min_valid_pct: 95
+  max_ice_pct: 1
+  buffer_m: 500
+  exclude_dates: []
+
+periods:
+  all: ["2017-01-01", "2026-12-31"]
+  pre_flood: ["2017-01-01", "2024-08-31"]
+  post_flood: ["2024-09-30", "2026-12-31"]
+
+# ścieżki względem JezioroNyskie/data
+paths:
+  raw: "raw"
+  processed: "processed"
+  reference: "raw/check"
