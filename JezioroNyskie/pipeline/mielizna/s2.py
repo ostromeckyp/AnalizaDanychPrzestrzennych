@@ -126,6 +126,32 @@ def check_harmonized(swir16_dn: np.ndarray, scl: np.ndarray, item_id: str) -> No
                          f"(offset not removed); p5 = {p5:.0f} DN")
 
 
+RADIOMETRY_MIN_P99 = 0.01       # p99 odbicia nad ważnymi pikselami; poniżej = scena uszkodzona
+RADIOMETRY_MIN_PIXELS = 1000
+
+
+def check_radiometry(bands: dict, valid: np.ndarray, label: str) -> None:
+    """ValueError, gdy 99. percentyl któregokolwiek pasma nad pikselami `valid` jest < 0,01.
+
+    Co robi: dla każdego pasma liczy p99 odbicia nad `valid` (wymaga >= 1000 pikseli, inaczej nic nie
+      robi) i rzuca wyjątek z nazwą pasma, jeśli jest poniżej `RADIOMETRY_MIN_P99`.
+    Dlaczego tak: uszkodzone produkty L2A mają prawie stałe DN (2024-09-01: red/nir/swir16/swir22
+      wszystkie DN=1, pasmo blue w paskach) i przechodzą testy SCL oraz check_harmonized, a RF
+      klasyfikuje taki szum jako wodę lub ląd. Ciemna woda nie wywoła alarmu, bo p99 liczy też
+      jasne piksele lądu: nawet NIR nad wodą ~0,002 zostawia p99 sceny dużo powyżej progu.
+    Wejście → wyjście: słownik pasm (float, NaN = brak), maska bool, etykieta do komunikatu → None
+      lub ValueError.
+    Jak to obronić: margines pomiarowy - scena uszkodzona ma p99 = 0,0001, a najgorsza dobra scena
+      0,0413 (pasmo blue, 2020-11-06); próg 0,01 leży 4x poniżej dobrych i 100x powyżej uszkodzonej.
+    """
+    if valid.sum() < RADIOMETRY_MIN_PIXELS:
+        return
+    for name, arr in bands.items():
+        v = float(np.percentile(arr[valid], 99))
+        if v < RADIOMETRY_MIN_P99:
+            raise ValueError(f"{label}: radiometrically corrupt: p99 {name} = {v:.4f} < 0.01")
+
+
 # --- maski i jakość sceny ---------------------------------------------------------
 
 def valid_mask(bands: dict, scl: np.ndarray) -> np.ndarray:

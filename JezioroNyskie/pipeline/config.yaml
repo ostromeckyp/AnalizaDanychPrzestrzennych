@@ -28,6 +28,7 @@ scene_filter:
     - {date: "2022-01-15", reason: "bright ice rim along SE shoreline"}
     - {date: "2023-02-09", reason: "brash ice / floe streaks across the whole lake incl. north shore"}
     - {date: "2023-12-18", reason: "white snow/ice patches on SW and E shoreline at waterline"}
+    - {date: "2024-09-01", reason: "corrupt L2A: red/nir/swir16/swir22 all DN=1, striped blue; check_radiometry p99=0.0001"}
     - {date: "2025-01-19", reason: "uncertain: white patches in southern marsh inlets at shoreline, possible ice/snow"}
     - {date: "2025-12-12", reason: "uncertain: textured pale patch with small bright floes near south shore, possible thin ice"}
     - {date: "2026-02-28", reason: "lake mostly ice-covered (east and centre), open water only in west"}

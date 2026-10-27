@@ -123,3 +123,56 @@ def test_otsu_scene_mask_cloud_is_nodata_and_filters_pond():
     core = np.zeros((40, 40), bool); core[10:30, 5:15] = True
     m = classify.otsu_scene_mask(b, scl, aoi, core, 0.0)
     assert (m[cloud_mask(scl)] == 255).all() and m[20, 2] == 1 and m[20, 38] == 0
+
+
+def _qc_inputs(n=40):
+    core = np.zeros((n, n), bool)
+    core[10:30, 10:30] = True
+    mask = np.zeros((n, n), np.uint8)
+    mask[core] = 1
+    return mask, mask.copy(), core
+
+
+def test_scene_qc_clean_scene_ok():
+    mask, otsu, core = _qc_inputs()
+    qc = classify.scene_qc(mask, otsu, core)
+    assert qc["qc_ok"] and qc["qc_reason"] == ""
+    assert qc["core_usable_frac"] == 1.0 and qc["core_water_frac"] == 1.0 and qc["rf_otsu_ratio"] == 1.0
+
+
+def test_scene_qc_land_in_core_flagged():
+    mask, otsu, core = _qc_inputs()
+    mask[10:30, 10:12] = 0      # 10% rdzenia to ląd
+    qc = classify.scene_qc(mask, otsu, core)
+    assert not qc["qc_ok"] and "core_water<0.95" in qc["qc_reason"]
+    assert qc["core_water_frac"] == pytest.approx(0.9)
+
+
+def test_scene_qc_rf_below_otsu_flagged():
+    mask, otsu, core = _qc_inputs()
+    otsu[0:5, 0:40] = 1         # Otsu ma 200 px więcej wody poza rdzeniem (400 -> 600)
+    qc = classify.scene_qc(mask, otsu, core)
+    assert qc["rf_otsu_ratio"] == pytest.approx(400 / 600)
+    assert not qc["qc_ok"] and qc["qc_reason"] == "rf/otsu<0.90"
+
+
+def test_scene_qc_otsu_zero_is_nan_and_not_ok():
+    mask, otsu, core = _qc_inputs()
+    otsu[:] = 0
+    qc = classify.scene_qc(mask, otsu, core)
+    assert np.isnan(qc["rf_otsu_ratio"]) and not qc["qc_ok"] and "rf/otsu=nan" in qc["qc_reason"]
+
+
+def test_scene_qc_core_mostly_nodata_flagged():
+    mask, otsu, core = _qc_inputs()
+    mask[10:30, 10:25] = 255    # 75% rdzenia nieznane
+    qc = classify.scene_qc(mask, otsu, core)
+    assert qc["core_usable_frac"] == pytest.approx(0.25)
+    assert not qc["qc_ok"] and "core_nodata" in qc["qc_reason"]
+
+
+def test_scene_qc_rf_above_otsu_is_ok():     # drawdown: RF > Otsu jest poprawne
+    mask, otsu, core = _qc_inputs()
+    mask[0:5, 0:40] = 1
+    qc = classify.scene_qc(mask, otsu, core)
+    assert qc["rf_otsu_ratio"] == pytest.approx(1.5) and qc["qc_ok"]

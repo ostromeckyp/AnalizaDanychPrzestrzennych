@@ -125,7 +125,8 @@ def _try_acquisition(r, by_id, cfg, grid, aoi, lake, out_dir, rejected_path):
     try:
         items = [by_id[i] for i in r["items"].split(";")]
         bands, scl = s2.load_day(items, grid, cfg, pool=6)
-    except ValueError as e:  # m.in. check_harmonized
+        s2.check_radiometry(bands, s2.valid_mask(bands, scl) & aoi, r["acq_id"])
+    except ValueError as e:  # m.in. check_harmonized, check_radiometry
         log.warning("%s %s: odrzucona (%s)", date, r["acq_id"], e)
         _reject(rejected_path, r, f"guard: {e}")
         return False

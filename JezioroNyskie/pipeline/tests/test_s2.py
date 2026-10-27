@@ -4,7 +4,7 @@ import numpy as np
 import pystac
 import pytest
 
-from mielizna.s2 import (cloud_mask, check_harmonized, dedupe_items, dn_to_reflectance,
+from mielizna.s2 import (cloud_mask, check_harmonized, check_radiometry, dedupe_items, dn_to_reflectance,
                          drop_non_cog_items,
                          group_acquisitions, is_usable, mosaic_first_valid, reflectance_offset,
                          resample_like_load_day, scene_quality, usable_dates, valid_mask)
@@ -187,3 +187,30 @@ def test_usable_dates_missing_cog_raises(tmp_path):
     _scene_tree(tmp_path, [_row("2021-06-01"), _row("2021-06-02")], cogs=["2021-06-01"])
     with pytest.raises(FileNotFoundError, match="2021-06-02"):
         usable_dates(CFG, tmp_path)
+
+
+def _rad_scene(n=60):
+    """Połowa woda (ciemna, NIR 0.002), połowa ląd (jasny); wszystkie piksele ważne."""
+    b = {k: np.full((n, n), 0.08, np.float32) for k in ("blue", "green", "red", "nir", "swir16", "swir22")}
+    b["nir"][:, : n // 2] = 0.002
+    return b, np.ones((n, n), bool)
+
+
+def test_check_radiometry_corrupt_band_raises():
+    b, valid = _rad_scene()
+    b["red"][:] = 1e-4
+    with pytest.raises(ValueError, match=r"2024-09-01.*radiometrically corrupt: p99 red = 0\.0001 < 0\.01"):
+        check_radiometry(b, valid, "2024-09-01")
+
+
+def test_check_radiometry_dark_water_scene_passes():
+    b, valid = _rad_scene()     # NIR 0.002 nad wodą, ale ląd jasny: p99 > 0.01
+    check_radiometry(b, valid, "ok")
+
+
+def test_check_radiometry_few_valid_pixels_is_noop():
+    b, valid = _rad_scene()
+    b["red"][:] = 1e-4
+    valid[:] = False
+    valid.flat[:999] = True
+    check_radiometry(b, valid, "small")

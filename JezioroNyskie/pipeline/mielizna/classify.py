@@ -14,8 +14,7 @@ import datetime as dt
 import numpy as np
 from scipy import ndimage
 
-from mielizna import rf
-from mielizna.features import FEATURES, compute_features, indices, stack
+from mielizna.features import compute_features, indices, stack
 from mielizna.otsu import otsu_mask, scene_threshold
 from mielizna.s2 import cloud_mask, valid_mask
 
@@ -24,6 +23,9 @@ PIXEL_KM2 = 100e-6          # piksel 10 m x 10 m w km2
 CORE_ERODE_PX = 20          # rdzeń jeziora = jezioro zerodowane o 200 m
 MIN_COMPONENT_PX = 5
 PROBA_SCALE = 254
+QC_MIN_CORE_WATER = 0.95    # rdzeń jeziora musi być >= 95% wodą (z pikseli znanych)
+QC_MIN_RF_OTSU = 0.90       # RF nie może mieć < 90% powierzchni wody Otsu
+QC_MIN_CORE_USABLE = 0.5    # >= 50% rdzenia musi mieć znaną klasę
 
 
 def lake_core(lake: np.ndarray, px: int = CORE_ERODE_PX) -> np.ndarray:
@@ -48,7 +50,8 @@ def predict_scene_with_proba(bands: dict, scl: np.ndarray, bundle: dict, date,
     """Maska wody RF i mapa P(woda) jako uint8 (255 = brak danych w obu).
 
     Co robi: liczy cechy, bierze piksele ważne, bez chmur i z kompletnymi cechami, przewiduje P(woda)
-      i próg t* (`rf.predict_water`); reszta dostaje 255. P(woda) jest skalowane do 0-254.
+      i próg t* (ta sama reguła p ≥ t* co `rf.predict_water`, jedno wywołanie modelu);
+      reszta dostaje 255. P(woda) jest skalowane do 0-254.
     Dlaczego tak: predykcja tylko na pikselach z pełnymi cechami (RF nie przyjmuje NaN); chmura,
       cień i NaN to „nieznane". Mapa P(woda) potrzebna jest do późniejszego wyznaczenia linii wody.
     Wejście → wyjście: pasma, SCL, bundle, data (date lub 'YYYY-MM-DD'), próg Otsu → (maska, proba).
@@ -60,9 +63,8 @@ def predict_scene_with_proba(bands: dict, scl: np.ndarray, bundle: dict, date,
     mask = np.full(scl.shape, NODATA, np.uint8)
     proba = np.full(scl.shape, NODATA, np.uint8)
     if ok.any():
-        Xs = X[ok]
-        mask[ok] = rf.predict_water(bundle, Xs).astype(np.uint8)
-        p = bundle["model"].predict_proba(Xs)[:, 1]
+        p = bundle["model"].predict_proba(X[ok])[:, 1]
+        mask[ok] = (p >= bundle.get("water_threshold", 0.5)).astype(np.uint8)   # jak rf.predict_water
         proba[ok] = np.rint(p * PROBA_SCALE).astype(np.uint8)
     return mask, proba
 
@@ -129,6 +131,8 @@ def classify_scene(bands: dict, scl: np.ndarray, date, bundle: dict, aoi: np.nda
     Co robi: `classify_scene_full` bez mapy P(woda); powierzchnia = liczba pikseli == 1 × 100 m².
     Dlaczego tak: interfejs dla backendu - jedna funkcja pakietu, wynik identyczny ze skryptem 04.
     Wejście → wyjście: pasma, SCL, data, bundle, AOI, rdzeń → (uint8 (H, W), float, float).
+    Uwaga dla backendu: po tym wywołaniu trzeba wywołać `scene_qc` (z maską Otsu z `otsu_scene_mask`)
+      i NIE publikować powierzchni ani linii brzegowej, gdy `qc_ok` jest False.
     Jak to obronić: patrz `classify_scene_full`.
     """
     mask, _, t = classify_scene_full(bands, scl, date, bundle, aoi, core)
@@ -147,3 +151,40 @@ def otsu_scene_mask(bands: dict, scl: np.ndarray, aoi: np.ndarray, core: np.ndar
     m = otsu_mask(indices(bands)["mndwi"], otsu_t)
     m[~_usable(bands, scl)] = NODATA
     return keep_lake_component(m, core, aoi)
+
+
+def scene_qc(mask: np.ndarray, mask_otsu: np.ndarray, core: np.ndarray) -> dict:
+    """Kontrola jakości sceny bez etykiet: rdzeń jeziora i zgodność RF z Otsu.
+
+    Co robi: liczy core_usable_frac (piksele rdzenia != 255 / rdzeń), core_water_frac (woda w rdzeniu
+      / znane piksele rdzenia), rf_otsu_ratio (woda RF / woda Otsu; NaN gdy Otsu ma 0) oraz
+      qc_ok = usable >= 0,5 & water >= 0,95 & ratio >= 0,90 (NaN nie przechodzi). qc_reason to
+      przyczyny oddzielone ';' (`core_nodata`, `core_water<0.95`, `rf/otsu<0.90`, `rf/otsu=nan`),
+      pusty gdy qc_ok.
+    Dlaczego tak: rdzeń (jezioro zerodowane o 200 m) jest zawsze wodą, więc ląd w rdzeniu to błąd
+      klasyfikacji (chmura, rozbłysk, uszkodzony produkt), a RF dużo poniżej Otsu to niewykryta woda.
+      Brak górnej granicy ilorazu, bo RF > Otsu jest poprawne przy niskim stanie wody (2018-10,
+      2021-10); brak reguły na otsu_t < 0 (7 z 10 takich scen jest dobrych); brak zastępowania RF
+      przez Otsu - scena z qc_ok False jest wykluczana, nie naprawiana.
+    Wejście → wyjście: maska RF i maska Otsu (uint8 {0, 1, 255}, po filtrze jeziora), rdzeń bool
+      → słownik z 5 polami wyżej.
+    Jak to obronić: progi są stałymi `QC_*` ustalonymi bez użycia etykiet; na 221 scenach flagują
+      7 (3%), a każdą z nich da się obejrzeć na obrazku qc/flagged/.
+    """
+    n_core = int(core.sum())
+    known = core & (mask != NODATA)
+    usable = known.sum() / n_core if n_core else 0.0
+    water = (core & (mask == 1)).sum() / known.sum() if known.any() else 0.0
+    n_otsu = int((mask_otsu == 1).sum())
+    ratio = float((mask == 1).sum() / n_otsu) if n_otsu else float("nan")
+    reasons = []
+    if usable < QC_MIN_CORE_USABLE:
+        reasons.append("core_nodata")
+    if water < QC_MIN_CORE_WATER:
+        reasons.append("core_water<0.95")
+    if np.isnan(ratio):
+        reasons.append("rf/otsu=nan")
+    elif ratio < QC_MIN_RF_OTSU:
+        reasons.append("rf/otsu<0.90")
+    return {"core_usable_frac": float(usable), "core_water_frac": float(water),
+            "rf_otsu_ratio": ratio, "qc_ok": not reasons, "qc_reason": ";".join(reasons)}
