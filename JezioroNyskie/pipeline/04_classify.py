@@ -24,12 +24,12 @@ import pandas as pd
 import rasterio
 
 from mielizna import rf
-from mielizna.classify import PIXEL_KM2, classify_scene_full, lake_core, otsu_scene_mask, scene_qc
+from mielizna.classify import analyze_scene, lake_core
 from mielizna.config import data_path, load_config
 from mielizna.grid import reference_grid
 from mielizna.labels import load_scene
 from mielizna.osm import aoi_mask, lake_mask
-from mielizna.s2 import check_radiometry, scene_quality, usable_dates, valid_mask
+from mielizna.s2 import usable_dates
 
 log = logging.getLogger("04_classify")
 COLUMNS = ["date", "otsu_threshold", "area_km2", "area_otsu_km2", "lake_nodata_pct", "local_cloud_pct",
@@ -88,16 +88,10 @@ def main():
         if d in stats and stats[d].get("model_sha") == model_sha and all(p.exists() for p in paths(d)):
             continue
         bands, scl = load_scene(d, proc / "s2")
-        check_radiometry(bands, valid_mask(bands, scl) & aoi, d)
-        mask, proba, t = classify_scene_full(bands, scl, d, bundle, aoi, core)
-        m_otsu = otsu_scene_mask(bands, scl, aoi, core, t)
-        q = scene_quality(d, scl, valid_mask(bands, scl), aoi, lake)
-        stats[d] = {"otsu_threshold": t, "area_km2": (mask == 1).sum() * PIXEL_KM2,
-                    "area_otsu_km2": (m_otsu == 1).sum() * PIXEL_KM2,
-                    "lake_nodata_pct": 100 * float(((mask == 255) & lake).sum() / lake.sum()),
-                    "local_cloud_pct": q["local_cloud_pct"], **scene_qc(mask, m_otsu, core),
-                    "model_sha": model_sha}
-        for p, arr in zip(paths(d), (mask, m_otsu, proba)):
+        r = analyze_scene(bands, scl, d, bundle, aoi, lake, core)
+        stats[d] = {k: v for k, v in r.items() if k not in ("mask", "mask_otsu", "proba")} \
+            | {"model_sha": model_sha}
+        for p, arr in zip(paths(d), (r["mask"], r["mask_otsu"], r["proba"])):
             write_mask(p, arr, grid)
         save_stats(stats, stats_path)
         if not stats[d]["qc_ok"]:

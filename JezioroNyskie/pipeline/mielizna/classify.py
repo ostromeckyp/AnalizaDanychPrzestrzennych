@@ -17,7 +17,7 @@ from scipy import ndimage
 
 from mielizna.features import compute_features, indices, stack
 from mielizna.otsu import otsu_mask, scene_threshold
-from mielizna.s2 import cloud_mask, valid_mask
+from mielizna.s2 import check_radiometry, cloud_mask, scene_quality, valid_mask
 
 NODATA = 255
 PIXEL_KM2 = 100e-6          # piksel 10 m x 10 m w km2
@@ -196,3 +196,28 @@ def scene_qc(mask: np.ndarray, mask_otsu: np.ndarray, core: np.ndarray) -> dict:
         reasons.append("rf/otsu<0.90")
     return {"core_usable_frac": float(usable), "core_water_frac": float(water),
             "rf_otsu_ratio": ratio, "qc_ok": not reasons, "qc_reason": ";".join(reasons)}
+
+
+def analyze_scene(bands: dict, scl: np.ndarray, date, bundle: dict, aoi: np.ndarray,
+                  lake: np.ndarray, core: np.ndarray) -> dict:
+    """Pełna analiza jednej sceny: maski RF i Otsu, mapa P(woda), powierzchnie i QC.
+
+    Co robi: `check_radiometry` (ValueError przy uszkodzonej scenie przechodzi dalej), potem
+      `classify_scene_full`, `otsu_scene_mask`, `scene_quality` i `scene_qc`. Zwraca słownik:
+      `mask`, `mask_otsu`, `proba` (uint8 H×W), `otsu_threshold`, `area_km2` (RF), `area_otsu_km2`,
+      `lake_nodata_pct` (% jeziora z maską 255), `local_cloud_pct` oraz 5 kluczy `scene_qc`.
+    Dlaczego tak: skrypt 04 i backend muszą liczyć scenę identycznie; jedna funkcja wyklucza rozjazd.
+      Do krzywej powierzchnia-rzędna idzie `area_otsu_km2`, nie `area_km2` (zob. `classify_scene`).
+    Wejście → wyjście: pasma, SCL, data, bundle, AOI, jezioro, rdzeń jeziora → słownik wyżej.
+    Jak to obronić: tylko składa przetestowane części, a test porównuje wynik z ich osobnym wywołaniem;
+      na prawdziwych scenach wynik jest identyczny z plikami zapisanymi przez 04.
+    """
+    check_radiometry(bands, valid_mask(bands, scl) & aoi, str(date))
+    mask, proba, t = classify_scene_full(bands, scl, date, bundle, aoi, core)
+    m_otsu = otsu_scene_mask(bands, scl, aoi, core, t)
+    q = scene_quality(date, scl, valid_mask(bands, scl), aoi, lake)
+    return {"mask": mask, "mask_otsu": m_otsu, "proba": proba, "otsu_threshold": t,
+            "area_km2": (mask == 1).sum() * PIXEL_KM2,
+            "area_otsu_km2": (m_otsu == 1).sum() * PIXEL_KM2,
+            "lake_nodata_pct": 100 * float(((mask == 255) & lake).sum() / lake.sum()),
+            "local_cloud_pct": q["local_cloud_pct"], **scene_qc(mask, m_otsu, core)}

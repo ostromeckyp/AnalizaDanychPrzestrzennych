@@ -176,3 +176,34 @@ def test_scene_qc_rf_above_otsu_is_ok():     # drawdown: RF > Otsu jest poprawne
     mask[0:5, 0:40] = 1
     qc = classify.scene_qc(mask, otsu, core)
     assert qc["rf_otsu_ratio"] == pytest.approx(1.5) and qc["qc_ok"]
+
+
+@pytest.fixture
+def scene_inputs():
+    """Syntetyczna scena 40x40 (1600 ważnych pikseli) + bundle, AOI, jezioro (lewa połowa), rdzeń."""
+    b, scl = _scene()
+    aoi = np.ones((40, 40), bool)
+    lake = np.zeros((40, 40), bool); lake[:, :20] = True
+    core = np.zeros((40, 40), bool); core[10:30, 5:15] = True
+    return b, scl, D, _bundle(), aoi, lake, core
+
+
+def test_analyze_scene_matches_parts(scene_inputs):
+    bands, scl, d, bundle, aoi, lake, core = scene_inputs
+    r = classify.analyze_scene(bands, scl, d, bundle, aoi, lake, core)
+    mask, proba, t = classify.classify_scene_full(bands, scl, d, bundle, aoi, core)
+    assert np.array_equal(r["mask"], mask) and np.array_equal(r["proba"], proba)
+    assert r["otsu_threshold"] == t
+    assert np.array_equal(r["mask_otsu"], classify.otsu_scene_mask(bands, scl, aoi, core, t))
+    assert r["area_km2"] == (mask == 1).sum() * classify.PIXEL_KM2
+    assert r["area_otsu_km2"] == (r["mask_otsu"] == 1).sum() * classify.PIXEL_KM2
+    assert r["lake_nodata_pct"] == 100 * ((mask == 255) & lake).sum() / lake.sum()
+    assert 0.0 <= r["local_cloud_pct"] <= 100.0
+    assert set(classify.scene_qc(mask, r["mask_otsu"], core)) <= set(r)
+
+
+def test_analyze_scene_rejects_corrupt_radiometry(scene_inputs):
+    bands, scl, d, bundle, aoi, lake, core = scene_inputs
+    bad = {k: np.full_like(v, 1e-4) for k, v in bands.items()}
+    with pytest.raises(ValueError, match="radiometrically corrupt"):
+        classify.analyze_scene(bad, scl, d, bundle, aoi, lake, core)
