@@ -1,6 +1,6 @@
 """Kontrakt API (modele pydantic v2) - źródło `openapi.json` dla frontu.
 
-Co robi: opisuje kształt odpowiedzi `/api/meta`, `/api/zones`, `/api/point`, `/api/scenes` i `/api/capacity-to-level` / `/api/level-to-capacity`
+Co robi: opisuje kształt odpowiedzi `/api/meta`, `/api/zones`, `/api/point`, `/api/scenes` i `/api/capacity-to-level` / `/api/level-to-capacity`, w `/api/meta` także adresy warstw obrazów
   (kolejne zadania dopisują swoje modele).
 Dlaczego tak: front (React) generuje typy TypeScript z `openapi.json`, więc kontrakt ma być jawny i
   ścisły. Pola, które mogą być nieskończone lub NaN, mają typ `float | None` i serializują się jako
@@ -79,6 +79,23 @@ class AreaLevel(BaseModel):
     points: list[AreaLevelPoint]
 
 
+class BottomLayer(BaseModel):
+    url: str
+    coordinates: list[tuple[float, float]]   # 4 narożniki [lon, lat]: LG, PG, PD, LD
+    breaks: list[float]                      # 6 progów klas dna [m n.p.m.]
+
+
+class UncertaintyLayer(BaseModel):
+    url: str
+    coordinates: list[tuple[float, float]]
+    min_unc: float                           # od tej niepewności [m] rysowana jest kropka
+
+
+class Layers(BaseModel):
+    bottom: BottomLayer
+    uncertainty: UncertaintyLayer
+
+
 class MetaResponse(BaseModel):
     model_version: str
     period: str
@@ -101,6 +118,7 @@ class MetaResponse(BaseModel):
     z_max_floor: float
     accuracy: Accuracy
     area_level: AreaLevel
+    layers: Layers
 
 
 class PointResponse(BaseModel):

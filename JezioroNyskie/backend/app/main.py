@@ -9,6 +9,7 @@ Dlaczego tak: produkty ładują się leniwie (w `lifespan`), gdy nie podano ich 
 Wejście → wyjście: `create_app(settings, products, *, search_fn, load_fn)` → `FastAPI`;
   `GET /api/meta` → `MetaResponse`; `GET /api/zones?h=&draft=&margin=` → `ZonesResponse`;
   `GET /api/point?lon=&lat=&h=&draft=&margin=` → `PointResponse`;
+  `GET /api/layers/{bottom,uncertainty}.png?theme=light|dark` → PNG (ETag, 304);
   `GET /api/scenes` → `list[SceneOut]`; `GET /api/shorelines?date=` → GeoJSON `Feature` (EPSG:4326, 404 gdy brak);
   `GET /api/marinas` → `FeatureCollection`; `GET /api/capacity-to-level?v=` / `/api/level-to-capacity?h=` → `{v, h, in_table}`.
   `search_fn` i `load_fn` (wstrzykiwane wyszukiwanie STAC / wczytanie sceny) zostaną użyte w kolejnych zadaniach.
@@ -18,19 +19,22 @@ Jak to obronić: wynik stref jest czystą funkcją (wersja modelu, h, draft, mar
 import json
 import math
 from contextlib import asynccontextmanager
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from pyproj import Transformer
 
 from app.cache import TTLStore
 from app.data import Products, capacity_to_level, level_to_capacity, load_products
+from app.layers import UNC_MIN, layer_coordinates, bottom_breaks, render_bottom_png, render_uncertainty_png
 from app.point import point_info
-from app.schemas import (CapacityToLevel, LevelToCapacity, MetaResponse, PointResponse, SceneOut,
+from app.schemas import (CapacityToLevel, Layers, LevelToCapacity, MetaResponse, PointResponse, SceneOut,
                          ZonesResponse)
 from app.settings import Settings, get_settings
 from app.zones import (round_param, zone_classes, zone_stats, zone_warnings, zones_geojson)
 
 CACHE_CONTROL = "public, max-age=300"
+LAYER_CACHE_CONTROL = "public, max-age=86400"   # obrazy warstw: zmieniają się tylko z modelem
 STATIC_CACHE_CONTROL = "public, max-age=3600"   # sceny, linie, przystanie, pojemność: zmieniają się tylko z modelem
 CAPACITY_MAX_MLN_M3 = 200.0
 LEVEL_LIMITS = (180.0, 210.0)                   # rozsądny zakres rzędnej [m n.p.m.] dla /api/level-to-capacity
@@ -53,16 +57,22 @@ def finite_or_none(x) -> float | None:
     return x if math.isfinite(x) else None
 
 
-def cached_json_response(request: Request, etag: str, build, cache_control: str = CACHE_CONTROL) -> Response:
-    """Odpowiedź JSON z ETag i Cache-Control; `If-None-Match` równy ETagowi daje 304 bez ciała.
+def cached_response(request: Request, etag: str, build, cache_control: str = CACHE_CONTROL,
+                    media_type: str = "application/json") -> Response:
+    """Odpowiedź z ETag i Cache-Control; `If-None-Match` równy ETagowi daje 304 bez ciała.
 
-    `build()` zwraca bajty JSON i jest wywoływane tylko, gdy ciało jest potrzebne. Wspólne dla
-    wszystkich endpointów z ETagiem.
+    `build()` zwraca bajty ciała i jest wywoływane tylko, gdy ciało jest potrzebne. Wspólne dla
+    wszystkich endpointów z ETagiem (JSON i PNG).
     """
     headers = {"ETag": etag, "Cache-Control": cache_control}
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
-    return Response(content=build(), media_type="application/json", headers=headers)
+    return Response(content=build(), media_type=media_type, headers=headers)
+
+
+def cached_json_response(request: Request, etag: str, build, cache_control: str = CACHE_CONTROL) -> Response:
+    """`cached_response` dla JSON."""
+    return cached_response(request, etag, build, cache_control)
 
 
 def slider_range(products: Products) -> tuple[float, float]:
@@ -78,6 +88,13 @@ def scene_out(s: dict) -> SceneOut:
     return SceneOut(date=s["date"], h_t=f("h_t"), h_sigma=f("h_sigma"), h_method=s.get("h_method"),
                     area_km2=f("area_km2"), area_otsu_km2=f("area_otsu_km2"), otsu_threshold=f("otsu_threshold"),
                     local_cloud_pct=f("local_cloud_pct"), lake_nodata_pct=f("lake_nodata_pct"))
+
+
+def build_layers(products: Products) -> Layers:
+    coords = layer_coordinates(products)
+    return Layers(
+        bottom={"url": "/api/layers/bottom.png", "coordinates": coords, "breaks": bottom_breaks(products)},
+        uncertainty={"url": "/api/layers/uncertainty.png", "coordinates": coords, "min_unc": UNC_MIN})
 
 
 def build_meta(products: Products) -> MetaResponse:
@@ -110,7 +127,8 @@ def build_meta(products: Products) -> MetaResponse:
             "rmse_loo": finite_or_none(curve.rmse), "rmse_loyo": finite_or_none(curve.rmse_loyo),
             "points": [{"date": s["date"], "area_otsu_km2": finite_or_none(s.get("area_otsu_km2")),
                         "h_t": finite_or_none(s["h_t"]), "h_method": s.get("h_method")}
-                       for s in products.scenes]})
+                       for s in products.scenes]},
+        layers=build_layers(products))
 
 
 def create_app(settings: Settings | None = None, products: Products | None = None, *,
@@ -227,6 +245,33 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
         v = finite_or_none(level_to_capacity(p, h))
         return static_json(request, f"-l2c-{h:g}", lambda: LevelToCapacity(
             h=h, v=v, in_table=v is not None).model_dump_json().encode())
+
+    layer_renderers = {"bottom": render_bottom_png, "uncertainty": render_uncertainty_png}
+
+    def layer_png(request: Request, name: str, theme: str) -> Response:
+        p: Products = request.app.state.products
+        cache: TTLStore = request.app.state.cache
+        key = ("layer", name, theme, p.version)
+
+        def build() -> bytes:
+            body = cache.get(key)
+            if body is None:
+                body = layer_renderers[name](p, theme)
+                cache.set(key, body)
+            return body
+
+        return cached_response(request, f'W/"{p.version}-{name}-{theme}"', build, LAYER_CACHE_CONTROL, "image/png")
+
+    @app.get("/api/layers/bottom.png", response_class=Response, responses={200: {"content": {"image/png": {}}}})
+    def bottom_png(request: Request, theme: Literal["light", "dark"] = Query(...)):
+        """Dno w 5 klasach (RGBA, EPSG:3857); narożniki i progi w `/api/meta`."""
+        return layer_png(request, "bottom", theme)
+
+    @app.get("/api/layers/uncertainty.png", response_class=Response,
+             responses={200: {"content": {"image/png": {}}}})
+    def uncertainty_png(request: Request, theme: Literal["light", "dark"] = Query(...)):
+        """Kropki niepewności (RGBA, 4× rozdzielczość, EPSG:3857)."""
+        return layer_png(request, "uncertainty", theme)
 
     return app
 

@@ -330,6 +330,86 @@
      }
     }
    }
+  },
+  "/api/layers/bottom.png": {
+   "get": {
+    "summary": "Bottom Png",
+    "description": "Dno w 5 klasach (RGBA, EPSG:3857); narożniki i progi w `/api/meta`.",
+    "operationId": "bottom_png_api_layers_bottom_png_get",
+    "parameters": [
+     {
+      "name": "theme",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "enum": [
+        "light",
+        "dark"
+       ],
+       "type": "string",
+       "title": "Theme"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "image/png": {}
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/layers/uncertainty.png": {
+   "get": {
+    "summary": "Uncertainty Png",
+    "description": "Kropki niepewności (RGBA, 4× rozdzielczość, EPSG:3857).",
+    "operationId": "uncertainty_png_api_layers_uncertainty_png_get",
+    "parameters": [
+     {
+      "name": "theme",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "enum": [
+        "light",
+        "dark"
+       ],
+       "type": "string",
+       "title": "Theme"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "image/png": {}
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
   }
  },
  "components": {
@@ -521,6 +601,45 @@
     ],
     "title": "AreaLevelPoint"
    },
+   "BottomLayer": {
+    "properties": {
+     "url": {
+      "type": "string",
+      "title": "Url"
+     },
+     "coordinates": {
+      "items": {
+       "prefixItems": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        }
+       ],
+       "type": "array",
+       "maxItems": 2,
+       "minItems": 2
+      },
+      "type": "array",
+      "title": "Coordinates"
+     },
+     "breaks": {
+      "items": {
+       "type": "number"
+      },
+      "type": "array",
+      "title": "Breaks"
+     }
+    },
+    "type": "object",
+    "required": [
+     "url",
+     "coordinates",
+     "breaks"
+    ],
+    "title": "BottomLayer"
+   },
    "CapacityToLevel": {
     "properties": {
      "v": {
@@ -581,6 +700,22 @@
     },
     "type": "object",
     "title": "HTTPValidationError"
+   },
+   "Layers": {
+    "properties": {
+     "bottom": {
+      "$ref": "#/components/schemas/BottomLayer"
+     },
+     "uncertainty": {
+      "$ref": "#/components/schemas/UncertaintyLayer"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bottom",
+     "uncertainty"
+    ],
+    "title": "Layers"
    },
    "LevelToCapacity": {
     "properties": {
@@ -769,6 +904,9 @@
      },
      "area_level": {
       "$ref": "#/components/schemas/AreaLevel"
+     },
+     "layers": {
+      "$ref": "#/components/schemas/Layers"
      }
     },
     "type": "object",
@@ -793,7 +931,8 @@
      "crs",
      "z_max_floor",
      "accuracy",
-     "area_level"
+     "area_level",
+     "layers"
     ],
     "title": "MetaResponse"
    },
@@ -1144,6 +1283,42 @@
      "step"
     ],
     "title": "Slider"
+   },
+   "UncertaintyLayer": {
+    "properties": {
+     "url": {
+      "type": "string",
+      "title": "Url"
+     },
+     "coordinates": {
+      "items": {
+       "prefixItems": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        }
+       ],
+       "type": "array",
+       "maxItems": 2,
+       "minItems": 2
+      },
+      "type": "array",
+      "title": "Coordinates"
+     },
+     "min_unc": {
+      "type": "number",
+      "title": "Min Unc"
+     }
+    },
+    "type": "object",
+    "required": [
+     "url",
+     "coordinates",
+     "min_unc"
+    ],
+    "title": "UncertaintyLayer"
    },
    "ValidationError": {
     "properties": {
