@@ -5,7 +5,7 @@ Co robi: sprawdza liczby z planu 1 (meta), czas zimnego `/api/zones`, pole bezpi
 Dlaczego tak: syntetyczny zbiór 20×30 px nie wykryje błędu siatki, wydajności ani rozjazdu liczb.
 Wejście → wyjście: `data/processed/model/all/` → asercje; brak modelu = cały moduł pominięty.
 Jak to obronić: świeża aplikacja na test (pusty cache TTL) mierzy najgorszy przypadek, a przedział
-  `safe_km2` pochodzi z ledgera planu 1 (128 908 px przed R25, R25 może tylko zmniejszyć).
+  `safe_km2` pochodzi z ledgera planu 1 (z zapasem m = 0,3: 128 908 px przed R25, 128 901 px po R25; bez zapasu 129 880 px).
 """
 import time
 from pathlib import Path
