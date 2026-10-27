@@ -36,7 +36,7 @@ Retrening to godziny (ok. 550 dopasowań), więc wymuszaj go świadomie.
 | `make levels` | `06_water_levels.py` | → `scenes.json`, `model/area_level_curve.json` |
 | `make bottom` | `07_bottom_model.py` | → `model/{all,pre_flood,post_flood}/bottom_*.tif`, `model_meta.json` |
 | `make all` | wszystkie po kolei | staje przed `rf`, jeśli < 150 ręcznych etykiet klas |
-| `make test` | `pytest -q` | 181 testów |
+| `make test` | `pytest -q` | 182 testów |
 
 Dane surowe w `data/raw/`, logi w `data/processed/logs/`. Notatki do nauki (po polsku, z pytaniami obronnymi):
 [`docs/nauka/`](docs/nauka/) — `M1-dane.md`, `M2-klasyfikacja.md`, `M3-poziomy.md`, `M4-model-dna.md`, `decyzje.md`.

@@ -40,15 +40,15 @@ Skrypt: `07_bottom_model.py`, logika: `mielizna/bottom.py` (`combine_evidence`, 
 Niebezpieczny błąd to „ląd uznany za wodę": obniża z_max i płycizna wygląda na głęboką. Reguła łączenia: **woda wymaga obu masek**, a **ląd wystarczy z jednej**.
 W porównaniu z samym RF (RF-only) zmiana obserwacji może więc być tylko: woda → ląd, woda → nieznane albo nieznane → ląd (woda nie może się pojawić tam, gdzie RF mówił „ląd" lub „nieznane").
 Każda taka zmiana albo dodaje obserwację lądu (składnik błędu, który **nie rośnie ze wzrostem progu**), albo usuwa obserwację wody — w obu przypadkach największy minimalizator
-może się tylko podnieść, a zbiór spójnej wody tylko zmniejszyć, czyli **surowe z_max nie może spaść względem RF-only**. Test własności `test_adding_land_never_lowers_zmax` sprawdza ten mechanizm losowo,
+może się tylko podnieść, a zbiór spójnej wody tylko zmniejszyć, czyli **z_max nie może spaść względem RF-only**. Test własności `test_adding_land_never_lowers_zmax` sprawdza ten mechanizm losowo,
 a test R25 (`r25_combined_never_lowers_zmax_vs_rf_only`) sprawdza go dla samej reguły łączenia; w `07` jest twarda asercja na danych: **0 pikseli ze z_max niższym niż RF-only** (`07_bottom_model.log`, pkt 4).
-Zastrzeżenie: dowód dotyczy surowych z_max_raw; po poszerzeniu o σ wymaga σ_C ≥ σ_nie-C (spełnione), a woda C i tak jest ignorowana (R24).
+Dowód działa dla dowolnych σ (także σ_C < σ_nie-C): k_max tylko rośnie, więc zbiór spójnej wody się kurczy, a minimum h+kσ po mniejszym zbiorze nie spada — dotyczy zarówno surowego, jak i poszerzonego z_max.
 **Historia (uczciwie):** wcześniejszy pomiar „z_max niżej o >5 cm na 0,2% px" brał się stąd, że Otsu=255 wymazywało ląd z RF (ląd → nieznane); R25 to naprawił i teraz jest 0.
 Ten sam argument obowiązuje dla R24 (usunięcie obserwacji wody).
 
 ## 3. Liczby z tego przebiegu (`07_bottom_model.log`, okres `all`, 141 652 px jeziora)
 
-- **Niezmiennik** z_min ≤ z_min_raw < z_max_raw ≤ z_max: **0 naruszeń** z 42 189 pikseli z przedziałem.
+- **Niezmiennik** z_min ≤ z_min_raw < z_max_raw ≤ z_max: **0 naruszeń** z 42 096 pikseli z przedziałem.
 - **Sprzeczności:** `n_conflict_px` = 58 412 = **23,3%** obserwowanych px AOI (32,4% px jeziora); ≥3 sprzeczności: 9,3%; stosunek > 0,1: 2,4%; p99 = 37.
 - **Zatoka W vs E (kolumna < 330):** W: sprzeczności w 53,0% px, stosunek > 0,1 w 8,8%, „zawsze woda" 64,1%; E: 27,6%, 1,8%, 76,4%. (Plamistość zachodniej płytkiej zatoki.)
 - **Klasy w jeziorze:** zawsze woda 104 886, zawsze ląd 5 365, przedział 31 401, nierozstrzygnięte 0. Całe AOI (`model_meta.json`): obserwowane 250 421 z 250 584, przedział 42 096, zawsze woda 104 920, zawsze ląd 103 405.
@@ -78,7 +78,7 @@ dany piksel był wodą, a przy jakich lądem. Tam, gdzie widzieliśmy ląd przy 
 **2. Skąd wiesz, że RF ∧ Otsu jest bezpieczniejsze?**
 Bo błąd groźny to „ląd jako woda". Woda wymaga obu masek, a ląd wystarczy z jednej, więc względem samego RF zmiany to tylko woda → ląd/nieznane lub nieznane → ląd, a to z dowodu wyżej nigdy nie obniża z_max.
 Potwierdza to dane (z_max niżej na 0 px, wyżej o >5 cm na 22,4%). Na etykietach mamy tylko liczbę **historyczną** ze starszego modelu (próg 0,6, ledger Task 8, nieprzeliczoną dla obecnego modelu t = 0,70): RF∧Otsu łapało ląd 47/50 wobec 36/50 dla RF.
-Cena: woda traci recall (0,61 na trudnych punktach brzegowych), więc przedziały są szersze.
+Cena: woda traci recall (0,61 na trudnych punktach brzegowych; historyczne, starszy model t=0,6), więc przedziały są szersze.
 
 **3. Dlaczego sceny C nie mogą ustalać wody?**
 Poziom C pochodzi z krzywej z błędem 0,49 m, skorelowanym w obrębie roku, a w paśmie 195–198 m poziom C bywa zaniżony o 0,1–0,4 m — czyli dno wyglądałoby na głębsze. Nie ma tu symetrii: błąd w jedną stronę jest groźny. Usunięcie wody C może tylko podnieść z_max (konserwatywnie).

@@ -200,7 +200,10 @@ def finish(fails: list[str], proc, periods: list[str]) -> int:
     """
     if not fails:
         return 0
-    log.error("NIEPOWODZENIE asercji: %s", fails)
+    if fails == ["wyjątek"]:
+        log.error("NIEPOWODZENIE (wyjątek)")
+    else:
+        log.error("NIEPOWODZENIE asercji: %s", fails)
     for name in periods:
         meta = proc / "model" / name / "model_meta.json"
         meta.unlink(missing_ok=True)
