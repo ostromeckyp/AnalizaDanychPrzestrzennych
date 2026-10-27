@@ -2,11 +2,11 @@
 
 Co robi: przelicza rastry modelu (EPSG:2180) do Web Mercatora (10 m, najbliższy sąsiad), wyznacza cztery
   narożniki obrazu w lon/lat oraz renderuje dwa PNG-i RGBA: dno (5 klas wg percentyli `z`) i kropki
-  niepewności (`unc` ≥ 0,5 m).
+  niepewności (`unc` ≥ 0,5 m), obraz 2×.
 Dlaczego tak: MapLibre `image` rozciąga obraz między czterema narożnikami lon/lat, więc obraz musi być
   w układzie, w którym kafelki mapy są prostokątne (3857). Klasy wg percentyli dają równe powierzchnie
   klas niezależnie od rozkładu głębokości; kolory interpolowane w RGB od płytko (jasny) do głęboko
-  (ciemny), osobna para dla motywu jasnego i ciemnego (brief §16.3). Kropki 2×2 w komórce 4×4 dają
+  (ciemny), osobna para dla motywu jasnego i ciemnego (brief §16.3). Kropki 1×1 w komórce 2×2 dają
   deseń, który nie zasłania dna. Powtórzone progi percentyli (np. mało różnych `z`) nie psują
   klasyfikacji: `np.searchsorted(..., side="left")` na progach wewnętrznych daje klasy 0-4 (wartość równa progowi trafia do klasy niższej), a puste klasy po prostu nie występują.
 Wejście → wyjście: `Products` + motyw (`light`|`dark`) → bajty PNG; `to_web_mercator(arr, products)` →
@@ -27,7 +27,7 @@ from rasterio.warp import Resampling, calculate_default_transform, reproject
 MERCATOR = "EPSG:3857"
 RESOLUTION_M = 10
 UNC_MIN = 0.5                      # m; od tej niepewności rysujemy kropkę
-UNC_SCALE = 4                      # obraz niepewności powiększony 4×
+UNC_SCALE = 2                      # obraz niepewności powiększony 2×
 N_CLASSES = 5
 BOTTOM_COLORS = {                  # (najpłycej, najgłębiej), brief §16.3
     "light": ("#C4DDE9", "#215C86"),
@@ -106,15 +106,18 @@ def render_bottom_png(products, theme: str) -> bytes:
 
 
 def render_uncertainty_png(products, theme: str) -> bytes:
-    """Kropki 2×2 w komórkach 4×4 (obraz 4×) tam, gdzie `unc` ≥ 0,5 m; reszta przezroczysta."""
+    """Kropki 1×1 w komórkach 2×2 (obraz 2×) tam, gdzie `unc` ≥ 0,5 m; reszta przezroczysta.
+
+    Dlaczego 2×, nie 4×: na prawdziwej siatce obraz 4× ma 5748×4536 px (≈100 MB zdekodowanego RGBA),
+    zbyt dużo dla telefonu; 2× to ≈26 MB, a deseń kropek nadal jest czytelny.
+    """
     unc = np.where(products.in_model, products.unc, np.nan)
     flag = np.where(np.isfinite(unc), (unc >= UNC_MIN).astype(np.float32), np.nan)
     dst, _ = to_web_mercator(flag, products)
     dots = np.nan_to_num(dst, nan=0.0) > 0.5
     h, w = dots.shape
     big = np.zeros((h * UNC_SCALE, w * UNC_SCALE), bool)
-    big[1::UNC_SCALE, 1::UNC_SCALE] = big[1::UNC_SCALE, 2::UNC_SCALE] = dots
-    big[2::UNC_SCALE, 1::UNC_SCALE] = big[2::UNC_SCALE, 2::UNC_SCALE] = dots
+    big[::UNC_SCALE, ::UNC_SCALE] = dots                      # kropka 1×1 w lewym górnym rogu komórki 2×2
     rgba = np.zeros(big.shape + (4,), np.uint8)
     rgba[big, :3] = _rgb(UNC_COLORS[theme]).astype(np.uint8)
     rgba[big, 3] = UNC_ALPHA

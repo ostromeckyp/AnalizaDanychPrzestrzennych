@@ -63,16 +63,16 @@ def test_uncertainty_png_empty_when_all_below_threshold(products):
     assert img.mode == "RGBA" and img.getextrema()[3] == (0, 0)
 
 
-def test_uncertainty_png_dots_2x2_in_4x4_cells(products):
+def test_uncertainty_png_dots_1x1_in_2x2_cells(products):
     unc = np.full(products.shape, 0.2, np.float32)
     unc[3, 4] = 0.6
     p2 = dataclasses.replace(products, unc=unc)
     cells, _ = to_web_mercator(np.where(unc >= 0.5, 1.0, np.nan), products)
     n_cells = int(np.isfinite(cells).sum())
     img = np.asarray(_img(render_uncertainty_png(p2, "light")))
-    assert img.shape[:2] == (cells.shape[0] * 4, cells.shape[1] * 4)
+    assert img.shape[:2] == (cells.shape[0] * 2, cells.shape[1] * 2)
     ys, xs = np.nonzero(img[..., 3])
-    assert len(ys) == 4 * n_cells and set(ys % 4) == {1, 2} and set(xs % 4) == {1, 2}
+    assert len(ys) == n_cells and set(ys % 2) == {0} and set(xs % 2) == {0}
     assert set(map(tuple, img[ys, xs])) == {(0x0E, 0x24, 0x33, 153)}
     dark = np.asarray(_img(render_uncertainty_png(p2, "dark")))
     assert set(map(tuple, dark[ys, xs][:, :3])) == {(0xE6, 0xEE, 0xF3)}
