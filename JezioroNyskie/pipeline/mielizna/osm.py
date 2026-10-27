@@ -2,6 +2,7 @@
 import hashlib
 import json
 import time
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
@@ -95,17 +96,17 @@ def points_gdf(overpass_json: dict) -> gpd.GeoDataFrame:
                             geometry="geometry", crs=TARGET_CRS)
 
 
-def _mask(grid: Grid, layer: str) -> np.ndarray:
-    gdf = gpd.read_file(data_path("processed", "lake.gpkg"), layer=layer)
+def _mask(grid: Grid, layer: str, path: Path | None = None) -> np.ndarray:
+    gdf = gpd.read_file(path or data_path("processed", "lake.gpkg"), layer=layer)
     return rasterize(((g, 1) for g in gdf.geometry), out_shape=(grid.height, grid.width),
                      transform=grid.transform, fill=0, all_touched=False, dtype="uint8").astype(bool)
 
 
-def aoi_mask(grid: Grid) -> np.ndarray:
-    """Maska bool obszaru zainteresowania (jezioro + bufor 500 m)."""
-    return _mask(grid, "aoi")
+def aoi_mask(grid: Grid, *, path: Path | None = None) -> np.ndarray:
+    """Maska bool obszaru zainteresowania (jezioro + bufor 500 m); `path` = jawny lake.gpkg (domyślnie z data_path)."""
+    return _mask(grid, "aoi", path)
 
 
-def lake_mask(grid: Grid) -> np.ndarray:
-    """Maska bool powierzchni jeziora."""
-    return _mask(grid, "lake")
+def lake_mask(grid: Grid, *, path: Path | None = None) -> np.ndarray:
+    """Maska bool powierzchni jeziora; `path` = jawny lake.gpkg (domyślnie z data_path)."""
+    return _mask(grid, "lake", path)

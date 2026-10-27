@@ -81,3 +81,20 @@ def test_masks_from_gpkg(tmp_path, monkeypatch, sample_json):
     assert lake.dtype == bool and lake.shape == (grid.height, grid.width)
     assert lake.sum() * 100 == pytest.approx(p.area, rel=0.05)
     assert aoi.sum() > lake.sum() and not (lake & ~aoi).any()
+
+
+def test_masks_explicit_path_ignores_data_path(tmp_path, monkeypatch, sample_json):
+    import geopandas as gpd
+    p = lake_polygon(sample_json)
+    gpkg = tmp_path / "lake.gpkg"
+    gpd.GeoDataFrame(geometry=[p], crs=2180).to_file(gpkg, layer="lake", driver="GPKG")
+    gpd.GeoDataFrame(geometry=[p.buffer(500)], crs=2180).to_file(gpkg, layer="aoi", driver="GPKG")
+
+    def boom(kind, *parts):
+        raise AssertionError("data_path nie powinno być wołane przy jawnym path")
+    monkeypatch.setattr(osm, "data_path", boom)
+    x0, y0, x1, y1 = p.buffer(1000).bounds
+    grid = Grid(crs="EPSG:2180", transform=Affine(10, 0, x0, 0, -10, y1),
+                width=int((x1 - x0) // 10), height=int((y1 - y0) // 10))
+    lake, aoi = osm.lake_mask(grid, path=gpkg), osm.aoi_mask(grid, path=gpkg)
+    assert lake.sum() > 0 and aoi.sum() > lake.sum()
