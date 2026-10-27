@@ -30,4 +30,4 @@ periods:
 paths:
   raw: "raw"
   processed: "processed"
-  reference: "raw/check"
+  reference: "reference"
