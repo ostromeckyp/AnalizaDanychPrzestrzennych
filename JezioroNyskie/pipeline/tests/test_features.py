@@ -43,7 +43,7 @@ def test_window_mean_excludes_nan_neighbour():
     green = np.full((5, 5), .06, dtype=np.float32)
     swir = np.full((5, 5), .01, dtype=np.float32)
     swir[1, 1] = np.nan                       # sąsiad piksela (2, 2)
-    f = compute_features(_bands(green=.06, swir16=.01) | {"swir16": swir}, 0.0, dt.date(2021, 7, 1))
+    f = compute_features(_bands() | {"swir16": swir}, 0.0, dt.date(2021, 7, 1))
     m = (0.06 - 0.01) / (0.06 + 0.01)
     assert np.isnan(f["mndwi"][1, 1]) and np.isnan(f["mndwi_mean3"][1, 1])
     assert np.isclose(f["mndwi_mean3"][2, 2], m)      # 8 ważnych sąsiadów, wszyscy = m
