@@ -7,7 +7,7 @@ Najpierw po ludzku, potem terminy. Wszystkie liczby: `data/processed/model/rf_re
 
 | plik | co to jest |
 |---|---|
-| `data/reference/labels.gpkg` | 620 punktów do oceny (warstwy: `auto_water`, `auto_land`, `shore`, `shore_low`); etykiety ludzkie w kolumnie `label`, `source=human` |
+| `data/reference/labels.gpkg` | 620 punktów do oceny (wartości kolumny `stratum`: `auto_water`, `auto_land`, `shore`, `shore_low`); etykiety ludzkie w kolumnie `label`, `source=human` |
 | `data/processed/model/rf_model.joblib` | wytrenowany model + opis (cechy, próg wody `water_threshold` = 0,70, sha etykiet i configu) |
 | `data/processed/model/rf_metrics.json`, `rf_report.md` | wyniki walidacji: tabele A–E |
 | `data/processed/masks/{data}.tif` | maska RF: 0 = ląd, 1 = woda, 255 = brak danych/chmura |
@@ -49,7 +49,7 @@ Linia M2 z raportu: *RF = 89,7% [84,5–93,3] → **NOT MET**. Kontekst: wszystk
 Mocniej: BA = 0,797 vs Otsu 0,755; κ = 0,538; recall lądu 14/21 (Otsu łapie więcej lądu: 17/21).
 
 Punkty `shore_low` (n = 58: 29 woda + 29 ląd, tabela C), tam gdzie ląd jest częsty: Otsu BA 0,569 (recall lądu 29/29, ale recall wody tylko 0,138),
-RF BA 0,638 (ląd 17/29), RF t* BA 0,621 (ląd 24/29). Zbiór łączny `shore ∪ shore_low` (n = 243, ląd 50): Otsu BA 0,768, RF BA 0,756,
+RF BA 0,638 (ląd 17/29), RF t* BA 0,621 (ląd 24/29; to wiersz z progiem t* dobieranym osobno w każdym foldzie, nie stałym 0,70). Zbiór łączny `shore ∪ shore_low` (n = 243, ląd 50): Otsu BA 0,768, RF BA 0,756,
 RF t* BA 0,773 (ląd 39/50 vs 31/50 dla RF @0,5).
 
 ## 4. Dlaczego tak
@@ -62,7 +62,7 @@ wszystko-woda ma 0,5), **κ Cohena** (dokładność ponad przypadek), recall lą
 **Bootstrap** dla BA/κ/F1: losujemy wiersze ze zwracaniem i patrzymy na rozrzut; jest optymistyczny, bo punkty są skupione w 50 blokach.
 
 **McNemar.** Porównuje dwie metody na *tych samych* punktach, licząc tylko punkty, w których jedna się myli, a druga nie (b i c).
-Uwaga: to porównanie *liczby błędów* (dokładności), w którym dominuje woda (jej jest 9× więcej): wiersze wody b=37, c=0; wiersze lądu b=1, c=4.
+Uwaga: to porównanie *liczby błędów* (dokładności), w którym dominuje woda (jej jest ok. 7,8× więcej: 164/21 w punktach `shore`): wiersze wody b=37, c=0; wiersze lądu b=1, c=4.
 Dlatego **p < 0,001 nie znaczy, że RF ma istotnie lepsze BA** — nigdy tak nie twierdzimy; o lądzie mówią wiersze lądu.
 
 **Podział po grupach, nie losowy (przeciek przestrzenny).** Sąsiednie piksele i ten sam dzień są niemal identyczne. Losowy podział wrzuciłby
@@ -87,7 +87,7 @@ dla nich nie liczymy poziomu z powierzchni. Pozostałe 218 mają powierzchnię R
 (najpierw oczekiwano 7, potem 2, ostatecznie 3 po zmianie t* na 0,70): poprzednie 7 było artefaktem modelu wytrenowanego na uszkodzonej scenie.
 
 **Błąd „błoto południowego brzegu".** Jasne, odsłonięte błoto przy niskiej wodzie RF często uznaje za wodę (P 0,7–0,9). Na `shore_low` RF
-łapie ląd 17/29 (przy t*=0,70 24/29), a Otsu 29/29. To **niebezpieczny** kierunek (obniża górne ograniczenie dna). Odpowiedź to nie podnoszenie t*
+łapie ląd 17/29 (wiersz RF t* z progiem dobieranym zagnieżdżonym CV w każdym foldzie: 24/29), a Otsu 29/29. To **niebezpieczny** kierunek (obniża górne ograniczenie dna). Odpowiedź to nie podnoszenie t*
 (zwijałoby całe sceny), tylko decyzja U1 w modelu dna: za wodę uznajemy tylko piksele, gdzie RF **i** Otsu mówią „woda" (M4).
 
 **Cechy (16):** 6 pasm, NDWI, MNDWI, AWEI (2 warianty), NDVI, `mndwi_minus_otsu`, średnia i odchylenie MNDWI z okna 3×3, `doy_sin`/`doy_cos` (pora roku).
@@ -101,15 +101,15 @@ brzegowe są ~89% wodą i spektralnie niejednoznaczne (mokre błoto, zalane roś
 i dajemy rzetelniejsze miary (BA 0,797, κ 0,538, recall lądu 14/21). 4 z 24 „podejrzanych" punktów po ponownym przeglądzie autor uznał za „nie da się ocenić".
 
 **2. Dlaczego MNDWI, a nie NDWI?**
-MNDWI = (zielony − SWIR1)/(zielony + SWIR1) lepiej oddziela wodę od zabudowy i gleby, bo SWIR mocniej pochłaniany przez wodę niż NIR. NDWI używa NIR i miesza wodę z roślinnością.
+MNDWI = (zielony − SWIR1)/(zielony + SWIR1) (Xu 2006) zastępuje NIR pasmem SWIR1. NDWI (McFeeters 1996, zielony i NIR) dobrze tłumi roślinność (wysokie NIR), a jego słabością jest mylenie wody z zabudową i odsłoniętą glebą — to poprawia właśnie MNDWI.
 Próg Otsu liczymy na MNDWI. RF dostaje jednak oba indeksy i inne cechy; w tabeli E2 najważniejszy wyszedł akurat NDWI (0,036 ± 0,057, duży rozrzut), więc nie twierdzimy, że MNDWI jest „lepszy" dla RF, tylko że jest standardem dla progu.
 
 **3. Skąd wiesz, że RF nie uczy się na danych testowych?**
-Wynik główny to podział po blokach 500 m: każdy punkt oceniamy modelem, który nie widział ani jego, ani jego sąsiadów (ani innych punktów z tego bloku).
-Test `test_rf.py` sprawdza rozłączność grup. Gdyby to był losowy podział, bliźniacze piksele zawyżyłyby wynik.
+Wynik główny to podział po blokach 500 m: każdy punkt oceniamy modelem, który nie widział ani jego, ani innych punktów z tego samego bloku 500 m.
+Test `test_rf.py` sprawdza rozłączność grup. **Uczciwe zastrzeżenie:** blok wyklucza tylko punkty z tego samego bloku; sąsiedzi z bloków obok i punkty z tych samych dat scen mogą być w zbiorze uczącym, więc pewna zależność przestrzenna i czasowa zostaje (wynik może być lekko optymistyczny). Gdyby to był losowy podział, bliźniacze piksele zawyżyłyby wynik znacznie mocniej.
 
 **4. Czy próg t* nie został dobrany na teście?**
-Nie: próg wybiera zagnieżdżone CV na części uczącej (R18), a próg końcowy (0,70) z 5-krotnego OOF na wszystkich wierszach; wynik główny M2 zostaje przy
+Nie: próg wybiera zagnieżdżone CV na części uczącej (R18), a próg końcowy (0,70) pochodzi z krzywej BA(t) uśrednionej z 10 powtórzeń OOF na wszystkich wierszach (R22); wynik główny M2 zostaje przy
 progu 0,5. Wiersz „RF t*" w tabeli pokazuje uczciwy, niezależny od testu efekt progu.
 
 **5. Co oznacza McNemar p < 0,001? Czy RF jest istotnie lepszy od Otsu?**

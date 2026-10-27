@@ -18,17 +18,18 @@ Skrypty: `03_fetch_osm.py` (obrys), `01_fetch_s2.py` (Sentinel-2), `06a_fetch_bu
 
 ## 2. Liczby z tego przebiegu
 
-- **Sceny użyteczne: 221** (`scenes.json`, `classify_stats.csv`). W CSV jest 679 wierszy akwizycji = 650 różnych dat;
-  po filtrach i deduplikacji zostaje 221 dat, każda z jednego zdjęcia.
+- **Sceny użyteczne: 221** (`scenes.json`, `classify_stats.csv`). W CSV jest 679 wierszy akwizycji = 650 różnych dat (liczba różnych dat w CSV, przed deduplikacją i filtrami);
+  po deduplikacji produktów i filtrach jakości zostaje 221 dat, każda z jednego zdjęcia.
 - **Rozkład po miesiącach** (`scenes.json`): sty 5, lut 4, mar 14, kwi 31, maj 20, cze 25, lip 22, sie 35, wrz 26,
   paź 24, lis 12, gru 3. Zimy są ubogie (lód, chmury), lato dobrze pokryte.
 - **Rozkład po latach**: 2017: 7, 2018: 26, 2019: 21, 2020: 29, 2021: 17, 2022: 21, 2023: 23, 2024: 21, 2025: 29, 2026: 27.
 - **Wykluczone ręcznie (lód/śnieg/uszkodzone): 15 dat** w `config.yaml` (14 z przeglądu lodu + 2024-09-01 uszkodzona).
   Dodatkowo 2022-02-14 odrzucona automatycznie (`scenes_pass2_rejected.csv`).
-- **Komunikaty RZGW: 158 wierszy** w `bulletins.csv` (86 z archiwum Wayback, 72 z listy gov.pl). Log
-  `06a_fetch_bulletins.log`: „pokrycie: 158 / 222 scen" (stan sprzed usunięcia 2024-09-01; po nim jest 221 scen).
-  Żadna z 54 scen z lat 2017–2019 nie ma komunikatu (`bulletins.csv` zaczyna się w 2020; najwcześniejszy komunikat to 2019-12-31): Wayback
-  zaczyna się 2019-11-04. Wszystkie 53 sceny sprzed tej daty dostały poziom z krzywej (wariant C), 0 z nich ekstrapolowanych (`06_water_levels.log`).
+- **Komunikaty RZGW: 158 wierszy** w `bulletins.csv` (86 z archiwum Wayback, 72 z listy gov.pl). Pokrycie
+  scen komunikatami = **157 / 221** (część wspólna `scenes.json` i `bulletins.csv`; `bulletins.csv` ma jeszcze wiersz dla wykluczonej 2024-09-01, stąd 158 wierszy, a log
+  `06a_fetch_bulletins.log` podaje „158 / 222" ze stanu sprzed usunięcia tej sceny).
+  Żadna z **54 scen sprzed 2019-11-04** nie ma komunikatu (`bulletins.csv` zaczyna się w 2020; najwcześniejszy komunikat to 2019-12-31): Wayback
+  zaczyna się 2019-11-04. Z tych 54: 53 dostało poziom z krzywej (wariant C, 0 ekstrapolowanych, `06_water_levels.log`), a 1 (2019-06-15) jest `qc_excluded` (bez poziomu).
   Lista gov.pl sięga tylko 2024-02-26..2026-10-26 (719 komunikatów, log 06a).
 - **Godzina odczytu** (`reading_utc`): 156 komunikatów z odczytem 06:00 UTC, 2 z 12:00 UTC.
 - **Stan magazynowy „v_npp"** (pojemność przy normalnym poziomie piętrzenia): 66,3 mln m³ w 2020-01..2021-11 (45 komunikatów),
@@ -58,7 +59,7 @@ Gdy data ma dwa kafle (33UXR i 33UXS), sklejamy je „pierwszy ważny wygrywa", 
 
 **Lód (14 dat wykluczonych).** Zimą jezioro bywa zamarznięte, a lód wygląda dla algorytmu jak ląd. Sprawdziliśmy 40 zimowych miniatur
 *oglądając je* i wykluczyliśmy 14 (`task-4-ice-decisions`). Dlaczego nie automat: SCL klasy 11 (śnieg/lód) = 0% na jeziorze w każdej
-dacie, czyli nie wykrywa lodu na wodzie; prosty próg jasności (blue>0,10 i green>0,10) łapie tylko kilka dat z marca 2026 i 2021-03-03,
+dacie, czyli nie wykrywa lodu na wodzie; prosty próg jasności (blue>0,10 i green>0,10) łapie tylko kilka dat z okresu 2026-02-28..2026-03-07 i 2021-03-03,
 a cienki szary lód z 2017-02 i 2019-02 ma odbicie podobne do mętnej wody. Zasada: lód na >5% jeziora, lub gdziekolwiek na linii
 brzegu, lub śnieg przy brzegu przy niejednoznacznej linii → wyklucz; w razie wątpliwości wyklucz. Koszt błędu: zła scena zimowa psuje
 linię brzegową (lód = „ląd" → poziom wody pozornie niski).
@@ -81,14 +82,14 @@ Jeśli godzina nie da się sparsować, komunikat nie wygrywa z takim, który si�
 
 **1. Skąd wiesz, że zdjęcie jest czyste, a nie zachmurzone?**
 Dwa sita: kafel ma <60% chmur (tylko wstępny filtr), a lokalnie (nad jeziorem + AOI) chmury ≤5%, braki ≤5% (valid ≥95%) i lód ≤1%
-(`scene_filter` w `config.yaml`). Chmury rozpoznaje SCL; maska chmur jest poszerzona o 2 piksele (cienie, mgiełka na krawędzi).
+(`scene_filter` w `config.yaml`). Chmury rozpoznaje SCL; maska chmur (klasy SCL 8/9/10) jest poszerzona o 2 piksele (mgiełka na krawędzi chmury); cienie (klasa 3) nie są poszerzane.
 
 **2. Dlaczego 221, a nie 679 scen?**
-679 to akwizycje (kafel × satelita × data), z duplikatami przetwarzania i zimowymi zdjęciami. Po deduplikacji zostaje 650 dat,
-po filtrach jakości 221 (15 jeszcze usunęliśmy ręcznie jako lód/uszkodzone).
+679 to akwizycje (kafel × satelita × data), z duplikatami przetwarzania i zimowymi zdjęciami. Jest to 650 różnych dat (tyle różnych dat w CSV), po filtrach jakości
+221 (15 jeszcze usunęliśmy ręcznie jako lód/uszkodzone).
 
 **3. Czy offset +1000 nie zepsuł Ci wyników po 2022?**
-Nie: zmierzyliśmy ciemną wodę w SWIR (11–58 DN w każdym okresie, także w parach tej samej akwizycji ze starym i nowym przetwarzaniem)
+Nie: zmierzyliśmy ciemną wodę w SWIR (9–58 DN w każdym okresie, także w parach tej samej akwizycji ze starym i nowym przetwarzaniem)
 i dodaliśmy test, który *przerywa*, gdyby offset wrócił. Złapał jedną scenę (2022-02-14).
 
 **4. Co jeśli komunikat jest z innej godziny niż zdjęcie?**

@@ -1,6 +1,6 @@
 # Decyzje (ledger): co postanowiono, dlaczego, ile kosztuje pomyłka, gdzie to jest w kodzie
 
-Źródło: `.superpowers/sdd/2026-10-27-plan1-pipeline-model-dna/progress.md` (rozstrzygnięcia R1–R24 i decyzja użytkownika U1).
+Źródło: `.superpowers/sdd/2026-10-27-plan1-pipeline-model-dna/progress.md` (rozstrzygnięcia R1–R25 i decyzja użytkownika U1).
 „Ścieżki" są względem `pipeline/`. Gdy dwie reguły się różnią, wygrywa późniejsza (kolumna „uwagi").
 
 ## 1. Tabela decyzji
@@ -26,12 +26,13 @@
 | R17 | Przegląd 24 podejrzanych etykiet „w ciemno": stara etykieta w `label_v1`, nowa kolejka bez starej; potem 100 punktów `shore_low` | sprawdzić, czy to błąd etykiet | brak (stare etykiety zachowane) | `mielizna/labels.py: mark_suspect, sample_extra`, `tools/label_server.py`, `04a_label_candidates.py --mark-suspect/--append-low` |
 | R18 | Próg wody t* ∈ {0,50..0,90}, jednostronny, maksymalizuje BA, wybierany zagnieżdżonym CV; wynik główny zostaje przy 0,5 | błąd „ląd jako woda" jest groźny (płycizna wygląda na bezpieczną) | strefy bardziej zachowawcze | `mielizna/rf.py: _choose_threshold, _nested_threshold, final_threshold` |
 | R19 | Zapis P(woda) jako uint8 do estymatora z minimalizacją błędu — **zastąpione** (decyzja Task 11: nie używamy `proba/`) | estymator zostaje liczący | tylko miejsce na dysku | `04_classify.py` (zapis `proba/`) |
-| R20 | Strażnik radiometrii: p99 któregokolwiek pasma < 0,01 (≥1000 ważnych px) = scena uszkodzona; 2024-09-01 wykluczona | scena miała DN = 1 w czerwonym/NIR/SWIR | 1 scena + 1 min treningu | `mielizna/s2.py: check_radiometry`, `config.yaml` |
+| R20 | Strażnik radiometrii: p99 któregokolwiek pasma < 0,01 (≥1000 ważnych px) = scena uszkodzona; 2024-09-01 wykluczona | scena miała DN = 1 w czerwonym/NIR/SWIR | 1 scena + retrening (godziny, ok. 550 dopasowań RF) | `mielizna/s2.py: check_radiometry`, `config.yaml` |
 | R21 | QC sceny bez etykiet: rdzeń (brzeg o 200 m) znany ≥50%, woda w rdzeniu ≥95%, RF/Otsu ≥ 0,90; flagi, bez retreningu | wykryć sceny, gdzie RF się wysypał | ±3% obserwacji | `mielizna/classify.py: scene_qc` |
 | R22 | t* z uśrednionej krzywej BA(t) po 10 powtórzeniach OOF (nie z jednego losowania); poprawia R18 | pojedynczy argmax skakał 0,60–0,85 na tych samych danych | ±0,05 t*, 10× czasu | `mielizna/rf.py: THRESHOLD_REPEATS, _mean_threshold_curve` |
 | R23 | „Luka 0,44 m" to nie układ wysokości: 8 letnich scen 2020 + rozcieńczenie regresji; bez korekty; krzywa z powierzchni **Otsu** zamiast RF; σ(C) = RMSE LOYO | RF nasyca powierzchnię przy niskiej wodzie (błoto = woda) | C zbyt niskie przy niskim poziomie Otsu (groźne), mała ekspozycja | `mielizna/levels.py: curve_areas, AreaLevelCurve`, `06_water_levels.py` |
 | R24 | Obserwacje **wody** scen C = 255 (nieznane) wszędzie; ląd C zostaje; flaga 8 informacyjna. **Zastępuje** wcześniejszą regułę „C nie ustala z_max, jeśli jest woda nie-C" | stara reguła zmieniła 67 px, a C nadal obniżało z_max >5 cm na 38,6% px pasma 195–196 m | piksele widziane jako woda tylko przez C tracą górną granicę → „niebezpieczne" | `mielizna/bottom.py: compute_bounds, FLAG_C_WATER_IGNORED` |
-| **U1** | **Decyzja użytkownika**: „możemy podejść ostrożniej — listopad to już poza sezonem". Za wodę w modelu dna: RF ∧ Otsu; ląd = RF=ląd lub Otsu=ląd | RF uznaje jasne błoto za wodę (psuje bezpieczną stronę) | strefy bardziej zachowawcze, szersze przedziały (z_max wyżej na 21,9% px) | `mielizna/bottom.py: combine_evidence`, `model_meta.json: evidence` |
+| R25 | `combine_evidence`: woda tylko gdy RF=1 **i** Otsu=1; ląd gdy RF=0 **lub** Otsu=0 (nawet gdy druga maska to 255); reszta = 255. Doprecyzowuje U1 | wcześniej Otsu=255 wymazywało ląd z RF (0,2% px miało z_max niżej niż RF-only); teraz dowodliwie 0 | nieco więcej lądu przy odciętych zatokach (konserwatywnie) | `mielizna/bottom.py: combine_evidence`, asercja w `07_bottom_model.py` |
+| **U1** | **Decyzja użytkownika**: „możemy podejść ostrożniej — listopad to już poza sezonem". Za wodę w modelu dna: RF ∧ Otsu; ląd = RF=ląd lub Otsu=ląd | RF uznaje jasne błoto za wodę (psuje bezpieczną stronę) | strefy bardziej zachowawcze, szersze przedziały (z_max wyżej o >5 cm na 22,4% px; nigdy niżej niż RF-only, R25) | `mielizna/bottom.py: combine_evidence`, `model_meta.json: evidence` |
 
 Uwagi do U1: sezonowość (listopad, poza sezonem) wpływa na domyślny zakres poziomów w aplikacji, **nie** na to, które sceny wchodzą do modelu — sceny
 pozasezonowe niosą niskie poziomy, które mierzą płycizny. R22 zostaje (ostrożność wprowadza RF∧Otsu, nie wyższy próg).

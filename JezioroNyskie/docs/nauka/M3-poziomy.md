@@ -33,8 +33,7 @@ Razem 221 scen; h_t od **192,90** do **197,92 m**.
 
 **B (komunikat).** Komunikat RZGW podaje pojemność zbiornika Nysa w mln m³. Interpolujemy liniowo w tabeli KŻ (np. 25,0 mln m³ = 193,0 m,
 38,5 mln = 194,0 m, 47,5 mln = 194,7 m, 52,0 mln = 195,0 m, 67,0 mln = 196,0 m, 84,0 mln = 197,0 m, 122,0 mln = 198,9 m;
-`kz_pojemnosc_rzedna.csv`, 66 wierszy, 18,0 mln m³ = 192,4 m na początku). σ = 0,15 m to założenie robocze: rozbieżność interpolacji
-względem tabeli ≈ 0,13 m, zmiana krzywej pojemności 2021→2024 ≈ 0,04 m, komunikat ±1 dzień.
+`kz_pojemnosc_rzedna.csv`, 66 wierszy, 18,0 mln m³ = 192,4 m na początku). σ = 0,15 m to założenie robocze: rozbieżność między odpowiedzią na interpelację poselską (wrzesień 2024: 194,70 m przy 45,62 mln m³) a tabelą KŻ (≈ 194,57 m przy tej pojemności) ≈ 0,13 m, zmiana krzywej pojemności 2021→2024 ≈ 0,04 m, komunikat ±1 dzień.
 
 **C (krzywa z powierzchni).** Sceny bez komunikatu (głównie 2017–2019 — 53 sceny sprzed 2019-11-04) dostają poziom z powierzchni wody.
 Krzywa jest dopasowana do scen B/R, które mają i powierzchnię, i poziom: **131 obserwacji, 7 węzłów**, powierzchnia Otsu **10,58–14,40 km²**
@@ -62,11 +61,10 @@ Przyczyną było **8 scen z lipca–września 2020** przy wysokim poziomie, gdzi
 Wynik końcowy (`06_water_levels.log`, powierzchnia Otsu): reszta B − krzywa w reżimie v_npp = 65,7: n = 90, mediana **−0,035 m**; v_npp = 66,3:
 n = 39, mediana +0,112 m, a **bez lipca–września 2020 n = 28, mediana −0,014 m** (jednak reszty obu reżimów zbiegają się).
 
-**Powierzchnia RF się nasyca.** Przy poziomach poniżej ~194 m powierzchnia RF stoi na ok. 12,9 km², bo RF uznaje błoto za wodę (M2). Na tej krzywej
-reszta B = −0,68 m (65,7) — bez sensu. Dlatego krzywą budujemy z powierzchni **Otsu** (`area_source: area_otsu_km2`): LOO RMSE spadło z 0,657 → 0,466 m,
+**Powierzchnia RF się nasyca.** Przy poziomach poniżej ~194 m powierzchnia RF stoi na ok. 12,9 km², bo RF uznaje błoto za wodę (M2). Dlatego krzywą budujemy z powierzchni **Otsu** (`area_source: area_otsu_km2`): LOO RMSE spadło z 0,657 → 0,466 m,
 LOYO z 0,701 → 0,488 m. Konsekwencja dla planu 2: backend ma karmić krzywą powierzchnią Otsu, nie RF.
 
-**Test M3.** Cel: 05–12.09.2024 powinno być ≈ 194,70 ± 0,3 m (okres pomiaru). `scenes.json`: 2024-09-06 h_t = **194,61 m, B ✓**; sąsiednia 2024-09-03 = 194,63.
+**Test M3.** Cel: 05–12.09.2024 powinno być ≈ 194,70 ± 0,3 m (wartość z tej samej odpowiedzi na interpelację z września 2024, `docs/BRIEF.md`). `scenes.json`: 2024-09-06 h_t = **194,61 m, B ✓**; sąsiednia 2024-09-03 = 194,63.
 Powódź (Boris): 2024-09-18 = 196,74; 2024-09-21 = 197,06. Nie strojono do M3, tylko sprawdzono.
 
 **Jesień 2018 (kontrola sensu C).** C 2018-09-20..11-17: 194,58 → 192,95 → 193,33 m (obniżanie, potem wzrost), czyli zachowuje się jak spuszczany zbiornik.
@@ -79,7 +77,7 @@ dopasowanej do scen B. Każda ma jawnie zapisaną niepewność i źródło (`h_s
 
 **2. Dlaczego niepewność C to aż 0,49 m?**
 Bo tyle wynosi błąd przewidywania, gdy krzywą trzeba zastosować do zupełnie nowego roku (LOYO = 0,488 m). LOO (0,466 m) jest zbyt optymistyczne,
-bo sąsiednie sceny tego samego roku mają skorelowany błąd. Model dna uwzględnia to: sceny C nigdy same nie ustalają górnej granicy dna (M4).
+bo sąsiednie sceny tego samego roku mają skorelowany błąd. Model dna uwzględnia to (R24): woda ze scen C nigdy nie jest liczona — ani sama, ani z innymi; ląd ze scen C jest liczony (M4).
 
 **3. Czy luka 0,44 m między okresami nie zepsuła wyników?**
 Zbadaliśmy: wynika z 8–11 letnich scen 2020 (zjawisko powierzchniowe widoczne też w Otsu), nie z układu wysokości. Po wykluczeniu
@@ -90,7 +88,7 @@ Do krzywej liczy się *stabilność* powierzchni w funkcji poziomu, a RF przy ni
 ~12,9 km²). Otsu zachowuje monotoniczność; błąd LOO spadł z 0,657 do 0,466 m. To dobór z wyniku, ale mierzony na danych krzywej, nie na etykietach M2.
 
 **5. Dlaczego izotoniczna + PCHIP, a nie zwykła regresja?**
-Prosta/wielomian dałyby przeregulowanie na końcach i mogły malejąco przewidywać. Izotoniczna gwarantuje monotoniczność (więcej wody = wyżej), PCHIP daje gładkość bez przeskoków.
+Prosta/wielomian dałyby przeregulowanie na końcach i mogły przewidywać malejąco. Regresja izotoniczna wymusza monotoniczność na zaszumionych medianach (więcej wody = wyżej), a PCHIP zachowuje tę monotoniczność między węzłami i daje gładkość bez przeskoków (zwykły spline mógłby między węzłami falować).
 
 **6. Co z poziomem w układzie wysokościowym?**
 `h_datum: unknown (RZGW, prawdopodobnie KRON86)`. Zapisujemy to wprost w `scenes.json`. Porównanie z mapą KŻ (głębokości) zostaje na plan 4.

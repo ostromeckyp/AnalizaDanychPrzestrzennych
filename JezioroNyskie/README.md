@@ -17,10 +17,11 @@ Dane surowe (`data/raw/`) i przetworzone (`data/processed/`) nie są w git; wyj�
 ## Pipeline krok po kroku
 
 Wszystko z katalogu `pipeline/`. `make help` wypisuje cele. Make porównuje daty plików, więc `make bottom` na gotowych
-danych niczego nie trenuje i nie pobiera (ok. 20 s: tylko model dna). Wymuszenie kroku: `make -W ../data/reference/labels.gpkg rf` (albo `make clean-model rf`) lub ogólnie `make -W <plik> <cel>`.
+danych niczego nie trenuje i nie pobiera (model dna liczy się tylko, gdy `07` ma coś do odświeżenia — wtedy ok. 20 s; bez zmian wejścia: „nothing to be done"). Wymuszenie kroku: `make -W ../data/reference/labels.gpkg rf` (albo `make clean-model rf`) lub ogólnie `make -W <plik> <cel>`.
 (`make -B rf` nie działa: `04a` odmawia nadpisania etykiet.) Po edycji `exclude_dates` lub innych pól `config.yaml` uruchom
 `make s2` (potem `make classify` itd. albo od razu `make bottom`): `config.yaml` jest zależnością `scenes_candidates.csv`, więc
-zmiana kaskadowo odświeża dalsze kroki, ale nie retrenuje RF (RF zależy tylko od etykiet).
+zmiana kaskadowo odświeża dalsze kroki (`classify`, `shorelines`, `levels`, `bottom`), ale nie retrenuje RF: model RF zależy tylko od etykiet (`labels.gpkg`), już nie od CSV scen.
+Retrening to godziny (ok. 550 dopasowań), więc wymuszaj go świadomie.
 
 | cel | skrypt | wejście → wyjście (w `data/processed/`, o ile nie podano inaczej) |
 |---|---|---|
@@ -35,7 +36,7 @@ zmiana kaskadowo odświeża dalsze kroki, ale nie retrenuje RF (RF zależy tylko
 | `make levels` | `06_water_levels.py` | → `scenes.json`, `model/area_level_curve.json` |
 | `make bottom` | `07_bottom_model.py` | → `model/{all,pre_flood,post_flood}/bottom_*.tif`, `model_meta.json` |
 | `make all` | wszystkie po kolei | staje przed `rf`, jeśli < 150 ręcznych etykiet klas |
-| `make test` | `pytest -q` | 175 testów |
+| `make test` | `pytest -q` | 181 testów |
 
 Dane surowe w `data/raw/`, logi w `data/processed/logs/`. Notatki do nauki (po polsku, z pytaniami obronnymi):
 [`docs/nauka/`](docs/nauka/) — `M1-dane.md`, `M2-klasyfikacja.md`, `M3-poziomy.md`, `M4-model-dna.md`, `decyzje.md`.
