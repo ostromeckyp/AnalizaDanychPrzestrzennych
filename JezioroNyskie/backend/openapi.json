@@ -1,0 +1,669 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "Mielizna API",
+  "version": "0.1.0"
+ },
+ "paths": {
+  "/api/meta": {
+   "get": {
+    "summary": "Meta",
+    "operationId": "meta_api_meta_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MetaResponse"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/zones": {
+   "get": {
+    "summary": "Zones",
+    "operationId": "zones_api_zones_get",
+    "parameters": [
+     {
+      "name": "h",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "number",
+       "title": "H"
+      }
+     },
+     {
+      "name": "draft",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "number",
+       "maximum": 3.0,
+       "minimum": 0.1,
+       "default": 1.2,
+       "title": "Draft"
+      }
+     },
+     {
+      "name": "margin",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "number",
+       "maximum": 1.0,
+       "minimum": 0.0,
+       "default": 0.3,
+       "title": "Margin"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ZonesResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "Accuracy": {
+    "properties": {
+     "rf_oa": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rf Oa"
+     },
+     "rf_ba": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rf Ba"
+     },
+     "rf_kappa": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rf Kappa"
+     },
+     "otsu_ba": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Otsu Ba"
+     },
+     "n_labels": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "N Labels"
+     }
+    },
+    "type": "object",
+    "required": [
+     "rf_oa",
+     "rf_ba",
+     "rf_kappa",
+     "otsu_ba",
+     "n_labels"
+    ],
+    "title": "Accuracy"
+   },
+   "AreaLevel": {
+    "properties": {
+     "nodes_area_km2": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Nodes Area Km2"
+     },
+     "nodes_h": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Nodes H"
+     },
+     "rmse_loo": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rmse Loo"
+     },
+     "rmse_loyo": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rmse Loyo"
+     },
+     "points": {
+      "items": {
+       "$ref": "#/components/schemas/AreaLevelPoint"
+      },
+      "type": "array",
+      "title": "Points"
+     }
+    },
+    "type": "object",
+    "required": [
+     "nodes_area_km2",
+     "nodes_h",
+     "rmse_loo",
+     "rmse_loyo",
+     "points"
+    ],
+    "title": "AreaLevel"
+   },
+   "AreaLevelPoint": {
+    "properties": {
+     "date": {
+      "type": "string",
+      "title": "Date"
+     },
+     "area_otsu_km2": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Area Otsu Km2"
+     },
+     "h_t": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "H T"
+     },
+     "h_method": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "H Method"
+     }
+    },
+    "type": "object",
+    "required": [
+     "date",
+     "area_otsu_km2",
+     "h_t",
+     "h_method"
+    ],
+    "title": "AreaLevelPoint"
+   },
+   "DraftPreset": {
+    "properties": {
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "draft": {
+      "type": "number",
+      "title": "Draft"
+     }
+    },
+    "type": "object",
+    "required": [
+     "label",
+     "draft"
+    ],
+    "title": "DraftPreset"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "type": "array",
+      "title": "Detail"
+     }
+    },
+    "type": "object",
+    "title": "HTTPValidationError"
+   },
+   "Limits": {
+    "properties": {
+     "draft": {
+      "prefixItems": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "number"
+       }
+      ],
+      "type": "array",
+      "maxItems": 2,
+      "minItems": 2,
+      "title": "Draft"
+     },
+     "margin": {
+      "prefixItems": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "number"
+       }
+      ],
+      "type": "array",
+      "maxItems": 2,
+      "minItems": 2,
+      "title": "Margin"
+     }
+    },
+    "type": "object",
+    "required": [
+     "draft",
+     "margin"
+    ],
+    "title": "Limits"
+   },
+   "MetaResponse": {
+    "properties": {
+     "model_version": {
+      "type": "string",
+      "title": "Model Version"
+     },
+     "period": {
+      "type": "string",
+      "title": "Period"
+     },
+     "period_dates": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Period Dates"
+     },
+     "n_scenes": {
+      "type": "integer",
+      "title": "N Scenes"
+     },
+     "n_scenes_by_method": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "type": "object",
+      "title": "N Scenes By Method"
+     },
+     "first_scene_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "First Scene Date"
+     },
+     "last_scene_date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Scene Date"
+     },
+     "h_min_obs": {
+      "type": "number",
+      "title": "H Min Obs"
+     },
+     "h_max_obs": {
+      "type": "number",
+      "title": "H Max Obs"
+     },
+     "npp": {
+      "type": "number",
+      "title": "Npp"
+     },
+     "max_pp": {
+      "type": "number",
+      "title": "Max Pp"
+     },
+     "slider": {
+      "$ref": "#/components/schemas/Slider"
+     },
+     "defaults": {
+      "$ref": "#/components/schemas/Params"
+     },
+     "limits": {
+      "$ref": "#/components/schemas/Limits"
+     },
+     "draft_presets": {
+      "items": {
+       "$ref": "#/components/schemas/DraftPreset"
+      },
+      "type": "array",
+      "title": "Draft Presets"
+     },
+     "presets_provisional": {
+      "type": "boolean",
+      "title": "Presets Provisional"
+     },
+     "bbox_wgs84": {
+      "prefixItems": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "number"
+       },
+       {
+        "type": "number"
+       },
+       {
+        "type": "number"
+       }
+      ],
+      "type": "array",
+      "maxItems": 4,
+      "minItems": 4,
+      "title": "Bbox Wgs84"
+     },
+     "crs": {
+      "type": "string",
+      "title": "Crs"
+     },
+     "z_max_floor": {
+      "type": "number",
+      "title": "Z Max Floor"
+     },
+     "accuracy": {
+      "$ref": "#/components/schemas/Accuracy"
+     },
+     "area_level": {
+      "$ref": "#/components/schemas/AreaLevel"
+     }
+    },
+    "type": "object",
+    "required": [
+     "model_version",
+     "period",
+     "period_dates",
+     "n_scenes",
+     "n_scenes_by_method",
+     "first_scene_date",
+     "last_scene_date",
+     "h_min_obs",
+     "h_max_obs",
+     "npp",
+     "max_pp",
+     "slider",
+     "defaults",
+     "limits",
+     "draft_presets",
+     "presets_provisional",
+     "bbox_wgs84",
+     "crs",
+     "z_max_floor",
+     "accuracy",
+     "area_level"
+    ],
+    "title": "MetaResponse"
+   },
+   "Params": {
+    "properties": {
+     "h": {
+      "type": "number",
+      "title": "H"
+     },
+     "draft": {
+      "type": "number",
+      "title": "Draft"
+     },
+     "margin": {
+      "type": "number",
+      "title": "Margin"
+     }
+    },
+    "type": "object",
+    "required": [
+     "h",
+     "draft",
+     "margin"
+    ],
+    "title": "Params"
+   },
+   "Slider": {
+    "properties": {
+     "min": {
+      "type": "number",
+      "title": "Min"
+     },
+     "max": {
+      "type": "number",
+      "title": "Max"
+     },
+     "step": {
+      "type": "number",
+      "title": "Step"
+     }
+    },
+    "type": "object",
+    "required": [
+     "min",
+     "max",
+     "step"
+    ],
+    "title": "Slider"
+   },
+   "ValidationError": {
+    "properties": {
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Location"
+     },
+     "msg": {
+      "type": "string",
+      "title": "Message"
+     },
+     "type": {
+      "type": "string",
+      "title": "Error Type"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "ctx": {
+      "type": "object",
+      "title": "Context"
+     }
+    },
+    "type": "object",
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError"
+   },
+   "ZoneStats": {
+    "properties": {
+     "water_km2": {
+      "type": "number",
+      "title": "Water Km2"
+     },
+     "safe_km2": {
+      "type": "number",
+      "title": "Safe Km2"
+     },
+     "risk_km2": {
+      "type": "number",
+      "title": "Risk Km2"
+     },
+     "danger_km2": {
+      "type": "number",
+      "title": "Danger Km2"
+     },
+     "safe_pct": {
+      "type": "number",
+      "title": "Safe Pct"
+     },
+     "risk_pct": {
+      "type": "number",
+      "title": "Risk Pct"
+     },
+     "danger_pct": {
+      "type": "number",
+      "title": "Danger Pct"
+     }
+    },
+    "type": "object",
+    "required": [
+     "water_km2",
+     "safe_km2",
+     "risk_km2",
+     "danger_km2",
+     "safe_pct",
+     "risk_pct",
+     "danger_pct"
+    ],
+    "title": "ZoneStats"
+   },
+   "ZonesResponse": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "title": "Type"
+     },
+     "features": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Features"
+     },
+     "stats": {
+      "$ref": "#/components/schemas/ZoneStats"
+     },
+     "params": {
+      "$ref": "#/components/schemas/Params"
+     },
+     "warnings": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Warnings"
+     },
+     "model_version": {
+      "type": "string",
+      "title": "Model Version"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "features",
+     "stats",
+     "params",
+     "warnings",
+     "model_version"
+    ],
+    "title": "ZonesResponse"
+   }
+  }
+ }
+}

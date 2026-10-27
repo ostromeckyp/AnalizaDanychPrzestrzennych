@@ -100,3 +100,16 @@ def dataset_qc_false_date() -> str:
 @pytest.fixture
 def products(dataset):
     return load_products(dataset, "all")
+
+
+@pytest.fixture
+def app(dataset, products):
+    from app.main import create_app
+    from app.settings import Settings
+    return create_app(Settings(data_dir=dataset, live=False), products)
+
+
+@pytest.fixture
+def client(app):
+    from fastapi.testclient import TestClient
+    return TestClient(app)
