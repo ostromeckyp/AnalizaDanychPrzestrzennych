@@ -41,6 +41,18 @@ Retrening to godziny (ok. 550 dopasowań), więc wymuszaj go świadomie.
 Dane surowe w `data/raw/`, logi w `data/processed/logs/`. Notatki do nauki (po polsku, z pytaniami obronnymi):
 [`docs/nauka/`](docs/nauka/) — `M1-dane.md`, `M2-klasyfikacja.md`, `M3-poziomy.md`, `M4-model-dna.md`, `decyzje.md`.
 
+## Backend
+
+API FastAPI serwujące produkty pipeline'u (`backend/`, pakiet `app`; pipeline `mielizna` jako zależność lokalna).
+
+```bash
+cd backend && uv sync && uv run pytest        # testy na syntetycznym zbiorze danych
+uv run uvicorn app.main:app                   # uruchomienie (od zadania z `main.py`)
+```
+
+Zmienne środowiskowe: `MIELIZNA_DATA_DIR` (katalog danych), `MIELIZNA_PERIOD` (domyślnie `all`),
+`MIELIZNA_LIVE` (`0` wyłącza tryb na żywo), `MIELIZNA_REFRESH_H`, `MIELIZNA_FRESH_DAYS`.
+
 ## Dokumentacja
 
 - Brief: [`docs/BRIEF.md`](docs/BRIEF.md)
