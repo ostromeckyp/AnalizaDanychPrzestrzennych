@@ -19,11 +19,12 @@ import rasterio
 import rasterio.shutil
 
 from mielizna.grid import Grid
+from mielizna.levels import EXTRAP_TOKEN
 
 FLAG_ALWAYS_WATER = 1
 FLAG_ALWAYS_LAND = 2
 FLAG_CONFLICT = 4
-FLAG_ZMAX_FROM_C = 8
+FLAG_C_WATER_IGNORED = 8
 FLAG_UNRESOLVED = 16
 FLAG_OUTSIDE = 255
 
@@ -31,15 +32,16 @@ FLAG_MEANING = {
     "1": "ALWAYS_WATER: brak spójnego lądu, z_min=NaN (=-inf), z_max skończone",
     "2": "ALWAYS_LAND: brak spójnej wody, z_max=NaN (=+inf), z_min skończone",
     "4": "CONFLICT: n_conflict > 0 (część scen sprzeczna z progiem dna)",
-    "8": "ZMAX_FROM_C: z_max wyznaczone wyłącznie przez sceny wariantu C",
-    "16": "UNRESOLVED: obserwowany, ale obie granice puste (remis przy równych poziomach)",
+    "8": "C_WATER_IGNORED: piksel miał obserwacje wody ze scen wariantu C, które pominięto (R24: woda C = nieznane)",
+    "16": ("UNRESOLVED: obserwowany, ale obie granice puste: remis przy równych poziomach ALBO obserwacje sprzeczne "
+           "na różnych poziomach (np. woda przy 193 m i ląd przy 197 m: CONFLICT+UNRESOLVED, obie granice NaN)"),
     "255": "poza obszarem modelu (AOI)",
 }
 NAN_SEMANTICS = ("W obszarze modelu (obs_count > 0): NaN w z_min znaczy -inf (brak dolnego ograniczenia dna), "
                  "NaN w z_max znaczy +inf (piksel nigdy nie był spójnie wodą). obs_count == 0 lub flags == 255 "
                  "znaczy: poza obszarem modelu.")
 EVIDENCE = "rf_and_otsu_water; land = rf0 or otsu0; 255 in either = unknown"
-ZMAX_RULE = "non-C water preferred; C only if no non-C consistent water (flag 8)"
+ZMAX_RULE = "R24: water observations of C scenes are unknown (255) for threshold and z_max; C land kept; flag 8 = C water ignored"
 NODATA_U16 = 65535
 _MAX_STRIP_ELEMENTS = 8_000_000
 
@@ -54,6 +56,7 @@ def combine_evidence(rf: np.ndarray, otsu: np.ndarray) -> np.ndarray:
       metody dokłada obserwacji lądu, które tylko podnoszą próg dna (dowód: dodanie lądu nie zmniejsza
       z_max). Pod chmurą lądu nie zmyślamy - tam zostaje 255.
     Wejście → wyjście: dwie tablice uint8 {0,1,255} dowolnego kształtu → uint8 tego samego kształtu.
+      Uwaga (R24): wodę ze scen wariantu C zamienia na 255 dopiero `compute_bounds` (ma is_c), nie ta funkcja.
     Jak to obronić: RF∧Otsu ma na etykietach ręcznych recall lądu 47/50 wobec 36/50 samego RF; koszt
       to niższy recall wody (0.61), czyli konserwatywne, nie niebezpieczne przesunięcie granic.
     """
@@ -72,8 +75,10 @@ def select_scenes(scenes: list[dict], start: str, end: str) -> pd.DataFrame:
     Dlaczego tak: kontrakt T8/T10 - sceny odrzucone przez QC albo bez poziomu nie mogą dawać obserwacji
       (ich maski nie są otwierane). Okres daje wersje modelu: all / pre_flood / post_flood.
     Wejście → wyjście: lista słowników z scenes.json → DataFrame date, h_t, h_sigma, h_method,
-      extrapolated (z h_source), h_source.
-    Jak to obronić: filtr jest jawny i testowany; nic nie jest po cichu pomijane.
+      extrapolated (z h_source, znacznik `levels.EXTRAP_TOKEN`), h_source. Brak h_sigma → ValueError.
+    Jak to obronić: filtr jest jawny i testowany; nic nie jest po cichu pomijane, a brak niepewności
+      poziomu (która poszerza przedział) jest błędem, nie zerem. `extrapolated` pochodzi z tekstu
+      h_source (scenes.json nie ma osobnego pola), ale znacznik jest stałą wspólną z levels.py.
     """
     rows = []
     for s in scenes:
@@ -82,9 +87,12 @@ def select_scenes(scenes: list[dict], start: str, end: str) -> pd.DataFrame:
             continue
         if not (start <= s["date"] <= end):
             continue
-        rows.append({"date": s["date"], "h_t": float(h), "h_sigma": float(s.get("h_sigma") or 0.0),
+        sig = s.get("h_sigma")
+        if sig is None or not np.isfinite(sig):
+            raise ValueError(f"scena {s['date']}: brak h_sigma (niepewność poziomu jest wymagana)")
+        rows.append({"date": s["date"], "h_t": float(h), "h_sigma": float(sig),
                      "h_method": s.get("h_method"),
-                     "extrapolated": "ekstrapolacja" in str(s.get("h_source") or ""),
+                     "extrapolated": EXTRAP_TOKEN.strip(", ") in str(s.get("h_source") or ""),
                      "h_source": s.get("h_source") or ""})
     cols = ["date", "h_t", "h_sigma", "h_method", "extrapolated", "h_source"]
     return pd.DataFrame(rows, columns=cols).sort_values("date").reset_index(drop=True)
@@ -92,8 +100,8 @@ def select_scenes(scenes: list[dict], start: str, end: str) -> pd.DataFrame:
 
 def _bounds_strip(m: np.ndarray, h: np.ndarray, sg: np.ndarray, isc: np.ndarray, k_sigma: float) -> dict:
     """Przedziały dla paska wierszy; sceny już posortowane po h (patrz `compute_bounds`)."""
-    T = m.shape[0]
-    water = m == 1
+    c_water = (m == 1) & isc[:, None, None]       # R24: woda ze sceny C = nieznane
+    water = (m == 1) & ~isc[:, None, None]
     land = m == 0
     lev = np.unique(h, return_inverse=True)[1]
     U = int(lev[-1]) + 1
@@ -111,7 +119,7 @@ def _bounds_strip(m: np.ndarray, h: np.ndarray, sg: np.ndarray, isc: np.ndarray,
     k_max = U - is_min[::-1].argmax(axis=0)
     levc = lev[:, None, None]
     c_land = land & (levc < k_min)               # ląd spójny z każdym minimalnym progiem
-    c_water = water & (levc >= k_max)             # woda spójna z każdym minimalnym progiem
+    cons_water = water & (levc >= k_max)          # woda spójna z każdym minimalnym progiem
     hh = h[:, None, None]
     ss = k_sigma * sg[:, None, None]
     nan = np.nan
@@ -122,20 +130,17 @@ def _bounds_strip(m: np.ndarray, h: np.ndarray, sg: np.ndarray, isc: np.ndarray,
 
     z_min_raw = reduce(c_land, hh, np.max)
     z_min = reduce(c_land, hh - ss, np.max)
-    non_c = c_water & ~isc[:, None, None]
-    has_non_c = non_c.any(axis=0)
-    elig = np.where(has_non_c[None], non_c, c_water)
-    z_max_raw = reduce(elig, hh, np.min)
-    z_max = reduce(elig, hh + ss, np.min)
-    obs = (water | land).sum(axis=0)
-    from_c = c_water.any(axis=0) & ~has_non_c
+    z_max_raw = reduce(cons_water, hh, np.min)
+    z_max = reduce(cons_water, hh + ss, np.min)
+    obs = (m != 255).sum(axis=0)                  # ważne obserwacje, także pominięta woda C
+    c_ignored = c_water.any(axis=0)
     fin_min, fin_max = np.isfinite(z_min_raw), np.isfinite(z_max_raw)
     both = fin_min & fin_max
     flags = np.zeros(obs.shape, np.uint8)
     flags[(obs > 0) & ~fin_min & fin_max] |= FLAG_ALWAYS_WATER
     flags[(obs > 0) & fin_min & ~fin_max] |= FLAG_ALWAYS_LAND
     flags[n_conf > 0] |= FLAG_CONFLICT
-    flags[from_c] |= FLAG_ZMAX_FROM_C
+    flags[c_ignored] |= FLAG_C_WATER_IGNORED
     flags[(obs > 0) & ~fin_min & ~fin_max] |= FLAG_UNRESOLVED
     return {"z_min": z_min, "z_max": z_max, "z_min_raw": z_min_raw, "z_max_raw": z_max_raw,
             "z": np.where(both, (z_min_raw + z_max_raw) / 2, nan),
@@ -153,26 +158,38 @@ def compute_bounds(masks: np.ndarray, h: np.ndarray, h_sigma: np.ndarray, is_c: 
       (n_conflict = ta liczba). Gdy kilka progów ma ten sam minimalny błąd, bierzemy OBWIEDNIĘ wszystkich
       (od najniższego do najwyższego minimalizatora). Z_max = najniższy poziom wody spójnej z progiem,
       z_min = najwyższy poziom lądu spójnego z progiem; obie granice poszerzamy o k_sigma·σ sceny.
-      Dwie sceny o tym samym h nie mają progu między sobą (remis → UNRESOLVED, flaga 16).
+      Dwie sceny o tym samym h nie mają progu między sobą (remis → UNRESOLVED, flaga 16). Flaga 16
+      oznacza też obserwacje sprzeczne na RÓŻNYCH poziomach: woda przy 193 m i ląd przy 197 m dają
+      CONFLICT+UNRESOLVED, obie granice NaN (żaden próg nie jest spójny z którąkolwiek obserwacją).
+      Reguła C (R24): obserwacje WODY ze scen wariantu C (is_c) traktujemy jak 255 (nieznane) i w progu,
+      i w z_max; obserwacje LĄDU z C zostają. Flaga 8 = piksel miał wodę z C, którą pominięto.
     Dlaczego tak: (1) najmniej błędów jest odporne na pojedyncze pomyłki klasyfikatora, a liczy się
       zwykłe zliczanie (bez wag 1/σ², bo błąd klasyfikacji nie zależy od σ poziomu). (2) Obwiednia przy
       remisie jest ostrożna: lądu uznajemy mniej (tylko poniżej każdego minimalnego progu), wody też mniej
-      (tylko powyżej każdego), więc przedział się poszerza, nigdy nie zawęża. (3) Sceny wariantu C
-      (poziom z krzywej powierzchnia-rzędna) mają błędy skorelowane w obrębie roku i w paśmie 195-198 m
-      są zaniżone o 0.1-0.4 m (kierunek niebezpieczny), więc C NIGDY samo nie wyznacza z_max, jeśli
-      istnieje spójna woda z B/R (C nadal liczy się w progu i w z_min; wtedy flaga 8 oznacza „z_max tylko
-      z C"). (4) Poszerzenie: każda obserwacja wody sama jest ważną górną granicą h+σ, więc bierzemy
-      minimum z h+σ, a nie σ sceny, która akurat ma najniższe h.
+      (tylko powyżej każdego), więc przedział się poszerza, nigdy nie zawęża. (3) Poziom C (krzywa
+      powierzchnia-rzędna) ma błędy skorelowane w obrębie roku i w paśmie 195-198 m jest zaniżony o
+      0.1-0.4 m, więc scena C zawyża, że woda była już przy niższym h: to niebezpieczny kierunek (z_max
+      za nisko = strefa „bezpieczna" tam, gdzie jeszcze nie jest). Dowód R24, że pominięcie wody C jest
+      zachowawcze: usunięcie obserwacji wody usuwa z errors(k) składnik [woda poniżej progu k], który
+      nie maleje ze wzrostem k; więc największy minimalizator k_max może tylko wzrosnąć, zbiór wody
+      spójnej (poziom ≥ k_max) tylko się kurczy, a minimum po mniejszym zbiorze nie może spaść: z_max
+      tylko rośnie lub staje się NaN (=+∞). Dowód nie zakłada nic o σ_C vs σ_nonC. Dane z recenzji:
+      stara reguła („C nie wyznacza z_max, o ile jest woda nie-C") zmieniała tylko 67 px, a C nadal
+      obniżało z_max o ponad 5 cm na 38.6% pikseli przedziałowych w paśmie 195-196 m (p1 −0.63 m).
+      Koszt, jeśli się mylimy: piksele, gdzie wodę widziały tylko sceny C z lat 2017-19, tracą górną
+      granicę i są pokazywane jako niebezpieczne (konserwatywnie). (4) Poszerzenie: każda obserwacja
+      wody sama jest ważną górną granicą h+σ, więc bierzemy minimum z h+σ, a nie σ sceny, która
+      akurat ma najniższe h.
     Wejście → wyjście: masks uint8 (T,H,W) {0,1,255} (wynik `combine_evidence`), h i h_sigma (T,), is_c
       bool (T,) lub None; kolejność scen dowolna. Zwraca słownik tablic (H,W), liczby zmiennoprzecinkowe
       jako float64: z_min, z_max (poszerzone), z_min_raw, z_max_raw, z (środek surowych granic), unc
-      (połowa szerokości poszerzonego przedziału), obs_count, n_conflict, flags.
-      NaN: brak spójnego lądu → z_min = NaN (−∞), brak spójnej wody → z_max = NaN (+∞).
+      (połowa szerokości poszerzonego przedziału), obs_count (ważne obserwacje, także pominięta woda C),
+      n_conflict, flags. NaN: brak spójnego lądu → z_min = NaN (−∞), brak spójnej wody → z_max = NaN (+∞).
       Niezmiennik: z_min ≤ z_min_raw < z_max_raw ≤ z_max, więc z_min > z_max nie może zajść;
       sprzeczność obserwacji mierzy n_conflict.
-    Jak to obronić: przypadki brzegowe pokrywa test porównujący z pętlą po pikselach, własność
-      „dodanie lądu nie obniża z_max" jest sprawdzana testem na losowych danych. Koszt błędu reguły C:
-      z_max rośnie (więcej stref „ryzykownych"), czyli w stronę bezpieczną; wyłączenie: is_c=None.
+    Jak to obronić: przypadki brzegowe pokrywa test porównujący z pętlą po pikselach; testy własności na
+      losowych danych (σ_C ≥ σ_nonC): dodanie wody C nie zmienia z_max, dodanie lądu go nie obniża.
+      Wyłączenie reguły C: is_c=None.
     """
     masks = np.asarray(masks)
     h = np.asarray(h, float)
@@ -194,7 +211,16 @@ def compute_bounds(masks: np.ndarray, h: np.ndarray, h_sigma: np.ndarray, is_c: 
 
 
 def model_version(scenes_bytes: bytes, dates: list[str]) -> str:
-    """Skrót wersji modelu: sha256 z scenes.json i nazw plików masek wybranych dat (12 znaków)."""
+    """Skrót wersji modelu: sha256 z scenes.json i nazw plików masek wybranych dat (12 znaków).
+
+    Co robi: skleja bajty scenes.json z posortowaną listą nazw `masks/{d}.tif` i `masks_otsu/{d}.tif`
+      i bierze 12 pierwszych znaków sha256.
+    Dlaczego tak: wersja ma się zmieniać, gdy zmienia się zestaw scen, ich poziomy (scenes.json) albo
+      maski; backend używa jej do unieważniania cache. Nazwy zamiast zawartości masek: tanio, a zmiana
+      masek zmienia model klasyfikatora (rf_model_sha w meta).
+    Wejście → wyjście: bajty scenes.json, lista dat ISO → ciąg 12 znaków hex (nie zależy od kolejności dat).
+    Jak to obronić: test sprawdza determinizm i wrażliwość na oba wejścia.
+    """
     names = sorted([f"masks/{d}.tif" for d in dates] + [f"masks_otsu/{d}.tif" for d in dates])
     return hashlib.sha256(scenes_bytes + "\n".join(names).encode()).hexdigest()[:12]
 
@@ -241,9 +267,17 @@ def write_model(result: dict, grid: Grid, out_dir: Path, meta: dict, aoi: np.nda
 
 
 def read_model(model_dir: Path) -> tuple[dict[str, np.ndarray], dict]:
-    """Czyta model: tablice (NaN zachowane; uint16/uint8 surowe z nodata 65535/255) i model_meta.json.
+    """Czyta model z dysku: tablice rastrów i model_meta.json.
 
-    Klucze: z_min, z_max, z, unc, obs_count, n_conflict, flags. Dla backendu (strefy §6.4).
+    Co robi: otwiera 7 rastrów z `model_dir` i wczytuje metadane.
+    Dlaczego tak: backend (strefy §6.4) ma jedno miejsce czytania modelu, zgodne z `write_model`.
+    Wejście → wyjście: katalog modelu → (słownik tablic (H,W), meta). Klucze: z_min, z_max, z, unc
+      (float32, NaN zachowane), obs_count i n_conflict (uint16, nodata 65535 poza AOI), flags (uint8,
+      nodata 255 poza AOI). Nodata NIE jest podmieniane na NaN: backend sam maskuje piksele
+      `obs_count == 0 | flags == 255` jako „poza modelem". Reguła dla backendu wewnątrz modelu:
+      NaN w z_min → −inf, NaN w z_max → +inf, np.where(isnan(z_min), -np.inf, z_min) itd. (patrz
+      meta["nan_semantics"]); dopiero po tej zamianie liczy się D_lo = h − z_max, D_hi = h − z_min.
+    Jak to obronić: test round-trip sprawdza typy, nodata i zachowanie NaN.
     """
     model_dir = Path(model_dir)
     arrays = {}
@@ -256,7 +290,19 @@ def read_model(model_dir: Path) -> tuple[dict[str, np.ndarray], dict]:
 
 def build_meta(period: str, span: tuple[str, str], sel: pd.DataFrame, result: dict, aoi: np.ndarray,
                version: str, k_sigma: float, rf_model_sha: str, water_threshold: float | None) -> dict:
-    """Metadane modelu (model_meta.json) - patrz task-11-decisions §3."""
+    """Buduje słownik metadanych `model_meta.json` jednego okresu.
+
+    Co robi: zbiera opis okresu i scen (liczba, metody, udział ekstrapolowanych C, zakres poziomów),
+      opis metody (dowody, reguła C/R24, flagi, semantyka NaN, k_sigma, sha klasyfikatora, próg wody)
+      oraz liczniki pikseli w AOI (obserwowane, przedział, zawsze woda/ląd, UNRESOLVED, woda C
+      pominięta, sprzeczne).
+    Dlaczego tak: model musi się sam opisywać (spec §6a, obrona): backend i raport czytają stąd, jak
+      interpretować NaN i flagi i z jakich scen powstał.
+    Wejście → wyjście: okres, [start, koniec], DataFrame scen z `select_scenes`, wynik `compute_bounds`,
+      maska AOI, wersja, k_sigma, rf_model_sha, próg wody lub None → słownik gotowy do JSON.
+    Jak to obronić: liczniki wynikają wprost z rastrów zapisanych obok; `created_at` to jedyne pole
+      niedeterministyczne (UTC).
+    """
     obs = result["obs_count"]
     fl = result["flags"]
     inside = aoi
@@ -275,7 +321,7 @@ def build_meta(period: str, span: tuple[str, str], sel: pd.DataFrame, result: di
             "always_water_px": int(((fl & FLAG_ALWAYS_WATER > 0) & inside).sum()),
             "always_land_px": int(((fl & FLAG_ALWAYS_LAND > 0) & inside).sum()),
             "unresolved_px": int(((fl & FLAG_UNRESOLVED > 0) & inside).sum()),
-            "zmax_from_c_px": int(((fl & FLAG_ZMAX_FROM_C > 0) & inside).sum()),
+            "c_water_ignored_px": int(((fl & FLAG_C_WATER_IGNORED > 0) & inside).sum()),
             "conflict_px": int(((result["n_conflict"] > 0) & inside).sum()),
         },
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "version": version,

@@ -28,6 +28,7 @@ from sklearn.isotonic import IsotonicRegression
 from mielizna.capacity import capacity_to_level, level_to_capacity
 
 B_SIGMA = 0.15  # [m] założenie robocze: interpelacja-tabela ~0,13 m, zmiana krzywej 2021->2024 ~0,04 m, dzień +-1
+EXTRAP_TOKEN = ", ekstrapolacja"  # znacznik w h_source sceny C poza zakresem krzywej (czyta go bottom.select_scenes)
 C_EXTRAP_EXTRA = 0.1  # [m] dodatek do niepewności przy ekstrapolacji krzywej
 BIN_WIDTH_KM2 = 0.5  # szerokość przedziału powierzchni, w którym bierzemy medianę h
 MIN_OBS = 3  # minimum scen do dopasowania krzywej (LOO wymaga >= 2 punktów po usunięciu jednej)
@@ -249,7 +250,7 @@ def variant_c(scenes: pd.DataFrame, curve: AreaLevelCurve) -> pd.DataFrame:
     for r in scenes.itertuples():
         h, extrap = curve(r.area_km2)
         biased = bool(r.lake_nodata_pct > 1)
-        note = f"krzywa powierzchnia-rzędna, A_otsu={r.area_km2:.2f} km2" + (", ekstrapolacja" if extrap else "") + (", area_biased" if biased else "")
+        note = f"krzywa powierzchnia-rzędna, A_otsu={r.area_km2:.2f} km2" + (EXTRAP_TOKEN if extrap else "") + (", area_biased" if biased else "")
         rows.append({"date": r.date, "h_t": h, "h_sigma": curve.sigma + (C_EXTRAP_EXTRA if extrap else 0.0),
                      "h_method": "C", "h_source": note, "extrapolated": extrap, "area_biased": biased})
     return pd.DataFrame(rows, columns=["date", "h_t", "h_sigma", "h_method", "h_source", "extrapolated",

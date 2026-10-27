@@ -64,14 +64,59 @@ def test_combine_evidence():
     assert combine_evidence(rf, ot).tolist() == [1, 0, 0, 0, 255, 255]
 
 
-def test_c_scene_does_not_set_zmax_when_non_c_exists():
+def test_c_water_is_unknown_for_threshold_and_zmax():
+    """R24: woda ze sceny C = 255. Tu C (194.2) widzi wodę, B (194.6, 195.4) też; z_max z B, flaga 8 ustawiona."""
     r = compute_bounds(px(0, 1, 1, 1), H, np.array([.15, .49, .15, .15]), is_c=np.array([0, 1, 0, 0], bool))
-    assert np.isclose(r["z_max"][0, 0], 194.75) and r["z_max_raw"][0, 0] == 194.6 and not (r["flags"][0, 0] & 8)
+    assert np.isclose(r["z_max"][0, 0], 194.75) and r["z_max_raw"][0, 0] == 194.6
+    assert r["z_min_raw"][0, 0] == 193.8 and r["flags"][0, 0] & 8
 
 
-def test_c_only_zmax_is_flagged():
+def test_c_water_ignored_equals_unknown():
+    c = np.array([0, 1, 0, 0], bool)
+    a = compute_bounds(px(0, 1, 1, 1), H, np.array([.15, .49, .15, .15]), is_c=c)
+    b = compute_bounds(px(0, 255, 1, 1), H, np.array([.15, .49, .15, .15]), is_c=c)
+    for k in ("z_min", "z_max", "z_min_raw", "z_max_raw", "n_conflict"):
+        np.testing.assert_array_equal(a[k], b[k])
+
+
+def test_only_c_water_gives_no_zmax_and_flag():
     r = compute_bounds(px(0, 1, 1, 1), H, np.array([.15, .49, .49, .49]), is_c=np.array([0, 1, 1, 1], bool))
-    assert np.isclose(r["z_max"][0, 0], 194.69) and r["flags"][0, 0] & 8
+    assert np.isnan(r["z_max"][0, 0]) and r["z_min_raw"][0, 0] == 193.8
+    assert r["flags"][0, 0] & 8 and r["flags"][0, 0] & 2
+    r = compute_bounds(px(1, 1), H[:2], np.array([.49, .49]), is_c=np.array([1, 1], bool))
+    assert np.isnan(r["z_max"][0, 0]) and np.isnan(r["z_min"][0, 0]) and r["obs_count"][0, 0] == 2
+    assert r["flags"][0, 0] == 8 | 16
+
+
+def test_c_land_still_raises_zmin():
+    r = compute_bounds(px(0, 0, 1, 1), H, np.array([.15, .49, .15, .15]), is_c=np.array([0, 1, 0, 0], bool))
+    assert r["z_min_raw"][0, 0] == 194.2 and np.isclose(r["z_min"][0, 0], 194.2 - .49)
+    assert not (r["flags"][0, 0] & 8)
+
+
+def test_contradictory_distinct_levels_unresolved():
+    r = compute_bounds(px(1, 0), np.array([193.0, 197.0]), np.zeros(2))
+    assert r["n_conflict"][0, 0] == 1 and np.isnan(r["z_min"][0, 0]) and np.isnan(r["z_max"][0, 0])
+    assert r["flags"][0, 0] & 4 and r["flags"][0, 0] & 16
+
+
+def test_adding_c_water_never_lowers_zmax():
+    for seed in range(8):
+        rng = np.random.default_rng(100 + seed)
+        T = 20
+        m = rng.choice([0, 1, 255], size=(T, 15, 15), p=[.3, .3, .4]).astype(np.uint8)
+        h = np.round(rng.uniform(193, 197, T), 1)
+        isc = rng.random(T) < .4
+        sig = np.where(isc, rng.uniform(.3, .6, T), rng.uniform(.05, .3, T))   # sigma_C >= sigma_nonC
+        old = compute_bounds(m, h, sig, is_c=isc)
+        m2 = m.copy()
+        add = (m == 255) & isc[:, None, None] & (rng.random(m.shape) < .7)
+        m2[add] = 1
+        new = compute_bounds(m2, h, sig, is_c=isc)
+        for key in ("z_max_raw", "z_max"):
+            fin = np.isfinite(old[key])
+            assert np.all(new[key][fin] >= old[key][fin] - 1e-12)
+            np.testing.assert_array_equal(old[key], new[key])      # R24: dokładnie bez zmian
 
 
 def test_equal_levels_unresolved_flag():
@@ -126,12 +171,14 @@ def test_strips_do_not_change_result():
 
 
 def test_adding_land_never_lowers_zmax():
+    """Własność z U1/R24 przy sigma_C >= sigma_nonC (przypadek realny: C 0.49, B 0.15; dowód z R24 z niej
+    nie korzysta, bo woda C nie wchodzi do z_max)."""
     rng = np.random.default_rng(1)
     T = 20
     m = rng.choice([0, 1, 255], size=(T, 20, 20), p=[.3, .4, .3]).astype(np.uint8)
     h = np.round(rng.uniform(193, 197, T), 1)
-    sig = rng.uniform(0, .5, T)
     isc = rng.random(T) < .3
+    sig = np.where(isc, rng.uniform(.3, .6, T), rng.uniform(.05, .3, T))
     old = compute_bounds(m, h, sig, is_c=isc)
     m2 = m.copy()
     flip = (m == 255) & (rng.random(m.shape) < .5)
@@ -170,6 +217,16 @@ def test_select_scenes_contract():
     assert df.date.tolist() == ["2020-05-01", "2020-05-02", "2020-06-01"]
     assert list(df.columns[:4]) == ["date", "h_t", "h_sigma", "h_method"]
     assert df.extrapolated.tolist() == [True, False, False]
+    with pytest.raises(ValueError, match="h_sigma"):
+        select_scenes([{"date": "2020-05-01", "h_t": 194.0, "h_sigma": None, "h_method": "B", "qc_ok": True}],
+                      "2020-05-01", "2020-05-02")
+
+
+def test_extrapolation_token_is_shared_with_levels():
+    from mielizna.levels import EXTRAP_TOKEN
+    sc = [{"date": "2020-05-01", "h_t": 194.0, "h_sigma": .49, "h_method": "C", "qc_ok": True,
+           "h_source": f"krzywa{EXTRAP_TOKEN}"}]
+    assert select_scenes(sc, "2020-05-01", "2020-05-02").extrapolated.tolist() == [True]
 
 
 def _grid():
