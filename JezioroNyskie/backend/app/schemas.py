@@ -1,6 +1,6 @@
 """Kontrakt API (modele pydantic v2) - źródło `openapi.json` dla frontu.
 
-Co robi: opisuje kształt odpowiedzi `/api/meta` i `/api/zones` (kolejne zadania dopisują swoje modele).
+Co robi: opisuje kształt odpowiedzi `/api/meta`, `/api/zones` i `/api/point` (kolejne zadania dopisują swoje modele).
 Dlaczego tak: front (React) generuje typy TypeScript z `openapi.json`, więc kontrakt ma być jawny i
   ścisły. Pola, które mogą być nieskończone lub NaN, mają typ `float | None` i serializują się jako
   `null` - JSON nigdy nie zawiera `NaN`/`Infinity`. Cechy GeoJSON niosą dodatkowe klucze (`id`, `bbox`),
@@ -9,7 +9,7 @@ Wejście → wyjście: słowniki z `app.main` → walidowane modele → JSON.
 Jak to obronić: zmiana modelu zmienia `openapi.json`, a test migawki wymusza jej świadome odświeżenie
   (`uv run python scripts/export_openapi.py`).
 """
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -100,3 +100,24 @@ class MetaResponse(BaseModel):
     z_max_floor: float
     accuracy: Accuracy
     area_level: AreaLevel
+
+
+class PointResponse(BaseModel):
+    kind: Literal["model", "always_water", "land", "outside"]
+    lon: float
+    lat: float
+    h: float
+    draft: float
+    margin: float
+    zone: Literal["safe", "risk", "danger"] | None
+    depth_min: float | None
+    depth_max: float | None
+    clearance_min: float | None
+    clearance_max: float | None
+    z_min: float | None
+    z_max: float | None
+    z: float | None
+    unc: float | None
+    bottom_above_water_min: float | None
+    bottom_above_water_max: float | None
+    obs_count: int | None

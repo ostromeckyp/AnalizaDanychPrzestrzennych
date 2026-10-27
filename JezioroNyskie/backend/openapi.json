@@ -85,6 +85,91 @@
      }
     }
    }
+  },
+  "/api/point": {
+   "get": {
+    "summary": "Point",
+    "operationId": "point_api_point_get",
+    "parameters": [
+     {
+      "name": "lon",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "number",
+       "maximum": 180,
+       "minimum": -180,
+       "title": "Lon"
+      }
+     },
+     {
+      "name": "lat",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "number",
+       "maximum": 90,
+       "minimum": -90,
+       "title": "Lat"
+      }
+     },
+     {
+      "name": "h",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "number",
+       "title": "H"
+      }
+     },
+     {
+      "name": "draft",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "number",
+       "maximum": 3.0,
+       "minimum": 0.1,
+       "default": 1.2,
+       "title": "Draft"
+      }
+     },
+     {
+      "name": "margin",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "number",
+       "maximum": 1.0,
+       "minimum": 0.0,
+       "default": 0.3,
+       "title": "Margin"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PointResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
   }
  },
  "components": {
@@ -514,6 +599,199 @@
      "margin"
     ],
     "title": "Params"
+   },
+   "PointResponse": {
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "model",
+       "always_water",
+       "land",
+       "outside"
+      ],
+      "title": "Kind"
+     },
+     "lon": {
+      "type": "number",
+      "title": "Lon"
+     },
+     "lat": {
+      "type": "number",
+      "title": "Lat"
+     },
+     "h": {
+      "type": "number",
+      "title": "H"
+     },
+     "draft": {
+      "type": "number",
+      "title": "Draft"
+     },
+     "margin": {
+      "type": "number",
+      "title": "Margin"
+     },
+     "zone": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "safe",
+         "risk",
+         "danger"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Zone"
+     },
+     "depth_min": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Depth Min"
+     },
+     "depth_max": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Depth Max"
+     },
+     "clearance_min": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Clearance Min"
+     },
+     "clearance_max": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Clearance Max"
+     },
+     "z_min": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Z Min"
+     },
+     "z_max": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Z Max"
+     },
+     "z": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Z"
+     },
+     "unc": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Unc"
+     },
+     "bottom_above_water_min": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bottom Above Water Min"
+     },
+     "bottom_above_water_max": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bottom Above Water Max"
+     },
+     "obs_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Obs Count"
+     }
+    },
+    "type": "object",
+    "required": [
+     "kind",
+     "lon",
+     "lat",
+     "h",
+     "draft",
+     "margin",
+     "zone",
+     "depth_min",
+     "depth_max",
+     "clearance_min",
+     "clearance_max",
+     "z_min",
+     "z_max",
+     "z",
+     "unc",
+     "bottom_above_water_min",
+     "bottom_above_water_max",
+     "obs_count"
+    ],
+    "title": "PointResponse"
    },
    "Slider": {
     "properties": {

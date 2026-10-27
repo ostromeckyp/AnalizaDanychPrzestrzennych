@@ -1,4 +1,4 @@
-"""Aplikacja FastAPI: fabryka `create_app`, `/api/meta` i `/api/zones`.
+"""Aplikacja FastAPI: fabryka `create_app`, `/api/meta`, `/api/zones` i `/api/point`.
 
 Co robi: buduje aplikację z produktami w `app.state`, wystawia metadane (zakresy suwaka, domyślne
   parametry, dokładność) i strefy głębokości dla zadanych h / draft / margin, z ETag i cache.
@@ -7,7 +7,8 @@ Dlaczego tak: produkty ładują się leniwie (w `lifespan`), gdy nie podano ich 
   zaokrąglonych parametrów, więc przeglądarka i CDN mogą odpowiadać 304 bez ciała. Zakres `h` zależy od
   danych, więc walidujemy go w handlerze (422), a nie w `Query`.
 Wejście → wyjście: `create_app(settings, products, *, search_fn, load_fn)` → `FastAPI`;
-  `GET /api/meta` → `MetaResponse`; `GET /api/zones?h=&draft=&margin=` → `ZonesResponse`.
+  `GET /api/meta` → `MetaResponse`; `GET /api/zones?h=&draft=&margin=` → `ZonesResponse`;
+  `GET /api/point?lon=&lat=&h=&draft=&margin=` → `PointResponse`.
   `search_fn` i `load_fn` (wstrzykiwane wyszukiwanie STAC / wczytanie sceny) zostaną użyte w kolejnych zadaniach.
 Jak to obronić: wynik stref jest czystą funkcją (wersja modelu, h, draft, margin) po zaokrągleniu do
   0,05 m, więc klucz cache, ETag i treść zawsze się zgadzają.
@@ -20,7 +21,8 @@ from pyproj import Transformer
 
 from app.cache import TTLStore
 from app.data import Products, load_products
-from app.schemas import MetaResponse, ZonesResponse
+from app.point import point_info
+from app.schemas import MetaResponse, PointResponse, ZonesResponse
 from app.settings import Settings, get_settings
 from app.zones import (round_param, zone_classes, zone_stats, zone_warnings, zones_geojson)
 
@@ -146,6 +148,20 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
             return body
 
         return cached_json_response(request, etag, build)
+
+    @app.get("/api/point", response_model=PointResponse)
+    def point(request: Request, lon: float = Query(..., ge=-180, le=180, allow_inf_nan=False),
+              lat: float = Query(..., ge=-90, le=90, allow_inf_nan=False),
+              h: float = Query(..., allow_inf_nan=False),
+              draft: float = Query(DEFAULT_DRAFT, ge=DRAFT_LIMITS[0], le=DRAFT_LIMITS[1]),
+              margin: float = Query(DEFAULT_MARGIN, ge=MARGIN_LIMITS[0], le=MARGIN_LIMITS[1])):
+        p: Products = request.app.state.products
+        lo, hi = slider_range(p)
+        h, draft, margin = round_param(h), round_param(draft), round_param(margin)
+        if not (lo <= h <= hi):
+            raise HTTPException(422, f"h poza zakresem suwaka [{lo}, {hi}]")
+        body = PointResponse(**point_info(p, lon, lat, h, draft, margin))
+        return Response(content=body.model_dump_json(), media_type="application/json")
 
     return app
 
