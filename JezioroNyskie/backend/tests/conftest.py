@@ -71,10 +71,11 @@ def make_dataset(root: Path) -> Path:
     def line(dy):  # linia brzegowa wewnątrz siatki (EPSG:2180)
         return MultiLineString([[(375050, 289900 - dy), (375150, 289900 - dy)]])
     shore = gpd.GeoDataFrame(
-        {"date": ["2026-09-30", "2026-10-20"], "area_km2": [11.9, 12.1], "lake_nodata_pct": 0.1,
-         "otsu_threshold": 0.1, "local_cloud_pct": 0.5, "core_water_frac": 0.9, "rf_otsu_ratio": 1.0,
-         "qc_ok": True, "qc_reason": "", "h_t": [193.2, 193.5], "h_method": "B"},
-        geometry=[line(0), line(20)], crs="EPSG:2180")
+        {"date": ["2026-09-30", "2026-10-20", QC_FALSE_DATE], "area_km2": [11.9, 12.1, 9.0],
+         "lake_nodata_pct": 0.1, "otsu_threshold": 0.1, "local_cloud_pct": 0.5, "core_water_frac": 0.9,
+         "rf_otsu_ratio": 1.0, "qc_ok": [True, True, False], "qc_reason": ["", "", "test"],
+         "h_t": [193.2, 193.5, None], "h_method": "B"},
+        geometry=[line(0), line(20), line(40)], crs="EPSG:2180")   # produkcja zapisuje też sceny QC-false
     shore.to_file(proc / "shorelines.gpkg", driver="GPKG")
     marinas = gpd.GeoDataFrame(
         {"osm_id": [1, 2], "kind": ["marina", "slipway"], "name": ["Przystań A", "Pochylnia B"]},

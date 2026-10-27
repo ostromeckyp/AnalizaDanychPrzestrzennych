@@ -1,4 +1,4 @@
-"""Aplikacja FastAPI: fabryka `create_app`, `/api/meta`, `/api/zones` i `/api/point`.
+"""Aplikacja FastAPI: fabryka `create_app`, `/api/meta`, `/api/zones`, `/api/point` oraz listy i pojemność.
 
 Co robi: buduje aplikację z produktami w `app.state`, wystawia metadane (zakresy suwaka, domyślne
   parametry, dokładność) i strefy głębokości dla zadanych h / draft / margin, z ETag i cache.
@@ -8,11 +8,14 @@ Dlaczego tak: produkty ładują się leniwie (w `lifespan`), gdy nie podano ich 
   danych, więc walidujemy go w handlerze (422), a nie w `Query`.
 Wejście → wyjście: `create_app(settings, products, *, search_fn, load_fn)` → `FastAPI`;
   `GET /api/meta` → `MetaResponse`; `GET /api/zones?h=&draft=&margin=` → `ZonesResponse`;
-  `GET /api/point?lon=&lat=&h=&draft=&margin=` → `PointResponse`.
+  `GET /api/point?lon=&lat=&h=&draft=&margin=` → `PointResponse`;
+  `GET /api/scenes` → `list[SceneOut]`; `GET /api/shorelines?date=` → GeoJSON `Feature` (EPSG:4326, 404 gdy brak);
+  `GET /api/marinas` → `FeatureCollection`; `GET /api/capacity-to-level?v=` / `/api/level-to-capacity?h=` → `{v, h, in_table}`.
   `search_fn` i `load_fn` (wstrzykiwane wyszukiwanie STAC / wczytanie sceny) zostaną użyte w kolejnych zadaniach.
 Jak to obronić: wynik stref jest czystą funkcją (wersja modelu, h, draft, margin) po zaokrągleniu do
   0,05 m, więc klucz cache, ETag i treść zawsze się zgadzają.
 """
+import json
 import math
 from contextlib import asynccontextmanager
 
@@ -20,13 +23,17 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response
 from pyproj import Transformer
 
 from app.cache import TTLStore
-from app.data import Products, load_products
+from app.data import Products, capacity_to_level, level_to_capacity, load_products
 from app.point import point_info
-from app.schemas import MetaResponse, PointResponse, ZonesResponse
+from app.schemas import (CapacityToLevel, LevelToCapacity, MetaResponse, PointResponse, SceneOut,
+                         ZonesResponse)
 from app.settings import Settings, get_settings
 from app.zones import (round_param, zone_classes, zone_stats, zone_warnings, zones_geojson)
 
 CACHE_CONTROL = "public, max-age=300"
+STATIC_CACHE_CONTROL = "public, max-age=3600"   # sceny, linie, przystanie, pojemność: zmieniają się tylko z modelem
+CAPACITY_MAX_MLN_M3 = 200.0
+LEVEL_LIMITS = (180.0, 210.0)                   # rozsądny zakres rzędnej [m n.p.m.] dla /api/level-to-capacity
 SLIDER_STEP = 0.05
 DEFAULT_DRAFT, DEFAULT_MARGIN = 1.20, 0.30
 DRAFT_LIMITS, MARGIN_LIMITS = (0.10, 3.00), (0.00, 1.00)
@@ -46,13 +53,13 @@ def finite_or_none(x) -> float | None:
     return x if math.isfinite(x) else None
 
 
-def cached_json_response(request: Request, etag: str, build) -> Response:
+def cached_json_response(request: Request, etag: str, build, cache_control: str = CACHE_CONTROL) -> Response:
     """Odpowiedź JSON z ETag i Cache-Control; `If-None-Match` równy ETagowi daje 304 bez ciała.
 
     `build()` zwraca bajty JSON i jest wywoływane tylko, gdy ciało jest potrzebne. Wspólne dla
     wszystkich endpointów z ETagiem.
     """
-    headers = {"ETag": etag, "Cache-Control": CACHE_CONTROL}
+    headers = {"ETag": etag, "Cache-Control": cache_control}
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
     return Response(content=build(), media_type="application/json", headers=headers)
@@ -63,6 +70,14 @@ def slider_range(products: Products) -> tuple[float, float]:
     m = products.meta
     return (round_param(m["h_min_obs"] - 0.5),
             round_param(max(m["h_max_obs"] + 0.5, products.max_pp)))
+
+
+def scene_out(s: dict) -> SceneOut:
+    """Pola sceny dla frontu; liczby nieskończone i NaN → None."""
+    f = lambda k: finite_or_none(s.get(k))   # noqa: E731
+    return SceneOut(date=s["date"], h_t=f("h_t"), h_sigma=f("h_sigma"), h_method=s.get("h_method"),
+                    area_km2=f("area_km2"), area_otsu_km2=f("area_otsu_km2"), otsu_threshold=f("otsu_threshold"),
+                    local_cloud_pct=f("local_cloud_pct"), lake_nodata_pct=f("lake_nodata_pct"))
 
 
 def build_meta(products: Products) -> MetaResponse:
@@ -162,6 +177,56 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
             raise HTTPException(422, f"h poza zakresem suwaka [{lo}, {hi}]")
         body = PointResponse(**point_info(p, lon, lat, h, draft, margin))
         return Response(content=body.model_dump_json(), media_type="application/json")
+
+    def static_json(request: Request, suffix: str, build) -> Response:
+        p: Products = request.app.state.products
+        return cached_json_response(request, f'W/"{p.version}{suffix}"', build, STATIC_CACHE_CONTROL)
+
+    @app.get("/api/scenes", response_model=list[SceneOut])
+    def scenes(request: Request):
+        p: Products = request.app.state.products
+        return static_json(request, "", lambda: json.dumps(
+            [scene_out(s).model_dump() for s in p.scenes], ensure_ascii=False).encode())
+
+    @app.get("/api/shorelines")
+    def shorelines(request: Request, date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$")):
+        p: Products = request.app.state.products
+        scene = next((s for s in p.scenes if s["date"] == date), None)   # tylko sceny opublikowane
+        if scene is None or date not in p.shorelines.index:
+            raise HTTPException(404, f"brak linii brzegowej dla {date}")
+
+        def build() -> bytes:
+            geom = p.shorelines.loc[[date]].to_crs(4326).geometry.iloc[0]
+            return json.dumps({"type": "Feature", "geometry": geom.__geo_interface__,
+                               "properties": scene_out(scene).model_dump()}, ensure_ascii=False).encode()
+        return static_json(request, f"-shore-{date}", build)
+
+    @app.get("/api/marinas")
+    def marinas(request: Request):
+        p: Products = request.app.state.products
+
+        def build() -> bytes:
+            gdf = p.marinas.to_crs(4326)[["osm_id", "kind", "name", "geometry"]]
+            return gdf.to_json(drop_id=True, ensure_ascii=False).encode()   # NaN → null (geopandas)
+        return static_json(request, "-marinas", build)
+
+    @app.get("/api/capacity-to-level", response_model=CapacityToLevel)
+    def capacity_to_level_ep(request: Request, v: float = Query(..., gt=0, le=CAPACITY_MAX_MLN_M3,
+                                                                allow_inf_nan=False)):
+        """Pojemność v [mln m³] (0 < v ≤ 200, inaczej 422) → rzędna; poza tabelą KŻ h=None."""
+        p: Products = request.app.state.products
+        h = finite_or_none(capacity_to_level(p, v))
+        return static_json(request, f"-c2l-{v:g}", lambda: CapacityToLevel(
+            v=v, h=h, in_table=h is not None).model_dump_json().encode())
+
+    @app.get("/api/level-to-capacity", response_model=LevelToCapacity)
+    def level_to_capacity_ep(request: Request, h: float = Query(..., ge=LEVEL_LIMITS[0], le=LEVEL_LIMITS[1],
+                                                                allow_inf_nan=False)):
+        """Rzędna h [m n.p.m.] (180–210, inaczej 422) → pojemność [mln m³]; poza tabelą KŻ v=None."""
+        p: Products = request.app.state.products
+        v = finite_or_none(level_to_capacity(p, h))
+        return static_json(request, f"-l2c-{h:g}", lambda: LevelToCapacity(
+            h=h, v=v, in_table=v is not None).model_dump_json().encode())
 
     return app
 

@@ -1,6 +1,7 @@
 """Kontrakt API (modele pydantic v2) - źródło `openapi.json` dla frontu.
 
-Co robi: opisuje kształt odpowiedzi `/api/meta`, `/api/zones` i `/api/point` (kolejne zadania dopisują swoje modele).
+Co robi: opisuje kształt odpowiedzi `/api/meta`, `/api/zones`, `/api/point`, `/api/scenes` i `/api/capacity-to-level` / `/api/level-to-capacity`
+  (kolejne zadania dopisują swoje modele).
 Dlaczego tak: front (React) generuje typy TypeScript z `openapi.json`, więc kontrakt ma być jawny i
   ścisły. Pola, które mogą być nieskończone lub NaN, mają typ `float | None` i serializują się jako
   `null` - JSON nigdy nie zawiera `NaN`/`Infinity`. Cechy GeoJSON niosą dodatkowe klucze (`id`, `bbox`),
@@ -121,3 +122,27 @@ class PointResponse(BaseModel):
     bottom_above_water_min: float | None
     bottom_above_water_max: float | None
     obs_count: int | None
+
+
+class SceneOut(BaseModel):
+    date: str
+    h_t: float | None
+    h_sigma: float | None
+    h_method: str | None
+    area_km2: float | None          # powierzchnia z RF - ta sama co linia brzegowa
+    area_otsu_km2: float | None     # powierzchnia Otsu (używana przez krzywą powierzchnia↔poziom)
+    otsu_threshold: float | None
+    local_cloud_pct: float | None
+    lake_nodata_pct: float | None
+
+
+class CapacityToLevel(BaseModel):
+    v: float
+    h: float | None
+    in_table: bool
+
+
+class LevelToCapacity(BaseModel):
+    h: float
+    v: float | None
+    in_table: bool

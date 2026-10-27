@@ -170,6 +170,166 @@
      }
     }
    }
+  },
+  "/api/scenes": {
+   "get": {
+    "summary": "Scenes",
+    "operationId": "scenes_api_scenes_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/SceneOut"
+         },
+         "type": "array",
+         "title": "Response Scenes Api Scenes Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/shorelines": {
+   "get": {
+    "summary": "Shorelines",
+    "operationId": "shorelines_api_shorelines_get",
+    "parameters": [
+     {
+      "name": "date",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+       "title": "Date"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/marinas": {
+   "get": {
+    "summary": "Marinas",
+    "operationId": "marinas_api_marinas_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/capacity-to-level": {
+   "get": {
+    "summary": "Capacity To Level Ep",
+    "description": "Pojemność v [mln m³] (0 < v ≤ 200, inaczej 422) → rzędna; poza tabelą KŻ h=None.",
+    "operationId": "capacity_to_level_ep_api_capacity_to_level_get",
+    "parameters": [
+     {
+      "name": "v",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "number",
+       "maximum": 200.0,
+       "exclusiveMinimum": 0,
+       "title": "V"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CapacityToLevel"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/level-to-capacity": {
+   "get": {
+    "summary": "Level To Capacity Ep",
+    "description": "Rzędna h [m n.p.m.] (180–210, inaczej 422) → pojemność [mln m³]; poza tabelą KŻ v=None.",
+    "operationId": "level_to_capacity_ep_api_level_to_capacity_get",
+    "parameters": [
+     {
+      "name": "h",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "number",
+       "maximum": 210.0,
+       "minimum": 180.0,
+       "title": "H"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LevelToCapacity"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
   }
  },
  "components": {
@@ -361,6 +521,36 @@
     ],
     "title": "AreaLevelPoint"
    },
+   "CapacityToLevel": {
+    "properties": {
+     "v": {
+      "type": "number",
+      "title": "V"
+     },
+     "h": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "H"
+     },
+     "in_table": {
+      "type": "boolean",
+      "title": "In Table"
+     }
+    },
+    "type": "object",
+    "required": [
+     "v",
+     "h",
+     "in_table"
+    ],
+    "title": "CapacityToLevel"
+   },
    "DraftPreset": {
     "properties": {
      "label": {
@@ -391,6 +581,36 @@
     },
     "type": "object",
     "title": "HTTPValidationError"
+   },
+   "LevelToCapacity": {
+    "properties": {
+     "h": {
+      "type": "number",
+      "title": "H"
+     },
+     "v": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "V"
+     },
+     "in_table": {
+      "type": "boolean",
+      "title": "In Table"
+     }
+    },
+    "type": "object",
+    "required": [
+     "h",
+     "v",
+     "in_table"
+    ],
+    "title": "LevelToCapacity"
    },
    "Limits": {
     "properties": {
@@ -792,6 +1012,115 @@
      "obs_count"
     ],
     "title": "PointResponse"
+   },
+   "SceneOut": {
+    "properties": {
+     "date": {
+      "type": "string",
+      "title": "Date"
+     },
+     "h_t": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "H T"
+     },
+     "h_sigma": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "H Sigma"
+     },
+     "h_method": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "H Method"
+     },
+     "area_km2": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Area Km2"
+     },
+     "area_otsu_km2": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Area Otsu Km2"
+     },
+     "otsu_threshold": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Otsu Threshold"
+     },
+     "local_cloud_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Local Cloud Pct"
+     },
+     "lake_nodata_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lake Nodata Pct"
+     }
+    },
+    "type": "object",
+    "required": [
+     "date",
+     "h_t",
+     "h_sigma",
+     "h_method",
+     "area_km2",
+     "area_otsu_km2",
+     "otsu_threshold",
+     "local_cloud_pct",
+     "lake_nodata_pct"
+    ],
+    "title": "SceneOut"
    },
    "Slider": {
     "properties": {

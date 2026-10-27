@@ -10,7 +10,7 @@ def test_load_products_semantics(products):
     assert np.isposinf(p.z_hi[0, 22])
     assert p.version == "all-testver00001"
     assert [s["date"] for s in p.scenes] == sorted(s["date"] for s in p.scenes) and len(p.scenes) == 2
-    assert set(p.shorelines.index) <= {s["date"] for s in p.scenes}
+    assert set(p.shorelines.index) == {s["date"] for s in p.scenes} and len(p.shorelines) == 2   # filtr QC działa
     assert p.z_max_floor == pytest.approx(193.05)
     assert p.npp == pytest.approx(195.91, abs=0.01) and p.max_pp == pytest.approx(198.89, abs=0.01)
 
