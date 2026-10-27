@@ -14,7 +14,7 @@ period:
   end: "2026-12-31"
 
 scene_filter:
-  max_tile_cloud: 30
+  max_tile_cloud: 60
   max_local_cloud_pct: 5
   min_valid_pct: 95
   max_ice_pct: 1
