@@ -11,28 +11,30 @@ Jak to obronić: patrz słowniczek poniżej; wszystkie hiperparametry są zamro�
   liczba w raporcie nie jest wynikiem strojenia na zbiorze testowym.
 
 Słowniczek (to jest rdzeń obrony ustnej)
-- Random Forest: 100 drzew decyzyjnych uczonych na losowych podpróbach wierszy i cech; klasa to
-  głosowanie drzew. Zaleta: radzi sobie z nieliniowością i skorelowanymi pasmami, nie wymaga
+- Random Forest: 100 drzew decyzyjnych uczonych na losowych podpróbach wierszy, z cechami losowanymi
+  przy każdym podziale (`max_features='sqrt'`); klasa to głosowanie drzew. Zaleta: radzi sobie z nieliniowością i skorelowanymi pasmami, nie wymaga
   skalowania cech. `class_weight="balanced"` waży rzadszą klasę (ląd) tak, by nie była ignorowana,
   a `min_samples_leaf=2` zabrania liścia z jednym punktem (mniej zapamiętywania szumu).
+  Każde drzewo przy każdym podziale losuje podzbiór cech (`max_features='sqrt'`).
 - Przeciek przestrzenny: sąsiednie piksele i piksele tej samej sceny są niemal identyczne. Losowy
   podział wierszy wrzuciłby „bliźniaki" do uczenia i do testu, a model wyglądałby na świetny,
   bo rozpoznaje znane miejsca, a nie uczy się wody. Dlatego walidujemy po GRUPACH: całe bloki
   500 m (`by_block`, główny wynik — test na miejscach, których model nie widział) albo całe
   sceny (`by_scene` — test na dniach, których model nie widział).
 - Dokładność zrównoważona (balanced accuracy, BA): średnia z czułości dla wody i dla lądu,
-  (recall_water + recall_land) / 2. Przy 168 punktach wody na 21 lądu zwykła dokładność (OA)
-  premiuje ignorowanie lądu: „wszystko woda" ma OA 0,89, ale BA tylko 0,50. BA = 0,50 to
+  (recall_water + recall_land) / 2. Gdy punktów wody jest wielokrotnie więcej niż lądu, zwykła
+  dokładność (OA) premiuje ignorowanie lądu: „wszystko woda" ma wysokie OA, ale BA tylko 0,50. BA = 0,50 to
   poziom losowy niezależnie od proporcji klas.
 - Kappa Cohena (κ): zgodność ponad zgodność przypadkową; 0 = tyle co losowo, 1 = idealnie.
 - Test McNemara: porównuje dwie metody na TYCH SAMYCH punktach, patrząc wyłącznie na punkty,
-  na których się różnią: b = RF dobrze a druga źle, c = odwrotnie. Gdyby metody były równie
-  dobre, b i c byłyby po połowie; p to dokładne prawdopodobieństwo (dwumianowe) tak skrajnego
-  podziału. Małe p = różnica nie jest przypadkiem. Dlatego mała próba lądu daje duże p, nawet
-  gdy różnica punktowa wygląda dobrze.
+  na których się różnią: b = RF dobrze a druga źle, c = odwrotnie. Porównuje LICZBY BŁĘDÓW
+  (czyli zwykłą dokładność), więc dominuje w nim klasa większościowa (woda); to NIE jest test
+  różnicy BA. Dlatego b i c podajemy dodatkowo osobno dla punktów wody i lądu. Gdyby metody były
+  równie dobre, b i c byłyby po połowie; p to dokładne prawdopodobieństwo (dwumianowe) tak
+  skrajnego podziału.
 - Przedziały ufności 95%: Wilson dla proporcji (OA, recall); bootstrap warstwowy (2000 losowań
   w obrębie klasy) dla BA, κ i F1_land. Bootstrap po wierszach jest optymistyczny, bo punkty
-  leżą w skupiskach (15 bloków), więc prawdziwa niepewność jest nieco większa.
+  leżą w skupiskach (mało bloków), więc prawdziwa niepewność jest nieco większa.
 """
 import hashlib
 import logging
@@ -53,7 +55,7 @@ from sklearn.model_selection import StratifiedGroupKFold
 from mielizna import labels as L
 from mielizna.features import FEATURES, compute_features
 from mielizna.otsu import scene_threshold
-from mielizna.s2 import BANDS, cloud_mask, valid_mask
+from mielizna.s2 import BANDS, cloud_mask, cloud_mask_description, valid_mask
 
 log = logging.getLogger(__name__)
 SEED = 42
@@ -61,6 +63,7 @@ BLOCK_M = 500
 HEADLINE_STRATUM = "shore"
 N_BOOT = 2000
 METHODS = ("rf", "otsu", "scl", "all_water", "rf_auto")
+TABLE_ORDER = ("all_water", "otsu", "scl", "rf", "rf_auto")   # kolejność wierszy w raporcie
 TABLE_COLUMNS = FEATURES + ["y", "date", "block", "otsu_pred", "scl_pred", "source", "stratum",
                             "id", "otsu_t"]
 METHOD_NAMES = {"all_water": "all-water", "otsu": "Otsu", "scl": "SCL==6", "rf": "RF",
@@ -133,7 +136,13 @@ def build_table(labels: gpd.GeoDataFrame, scenes_dir: Path, dates: list[str],
 
 
 def table_counts(df: pd.DataFrame) -> dict:
-    """Liczby do nagłówka raportu: wiersze źródło × klasa, bloki i sceny `human`, odrzucone."""
+    """Liczby do nagłówka raportu: wiersze źródło × klasa, bloki i sceny `human`, odrzucone.
+
+    Co robi: zlicza wiersze tabeli wg źródła i klasy oraz bloki i sceny punktów `human` (też tylko lądu).
+    Dlaczego tak: czytelnik raportu musi wiedzieć, na ilu i jak skupionych punktach stoi wynik.
+    Wejście → wyjście: tabela z `build_table` (z `attrs["dropped"]`) → słownik liczb.
+    Jak to obronić: to czyste zliczenia z tej samej tabeli, na której liczono miary.
+    """
     h = df[df.source == "human"]
     hl = h[h.y == 0]
     by = {s: {"water": int(((df.source == s) & (df.y == 1)).sum()),
@@ -184,10 +193,10 @@ def wilson_ci(k: int, n: int, z: float = 1.959964) -> tuple[float, float]:
     """Przedział ufności Wilsona 95% dla proporcji k/n.
 
     Co robi: daje zakres, w którym z 95% pewnością leży prawdziwa proporcja (np. czułość dla lądu).
-    Dlaczego tak: dla małych n (21 punktów lądu) zwykły przedział „p ± 1,96·SE" wychodzi poza [0, 1]
+    Dlaczego tak: dla małych n (kilkadziesiąt punktów lądu) zwykły przedział „p ± 1,96·SE" wychodzi poza [0, 1]
       i jest zbyt wąski przy p bliskim 0 lub 1; Wilson tego nie robi.
     Wejście → wyjście: liczba sukcesów k, liczba prób n → (dolna, górna); n = 0 → (NaN, NaN).
-    Jak to obronić: wzór podręcznikowy; 13/21 daje [0,409; 0,792] (sprawdzone ręcznie w teście).
+    Jak to obronić: wzór podręcznikowy; np. 13/21 daje [0,409; 0,792] (sprawdzone ręcznie w teście).
     """
     if n == 0:
         return float("nan"), float("nan")
@@ -205,7 +214,9 @@ def mcnemar_exact(correct_a: np.ndarray, correct_b: np.ndarray) -> dict:
       dwumianowego Bin(b + c, 0,5).
     Dlaczego tak: punkty, na których obie metody zgadzają się (obie dobrze lub obie źle), nic nie
       mówią o różnicy; liczą się tylko rozbieżne. Wersja dokładna (a nie χ²) jest poprawna także
-      dla małych b + c, co jest naszym przypadkiem.
+      dla małych b + c, co jest naszym przypadkiem. Test porównuje liczby błędów, czyli zwykłą
+      dokładność (OA), w której dominuje klasa większościowa (woda); NIE testuje różnicy BA.
+      Dlatego `mcnemar_by_class` rozkłada b i c osobno na punkty wody i lądu.
     Wejście → wyjście: dwa wektory bool „czy trafiła" → {"b", "c", "p"}; b + c = 0 → p = 1.
     Jak to obronić: test sparowany jest właściwy, bo obie metody oceniamy na identycznych punktach;
       hipoteza zerowa: P(b) = P(c).
@@ -214,6 +225,23 @@ def mcnemar_exact(correct_a: np.ndarray, correct_b: np.ndarray) -> dict:
     b, c = int((a & ~b_).sum()), int((~a & b_).sum())
     p = 1.0 if b + c == 0 else float(binomtest(min(b, c), b + c, 0.5).pvalue)
     return {"b": b, "c": c, "p": p}
+
+
+def mcnemar_by_class(y: np.ndarray, correct_a: np.ndarray, correct_b: np.ndarray) -> dict:
+    """b i c z McNemara osobno dla punktów wody (y = 1) i lądu (y = 0); bez p-wartości.
+
+    Co robi: dzieli rozbieżne pary na te z prawdziwą klasą woda i ląd.
+    Dlaczego tak: łączne b, c jest zdominowane przez wodę; ten rozkład pokazuje, na której klasie
+      metoda A wygrywa lub przegrywa z B (np. RF zyskuje na lądzie kosztem wody).
+    Wejście → wyjście: prawda `y` i dwa wektory bool „czy trafiła" → {"water": {b, c}, "land": {b, c}}.
+    Jak to obronić: sumy po obu klasach dają dokładnie b i c z `mcnemar_exact`.
+    """
+    y = np.asarray(y).astype(int)
+    a, b_ = np.asarray(correct_a, bool), np.asarray(correct_b, bool)
+    out = {}
+    for name, m in (("water", y == 1), ("land", y == 0)):
+        out[name] = {"b": int((a & ~b_ & m).sum()), "c": int((~a & b_ & m).sum())}
+    return out
 
 
 def _bootstrap_ci(y: np.ndarray, p: np.ndarray, seed: int = SEED, n_boot: int = N_BOOT) -> dict:
@@ -249,8 +277,10 @@ def _evaluate(y: np.ndarray, preds: dict[str, np.ndarray], ci: bool) -> dict:
     out = {k: fn(y, preds[k]) for k in METHODS}
     if ci:
         right = {k: preds[k] == y for k in ("rf", "otsu", "scl")}
-        out["mcnemar"] = {"vs_otsu": mcnemar_exact(right["rf"], right["otsu"]),
-                          "vs_scl": mcnemar_exact(right["rf"], right["scl"])}
+        out["mcnemar"] = {}
+        for k, o in (("vs_otsu", "otsu"), ("vs_scl", "scl")):
+            out["mcnemar"][k] = mcnemar_exact(right["rf"], right[o])
+            out["mcnemar"][k]["by_class"] = mcnemar_by_class(y, right["rf"], right[o])
     return out
 
 
@@ -262,8 +292,12 @@ def make_model(seed: int = SEED) -> RandomForestClassifier:
     Co robi: zwraca nieuczony klasyfikator.
     Dlaczego tak: nie strojimy parametrów, bo każda liczba, którą mamy, jest liczbą testową;
       strojenie na niej zawyżyłoby wynik. `balanced` kompensuje mniej licznych punktów lądu.
-    Wejście → wyjście: seed → RandomForestClassifier. Jak to obronić: wartości domyślne
-      zalecane w literaturze, ustalone przed obejrzeniem wyników.
+      `min_samples_leaf=2` to świadomy wybór, a nie domyślne 1 z sklearn: liść z jednym punktem
+      zapamiętuje pojedynczą (być może błędną) etykietę, a liście o ≥ 2 punktach dają gładsze
+      prawdopodobieństwa i mniejsze przeuczenie na szumie etykiet.
+    Wejście → wyjście: seed → RandomForestClassifier.
+    Jak to obronić: wartości (100 drzew, liść ≥ 2, seed 42) ustalono przed obejrzeniem wyników i
+      nigdy ich nie zmieniano pod wynik.
     """
     return RandomForestClassifier(n_estimators=100, min_samples_leaf=2, class_weight="balanced",
                                   n_jobs=-1, random_state=seed)
@@ -335,17 +369,28 @@ def grouped_cv(df: pd.DataFrame, group_col: str, n_splits: int = 5) -> dict:
 
 
 def train_final(df: pd.DataFrame) -> RandomForestClassifier:
-    """RF uczony na wszystkich wierszach tabeli (te same hiperparametry co w walidacji)."""
+    """RF uczony na wszystkich wierszach tabeli (te same hiperparametry co w walidacji).
+
+    Co robi: dopasowuje `make_model()` do całej tabeli (auto + human).
+    Dlaczego tak: model końcowy ma widzieć wszystkie etykiety; jego jakość szacujemy z `grouped_cv`
+      (modele z foldów), a nie z tego dopasowania, które zna własne dane uczące.
+    Wejście → wyjście: tabela z `build_table` → uczony RandomForestClassifier.
+    Jak to obronić: te same hiperparametry co w walidacji, więc wynik CV dotyczy tej konfiguracji.
+    """
     return make_model().fit(df[FEATURES].to_numpy(), df["y"].to_numpy())
 
 
-def permutation_importance_table(df: pd.DataFrame, folds: list, seed: int = SEED) -> pd.DataFrame:
+def permutation_importance_table(df: pd.DataFrame, folds: list, seed: int = SEED,
+                                 human_only: bool = False) -> pd.DataFrame:
     """Ważność cech: spadek BA po przetasowaniu cechy, mierzony na foldach testowych `by_block`.
 
     Co robi: w każdym foldzie uczy RF na części uczącej, a potem na części testowej tasuje po
-      jednej cesze (10 powtórzeń) i mierzy, o ile spada dokładność zrównoważona.
+      jednej cesze (10 powtórzeń) i mierzy, o ile spada dokładność zrównoważona. Z `human_only`
+      część testowa jest ograniczona do punktów `human` (uczenie bez zmian).
     Dlaczego tak: liczone na danych testowych, bo RF z `min_samples_leaf=2` prawie zapamiętuje
-      wiersze uczące, więc ważność liczona na nich jest bez znaczenia.
+      wiersze uczące, więc ważność liczona na nich jest bez znaczenia. Pełny fold testowy to w
+      większości punkty `auto` (łatwe, poprawne dla Otsu z konstrukcji), więc spadki BA są tam
+      małe i zaniżone; tabela na samych punktach `human` pokazuje cechy ważne na trudnym brzegu.
     Wejście → wyjście: tabela i foldy z `grouped_cv` → DataFrame (feature, mean, std) malejąco
       po `mean`; mean/std po foldach.
     Jak to obronić: pasma i indeksy są skorelowane, więc ważność dzieli się między nie (cecha
@@ -355,6 +400,8 @@ def permutation_importance_table(df: pd.DataFrame, folds: list, seed: int = SEED
     per_fold = []
     for tr, te in folds:
         m = make_model(seed).fit(df.iloc[tr][FEATURES].to_numpy(), df.iloc[tr]["y"].to_numpy())
+        if human_only:
+            te = te[(df.iloc[te]["source"] == "human").to_numpy()]
         r = permutation_importance(m, df.iloc[te][FEATURES].to_numpy(), df.iloc[te]["y"].to_numpy(),
                                    scoring="balanced_accuracy", n_repeats=10, random_state=seed,
                                    n_jobs=1)
@@ -367,6 +414,13 @@ def permutation_importance_table(df: pd.DataFrame, folds: list, seed: int = SEED
 # --- model na dysku ----------------------------------------------------------------------
 
 def file_sha256(path: Path) -> str:
+    """Suma SHA-256 zawartości pliku (hex).
+
+    Co robi: czyta bajty pliku i liczy skrót.
+    Dlaczego tak: zapisana w bundle suma etykiet i configu pozwala stwierdzić, z jakich danych jest model.
+    Wejście → wyjście: ścieżka → 64-znakowy ciąg hex.
+    Jak to obronić: standardowy `hashlib.sha256`; ta sama zawartość daje ten sam skrót.
+    """
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
@@ -381,8 +435,7 @@ def save_model(model: RandomForestClassifier, path: Path, meta: dict | None = No
     Wejście → wyjście: model, ścieżka, opcjonalny słownik meta → plik joblib.
     Jak to obronić: sumy SHA etykiet i configu pozwalają stwierdzić, z jakich danych jest model.
     """
-    bundle = {"model": model, "features": FEATURES, "bands": BANDS, "cloud_scl_classes": [3, 8, 9, 10],
-              "cloud_dilate_px": 2, "classes": {"0": "land", "1": "water"}, "nodata": 255,
+    bundle = {"model": model, "features": FEATURES, "bands": BANDS, "cloud_mask": cloud_mask_description(), "classes": {"0": "land", "1": "water"}, "nodata": 255,
               "otsu": {"per_scene": True, "helper": "mielizna.otsu.scene_threshold",
                        "mask": "aoi & valid & ~cloud"},
               "sklearn_version": sklearn.__version__,
@@ -401,7 +454,10 @@ def load_model(path: Path) -> dict:
     Co robi: `joblib.load`, potem walidacja. Inna kolejność/zestaw cech = ValueError (model
       dawałby cicho błędne wyniki); inna wersja sklearn = ostrzeżenie (model zwykle działa,
       ale nie ma gwarancji).
+    Dlaczego tak: model z innymi cechami dałby cicho błędne mapy, więc to błąd, a nie ostrzeżenie.
     Wejście → wyjście: ścieżka → słownik bundle.
+    Jak to obronić: kolejność cech jest jedyną rzeczą, której RF nie sprawdzi sam; test pokrywa
+      obie ścieżki (ValueError i ostrzeżenie).
     """
     bundle = joblib.load(path)
     if bundle["features"] != FEATURES:
@@ -427,7 +483,7 @@ def _fc(m: dict, key: str) -> str:
     return f"{_f(m[key])} [{_f(lo)}–{_f(hi)}]"
 
 
-def _human_table(block: dict, methods=METHODS, label: str | None = None) -> list[str]:
+def _human_table(block: dict, methods=TABLE_ORDER, label: str | None = None) -> list[str]:
     pre = f"| {label} " if label else ""
     rows = []
     for k in methods:
@@ -444,19 +500,27 @@ _HEAD = ("| method | n | OA [CI] | BA [CI] | κ [CI] | recall_land k/n [CI] | re
 
 
 def _mcnemar_lines(block: dict) -> list[str]:
+    """McNemar liczy błędy (OA), nie BA; b/c podane też osobno dla wody i lądu."""
     mc = block["mcnemar"]
-    return [f"McNemar RF–{n}: b = {mc[k]['b']}, c = {mc[k]['c']}, p {_p(mc[k]['p'])}"
-            for k, n in (("vs_otsu", "Otsu"), ("vs_scl", "SCL"))]
+    out = []
+    for k, n in (("vs_otsu", "Otsu"), ("vs_scl", "SCL")):
+        bc = mc[k]["by_class"]
+        out.append(f"McNemar RF–{n} (liczby błędów, czyli dokładność; dominuje woda): b = {mc[k]['b']}, "
+                   f"c = {mc[k]['c']}, p {_p(mc[k]['p'])}; wiersze wody b = {bc['water']['b']}, "
+                   f"c = {bc['water']['c']}; wiersze lądu b = {bc['land']['b']}, c = {bc['land']['c']}")
+    return out
 
 
-def render_report(res: dict, importance: pd.DataFrame, counts: dict) -> str:
+def render_report(res: dict, importance: pd.DataFrame, counts: dict,
+                  importance_human: pd.DataFrame | None = None) -> str:
     """Raport w markdown: nagłówek z licznościami i tabele A–E (liczby z 3 miejscami, CI w nawiasach).
 
     Co robi: formatuje wyniki `grouped_cv` (`by_block`, `by_scene`), ważność cech i liczności.
     Dlaczego tak: ten sam tekst idzie na stdout, do `rf_report.md` i do `rf_metrics.json`, więc
       liczby w obronie i w pliku są identyczne. Tabela A (human `shore`, by_block) to wynik główny;
       linia M2 podaje OA wprost, ale razem z poziomem „wszystko woda" i miarami, które coś mówią.
-    Wejście → wyjście: {"by_block", "by_scene"} + tabela ważności + `table_counts` → str.
+    Wejście → wyjście: {"by_block", "by_scene"} + tabela ważności (pełne foldy testowe) +
+      `table_counts` + opcjonalnie tabela ważności na punktach `human` (Tabela E2) → str.
     Jak to obronić: nic tu nie jest wybierane pod wynik; kryterium M2 jest raportowane jako
       MET/NOT MET bez strojenia.
     """
@@ -481,8 +545,10 @@ def render_report(res: dict, importance: pd.DataFrame, counts: dict) -> str:
             f"BA = {_f(rfm['bacc'])}, κ = {_f(rfm['kappa'])}, recall_land = {rfm['confusion'][0][0]}/{rfm['n_land']}.",
             "Punkty `auto` wybrano przez częstość wody z Otsu, więc Otsu jest na nich poprawny z konstrukcji; "
             "porównanie RF z Otsu ma sens tylko na punktach `human`.",
-            f"Wskaźnik pomocniczy (nie próg): BA RF {_f(rfm['bacc'])} vs Otsu {_f(h['otsu']['bacc'])}, "
-            f"McNemar p {_p(h['mcnemar']['vs_otsu']['p'])}.",
+            f"Wskaźnik pomocniczy (nie próg): BA RF {_f(rfm['bacc'])} vs Otsu {_f(h['otsu']['bacc'])}. "
+            f"McNemar porównuje liczby błędów (dokładność), a nie BA, i dominuje w nim woda, więc jego p "
+            f"{_p(h['mcnemar']['vs_otsu']['p'])} nie mówi, czy BA jest istotnie lepsze; "
+            f"o lądzie mówią wiersze lądu b/c powyżej.",
             "Przedziały BA, κ, F1_land to bootstrap po wierszach (optymistyczny: punkty są skupione w blokach).", ""]
     hs = bs["human"]
     out += ["## Tabela B — human `shore`, by_scene", "", _HEAD, *_human_table(hs), "", *_mcnemar_lines(hs), "",
@@ -499,12 +565,18 @@ def render_report(res: dict, importance: pd.DataFrame, counts: dict) -> str:
     out += ["## Tabela D — wszystkie wiersze (pomocniczo)", "", "| CV | method | OA | κ | F1_water | F1_land |",
             "|---|---|---|---|---|---|"]
     for cv, r in (("by_scene", bs), ("by_block", bb)):
-        for k in METHODS:
+        for k in TABLE_ORDER:
             m = r[k]
             out.append(f"| {cv} | {METHOD_NAMES[k]} | {_f(m['oa'])} | {_f(m['kappa'])} | {_f(m['f1_water'])} | {_f(m['f1_land'])} |")
     out += ["", "Punkty auto są poprawne dla Otsu z konstrukcji (wybrane przez częstość wody z Otsu), "
             "więc ta tabela zawyża Otsu i SCL.", "",
             "## Tabela E — ważność cech (permutacyjna, by_block OOF, ΔBA)", "", "| feature | mean | std |", "|---|---|---|"]
     out += [f"| {r.feature} | {_f(r['mean'])} | {_f(r['std'])} |" for _, r in importance.iterrows()]
-    out += ["", "Pasma i indeksy są skorelowane, więc ważność rozkłada się między nie."]
+    out += ["", "Pasma i indeksy są skorelowane, więc ważność rozkłada się między nie. Tabela E liczona na "
+            "pełnych foldach testowych, w większości punktach `auto` (łatwych), więc ΔBA jest mały i zaniżony."]
+    if importance_human is not None:
+        out += ["", "## Tabela E2 — ważność cech na punktach human foldów testowych (by_block, ΔBA, 10 powtórzeń)",
+                "", "| feature | mean | std |", "|---|---|---|"]
+        out += [f"| {r.feature} | {_f(r['mean'])} | {_f(r['std'])} |" for _, r in importance_human.iterrows()]
+    out += [""]
     return "\n".join(out)

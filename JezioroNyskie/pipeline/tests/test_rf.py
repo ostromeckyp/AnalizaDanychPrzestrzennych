@@ -74,10 +74,25 @@ def test_cv_raises_with_too_few_groups(toy_df):
         grouped_cv(toy_df, "block")
 
 
-def test_cv_raises_when_a_fold_has_no_human_land(toy_df):
+def test_cv_raises_when_no_human_land_at_all(toy_df):
     toy_df.loc[toy_df.source == "human", "y"] = 1      # w ogóle brak lądu „human"
     with pytest.raises(ValueError, match="human"):
         grouped_cv(toy_df, "date")
+
+
+@pytest.mark.filterwarnings("ignore:The least populated class")   # celowo 4 punkty lądu < 5 foldów
+def test_cv_raises_when_exactly_one_fold_lacks_human_land(toy_df):
+    # ląd „human" tylko w 4 punktach z 4 różnych bloków -> przy 5 foldach dokładnie jeden fold bez niego,
+    # a reszta ma ląd: guard ma złapać fold bez lądu, choć ląd human w ogóle istnieje
+    h_land = toy_df.index[(toy_df.source == "human") & (toy_df.y == 0)]
+    keep = []
+    for b in toy_df.loc[h_land, "block"].unique()[:4]:
+        keep.append(toy_df.loc[h_land][toy_df.loc[h_land, "block"] == b].index[0])
+    drop = [i for i in h_land if i not in keep]
+    toy_df.loc[drop, "y"] = 1
+    assert ((toy_df.source == "human") & (toy_df.y == 0)).sum() == 4
+    with pytest.raises(ValueError, match="fold"):
+        grouped_cv(toy_df, "block")
 
 
 def test_wilson_ci_hand_computed():
@@ -123,9 +138,33 @@ def test_per_stratum_when_shore_low_present(toy_df):
 
 def test_permutation_importance_lists_all_features(toy_df):
     folds = grouped_cv(toy_df, "block")["folds"]
-    imp = permutation_importance_table(toy_df, folds)
-    assert set(imp.feature) == set(FEATURES) and {"mean", "std"} <= set(imp.columns)
-    assert imp["mean"].is_monotonic_decreasing
+    for human_only in (False, True):
+        imp = permutation_importance_table(toy_df, folds, human_only=human_only)
+        assert set(imp.feature) == set(FEATURES) and {"mean", "std"} <= set(imp.columns)
+        assert imp["mean"].is_monotonic_decreasing
+    # mndwi niesie sygnał, więc na punktach human też jest na szczycie
+    assert permutation_importance_table(toy_df, folds, human_only=True).feature[0] == "mndwi"
+
+
+def test_mcnemar_by_class_splits_b_and_c():
+    y = np.array([1, 1, 1, 0, 0, 0])
+    a = np.array([1, 1, 0, 1, 0, 0], bool)
+    b = np.array([0, 1, 1, 0, 1, 0], bool)
+    r = rf.mcnemar_by_class(y, a, b)
+    assert r == {"water": {"b": 1, "c": 1}, "land": {"b": 1, "c": 1}}
+    tot = mcnemar_exact(a, b)
+    assert tot["b"] == r["water"]["b"] + r["land"]["b"] and tot["c"] == r["water"]["c"] + r["land"]["c"]
+
+
+def test_bundle_mask_description_matches_s2():
+    from mielizna import s2
+    assert s2.cloud_mask_description() == {"dilated": [8, 9, 10], "px": 2, "undilated": [3]}
+    scl = np.full((20, 20), 4)
+    scl[10, 10] = 9
+    scl[2, 2] = 3
+    d = s2.cloud_mask_description()
+    m = s2.cloud_mask(scl)
+    assert m[10 + d["px"], 10] and not m[10 + d["px"] + 1, 10] and m[2, 2] and not m[3, 2]
 
 
 def test_load_model_checks_features_and_warns_on_sklearn(tmp_path, toy_df):
@@ -148,9 +187,14 @@ def test_load_model_checks_features_and_warns_on_sklearn(tmp_path, toy_df):
 def test_render_report_has_tables_and_m2_line(toy_df):
     res = {"by_block": grouped_cv(toy_df, "block"), "by_scene": grouped_cv(toy_df, "date")}
     imp = permutation_importance_table(toy_df, res["by_block"]["folds"])
-    md = render_report(res, imp, table_counts(toy_df))
-    for s in ("Tabela A", "Tabela B", "Tabela D", "Tabela E", "M2 (OA", "McNemar", "all-water"):
+    imp_h = permutation_importance_table(toy_df, res["by_block"]["folds"], human_only=True)
+    md = render_report(res, imp, table_counts(toy_df), imp_h)
+    for s in ("Tabela A", "Tabela B", "Tabela D", "Tabela E", "Tabela E2", "M2 (OA", "McNemar", "all-water",
+              "wiersze lądu"):
         assert s in md
+    a = md.index("Tabela A")
+    rows = [l.split("|")[1].strip() for l in md[a:].splitlines()[4:9]]
+    assert rows == ["all-water", "Otsu", "SCL==6", "RF", "RF auto-only"]
 
 
 # --- build_table na syntetycznych scenach ---------------------------------------------
@@ -204,8 +248,9 @@ def test_build_table_filters_rows(tmp_path):
     assert d.y.to_dict() == {0: 1, 1: 0, 4: 0, 5: 1}
     assert d.otsu_pred.to_dict() == {0: 1, 1: 0, 4: 0, 5: 1}
     assert d.scl_pred.to_dict() == {0: 1, 1: 0, 4: 0, 5: 1}
-    assert d.loc[0, "block"] == f"{int(d.loc[0, 'block'].split('_')[0])}_{int(d.loc[0, 'block'].split('_')[1])}"
-    x0 = gdf.set_index("id").loc[0, "x"]
-    assert d.loc[0, "block"].startswith(f"{int(x0 // 500)}_")
+    g = gdf.set_index("id")
+    for i in (0, 1, 4, 5):                      # blok z known x/y: GRID_T daje x ≈ 372 0xx, y ≈ 292 4xx
+        assert d.loc[i, "block"] == f"{int(g.loc[i, 'x'] // 500)}_{int(g.loc[i, 'y'] // 500)}"
+    assert d.loc[0, "block"] == "744_584"       # x = 372055 -> 744, y = 292445 -> 584
     assert df.date.map(type).eq(str).all() and not df[FEATURES].isna().any().any()
     assert df.attrs["dropped"] == {"unlabelled_or_skip": 2, "not_usable": 1, "not_ok": 1, "nan": 0}

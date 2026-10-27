@@ -136,10 +136,20 @@ def valid_mask(bands: dict, scl: np.ndarray) -> np.ndarray:
     return ok
 
 
+CLOUD_SCL = (8, 9, 10)         # klasy SCL rozszerzane (chmury)
+CLOUD_SHADOW_SCL = (3,)        # klasy SCL bez rozszerzania (cienie chmur)
+CLOUD_DILATE_PX = 2
+
+
+def cloud_mask_description() -> dict:
+    """Opis `cloud_mask` z tych samych stałych, których ona używa (do bundle modelu)."""
+    return {"dilated": list(CLOUD_SCL), "px": CLOUD_DILATE_PX, "undilated": list(CLOUD_SHADOW_SCL)}
+
+
 def cloud_mask(scl: np.ndarray) -> np.ndarray:
     """Chmury (SCL 8, 9, 10) rozszerzone o 2 px, plus cienie chmur (SCL 3)."""
-    cloud = binary_dilation(np.isin(scl, (8, 9, 10)), iterations=2)
-    return cloud | (scl == 3)
+    cloud = binary_dilation(np.isin(scl, CLOUD_SCL), iterations=CLOUD_DILATE_PX)
+    return cloud | np.isin(scl, CLOUD_SHADOW_SCL)
 
 
 def scene_quality(date: str, scl: np.ndarray, valid: np.ndarray, aoi: np.ndarray,

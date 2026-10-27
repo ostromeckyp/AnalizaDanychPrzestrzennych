@@ -69,7 +69,8 @@ def main():
 
     res = {"by_scene": rf.grouped_cv(df, "date"), "by_block": rf.grouped_cv(df, "block")}
     imp = rf.permutation_importance_table(df, res["by_block"]["folds"])
-    report = rf.render_report(res, imp, counts)
+    imp_h = rf.permutation_importance_table(df, res["by_block"]["folds"], human_only=True)
+    report = rf.render_report(res, imp, counts, imp_h)
 
     model = rf.train_final(df)
     h = res["by_block"]["human"]["rf"]
@@ -83,7 +84,8 @@ def main():
     rf.save_model(model, out / "rf_model.joblib", _clean(meta))
 
     metrics = {"by_scene": _public(res["by_scene"]), "by_block": _public(res["by_block"]),
-               "importance": imp.to_dict("records"), "counts": counts, "report_md": report}
+               "importance": imp.to_dict("records"),
+               "importance_human": imp_h.to_dict("records"), "counts": counts, "report_md": report}
     (out / "rf_metrics.json").write_text(json.dumps(_clean(metrics), ensure_ascii=False, indent=1),
                                          encoding="utf-8")
     (out / "rf_report.md").write_text(report, encoding="utf-8")
