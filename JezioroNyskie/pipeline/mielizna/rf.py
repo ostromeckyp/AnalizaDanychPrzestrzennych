@@ -17,7 +17,7 @@ Słowniczek (to jest rdzeń obrony ustnej)
   a `min_samples_leaf=2` zabrania liścia z jednym punktem (mniej zapamiętywania szumu).
 - Próg decyzyjny wody t*: RF zwraca P(woda); domyślnie woda gdy P ≥ 0,5. Produkt używa progu
   JEDNOSTRONNEGO t* ∈ {0,50; 0,55; …; 0,90} (nigdy poniżej 0,5), wybieranego zagnieżdżoną
-  walidacją krzyżową (patrz `_choose_threshold`). Wynik główny M2 zostaje przy t = 0,5.
+  walidacją krzyżową (patrz `_choose_threshold_from_curve`; krzywa BA(t) uśredniona z 10 powtórzeń OOF, R22). Wynik główny M2 zostaje przy t = 0,5.
 - Przeciek przestrzenny: sąsiednie piksele i piksele tej samej sceny są niemal identyczne. Losowy
   podział wierszy wrzuciłby „bliźniaki" do uczenia i do testu, a model wyglądałby na świetny,
   bo rozpoznaje znane miejsca, a nie uczy się wody. Dlatego walidujemy po GRUPACH: całe bloki
@@ -64,6 +64,7 @@ SEED = 42
 BLOCK_M = 500
 HEADLINE_STRATUM = "shore"
 N_BOOT = 2000
+THRESHOLD_REPEATS = 10      # R22: liczba powtórzeń OOF (ziarna SEED..SEED+9) uśrednianych w krzywej BA(t)
 THRESHOLD_GRID = tuple(float(t) for t in np.round(np.arange(0.50, 0.9001, 0.05), 2))
 METHODS = ("rf", "rf_t", "otsu", "scl", "all_water", "rf_auto")
 TABLE_ORDER = ("all_water", "otsu", "scl", "rf", "rf_auto")   # kolejność wierszy w raporcie
@@ -307,11 +308,11 @@ def make_model(seed: int = SEED) -> RandomForestClassifier:
                                   n_jobs=-1, random_state=seed)
 
 
-def _oof_proba(df: pd.DataFrame, n_splits: int = 5) -> np.ndarray:
+def _oof_proba(df: pd.DataFrame, n_splits: int = 5, seed: int = SEED) -> np.ndarray:
     """P(woda) poza próbą dla każdego wiersza: StratifiedGroupKFold po blokach, te same warstwy.
 
     Co robi: dzieli wiersze `df` na `n_splits` foldów po `block` (warstwy klasa × źródło,
-      shuffle, seed 42), w każdym uczy `make_model()` na reszcie i zapisuje P(woda) dla foldu.
+      shuffle, ziarno `seed`), w każdym uczy `make_model()` na reszcie i zapisuje P(woda) dla foldu.
     Dlaczego tak: próg wolno wybierać tylko z prawdopodobieństw, których model nie widział w
       uczeniu; w przeciwnym razie RF (prawie zapamiętuje dane) dałby P bliskie 0/1 i próg byłby bez sensu.
     Wejście → wyjście: tabela (z kolumnami y, source, block) → wektor P(woda) w kolejności wierszy.
@@ -319,7 +320,7 @@ def _oof_proba(df: pd.DataFrame, n_splits: int = 5) -> np.ndarray:
     """
     d = df.reset_index(drop=True)
     strata = d["y"].to_numpy() * 2 + (d["source"] == "human").to_numpy()
-    cv = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=SEED)
+    cv = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=seed)
     X, y = d[FEATURES].to_numpy(), d["y"].to_numpy()
     proba = np.zeros(len(d))
     for tr, te in cv.split(d, strata, d["block"]):
@@ -327,35 +328,75 @@ def _oof_proba(df: pd.DataFrame, n_splits: int = 5) -> np.ndarray:
     return proba
 
 
-def _choose_threshold(proba: np.ndarray, y: np.ndarray, is_human: np.ndarray,
-                      grid: tuple = THRESHOLD_GRID) -> float:
-    """Próg t* ∈ siatce maksymalizujący BA na punktach `human` (woda iff P ≥ t, jednostronnie).
+def _ba_curve(proba: np.ndarray, y: np.ndarray, is_human: np.ndarray,
+              grid: tuple = THRESHOLD_GRID) -> np.ndarray:
+    """Krzywa BA(t) na punktach `human` dla progów z siatki (woda iff P >= t); NaN gdy brak klasy.
 
-    Co robi: dla każdego t z siatki liczy dokładność zrównoważoną (BA) na wierszach `human` z
-      przekazanych prawdopodobieństw OOF i zwraca t o największej BA. Remis → NAJMNIEJSZE t.
-      Brak lądu (albo wody) wśród punktów `human` → 0,5, czyli bez zmiany względem domyślnego.
-    Dlaczego tak: (1) Jednostronnie (t ≥ 0,5), bo błąd „ląd uznany za wodę" jest groźny: mielizna
-      wygląda na wodę, obniża się z_max = min h po obserwacjach wody i płytkie miejsca wychodzą
-      jako bezpieczne. Przesuwanie progu w górę wymaga większej pewności, że to woda, więc błędy
-      idą w stronę ostrożniejszych („niebezpiecznych") stref. (2) BA na `human`, bo to trudny brzeg,
-      a punkty `auto` są łatwe z konstrukcji. (3) Zagnieżdżenie (patrz `_nested_threshold`):
-      t* dla foldu testowego jest wybierane bez patrzenia na ten fold, więc wynik na teście nie jest
-      strojony na teście. (4) Remis → najmniejsze t, żeby bez dowodu nie odchodzić od 0,5.
-    Wejście → wyjście: P(woda) OOF, prawda 0/1, maska human → jeden float z siatki.
-    Jak to obronić: siatka (9 wartości) i kryterium są ustalone z góry (R18); koszt pomyłki to
-      więcej stref „niebezpiecznych", nie mniej.
+    Co robi: dla każdego t z siatki liczy dokładność zrównoważoną (średnia z recall lądu i wody) na
+      wierszach `human`. Gdy wśród nich nie ma lądu albo wody, zwraca same NaN (BA nieokreślone).
+    Dlaczego tak: krzywa (a nie sam argmax) jest tym, co wolno uśredniać po powtórzeniach OOF (R22).
+    Wejście → wyjście: P(woda), prawda 0/1, maska human → wektor długości `len(grid)`.
+    Jak to obronić: ta sama definicja BA co w tabelach A i C, tylko liczona dla wielu progów naraz.
     """
     proba, y = np.asarray(proba), np.asarray(y)
     ph, yh = proba[is_human], y[is_human]
     if not ((yh == 0).any() and (yh == 1).any()):
+        return np.full(len(grid), np.nan)
+    out = np.empty(len(grid))
+    for i, t in enumerate(grid):
+        pred = (ph >= t).astype(int)
+        out[i] = ((pred[yh == 0] == 0).mean() + (pred[yh == 1] == 1).mean()) / 2
+    return out
+
+
+def _choose_threshold_from_curve(curve: np.ndarray, grid: tuple = THRESHOLD_GRID) -> float:
+    """Argmax krzywej BA(t); remis (<= 1e-12) → NAJMNIEJSZE t; krzywa NaN (brak klasy) → 0,5.
+
+    Co robi: zwraca t z siatki o największym BA; kolejne t wygrywa tylko przewagą > 1e-12.
+    Dlaczego tak: remis → najmniejsze t, żeby bez dowodu nie odchodzić od 0,5; brak lądu lub wody
+      wśród punktów `human` → 0,5, czyli bez zmiany względem domyślnego.
+    Wejście → wyjście: wektor BA(t) (zwykle średnia z powtórzeń) → jeden float z siatki.
+    Jak to obronić: reguła z R18, bez zmian; R22 zmienia tylko to, co jest argmaksowane.
+    """
+    curve = np.asarray(curve, float)
+    if np.isnan(curve).any():
         return 0.5
     best_t, best_ba = grid[0], -1.0
-    for t in grid:
-        pred = (ph >= t).astype(int)
-        ba = ((pred[yh == 0] == 0).mean() + (pred[yh == 1] == 1).mean()) / 2
+    for t, ba in zip(grid, curve):
         if ba > best_ba + 1e-12:
             best_t, best_ba = t, ba
     return float(best_t)
+
+
+def _choose_threshold(proba: np.ndarray, y: np.ndarray, is_human: np.ndarray,
+                      grid: tuple = THRESHOLD_GRID) -> float:
+    """Próg t* ∈ siatce maksymalizujący BA na punktach `human` dla JEDNEGO wektora P (woda iff P ≥ t).
+
+    Co robi: `_choose_threshold_from_curve(_ba_curve(...))`. Produkt używa wersji uśrednionej po
+      powtórzeniach (`_mean_threshold_curve`, R22); ta funkcja zostaje jako definicja reguły dla
+      jednego OOF i do testów.
+    Dlaczego tak: (1) Jednostronnie (t ≥ 0,5), bo błąd „ląd uznany za wodę" jest groźny: mielizna
+      wygląda na wodę, obniża się z_max = min h po obserwacjach wody i płytkie miejsca wychodzą
+      jako bezpieczne; wyższy próg to błędy w stronę ostrożniejszych stref. (2) BA na `human`,
+      bo to trudny brzeg, a punkty `auto` są łatwe z konstrukcji. (3) Remis → najmniejsze t.
+    Wejście → wyjście: P(woda) OOF, prawda 0/1, maska human → jeden float z siatki.
+    Jak to obronić: siatka (9 wartości) i kryterium są ustalone z góry (R18); krzywa BA jest płaska
+      (w obrębie 0,01) na 0,60–0,80, więc pojedynczy argmax jest niestabilny — stąd R22.
+    """
+    return _choose_threshold_from_curve(_ba_curve(proba, y, is_human, grid), grid)
+
+
+def _mean_threshold_curve(sub: pd.DataFrame) -> np.ndarray:
+    """Średnia krzywa BA(t) z THRESHOLD_REPEATS powtórzeń OOF (ziarna SEED..SEED+9) na punktach `human`.
+
+    Co robi: dla k = 0..9 liczy `_oof_proba(sub, seed=SEED + k)`, z niego `_ba_curve`, i uśrednia.
+    Dlaczego tak: zob. `_nested_threshold`; używane identycznie w walidacji zagnieżdżonej i w t* końcowym.
+    Wejście → wyjście: tabela (podzbiór) → wektor długości `len(THRESHOLD_GRID)` (NaN gdy brak klasy).
+    Jak to obronić: 10 powtórzeń to stała z góry (R22), nie wynik strojenia.
+    """
+    y, hm = sub["y"].to_numpy(), _human_mask(sub)
+    curves = [_ba_curve(_oof_proba(sub, seed=SEED + k), y, hm) for k in range(THRESHOLD_REPEATS)]
+    return np.mean(curves, axis=0)
 
 
 def _human_mask(d: pd.DataFrame) -> np.ndarray:
@@ -363,31 +404,37 @@ def _human_mask(d: pd.DataFrame) -> np.ndarray:
     return ((d["source"] == "human").to_numpy()) & np.isin(strat, L.HUMAN_STRATA)
 
 
-def _nested_threshold(df: pd.DataFrame, train_idx: np.ndarray) -> float:
-    """t* dla jednego foldu zewnętrznego, wybrany WYŁĄCZNIE na jego wierszach uczących.
+def _nested_threshold(df: pd.DataFrame, train_idx: np.ndarray) -> tuple[float, np.ndarray]:
+    """t* i średnia krzywa BA dla jednego foldu zewnętrznego, wybrane WYŁĄCZNIE na jego wierszach uczących.
 
-    Co robi: bierze `df.iloc[train_idx]`, liczy na nich wewnętrzne P(woda) OOF (`_oof_proba`) i
-      wybiera próg regułą `_choose_threshold` na punktach `human` tego podzbioru.
+    Co robi: bierze `df.iloc[train_idx]`, uśrednia krzywą BA(t) z 10 powtórzeń wewnętrznego OOF
+      (`_mean_threshold_curve`) i wybiera argmax (remis → najmniejsze t; brak lądu human → 0,5).
     Dlaczego tak: wiersze testowe foldu zewnętrznego nie biorą udziału w wyborze progu, więc ocena
-      na nich jest uczciwa (bez „podglądania" testu).
-    Wejście → wyjście: tabela i pozycje wierszy uczących → float.
-    Jak to obronić: test sprawdza, że do wyboru progu trafiają tylko indeksy uczące.
+      na nich jest uczciwa. Uśrednianie, bo pojedynczy OOF jest zbyt zaszumiony: krzywa BA jest płaska
+      (w obrębie 0,01) na 0,60–0,80, a argmax z jednego ziarna wahał się od 0,60 do 0,85 na TYCH
+      SAMYCH danych. Nie wybieramy „ostrożnego" końca plateau (największe t), bo powyżej 0,75 całe
+      sceny zapadają się w ląd (2020-11-06 przy 0,80: core_water 0,40).
+    Wejście → wyjście: tabela i pozycje wierszy uczących → (float, krzywa BA).
+    Jak to obronić: test sprawdza, że 10 powtórzeń (ziarna 42..51) widzi tylko indeksy uczące.
     """
-    sub = df.iloc[train_idx]
-    p = _oof_proba(sub)
-    return _choose_threshold(p, sub["y"].to_numpy(), _human_mask(sub))
+    curve = _mean_threshold_curve(df.iloc[train_idx])
+    return _choose_threshold_from_curve(curve), curve
 
 
-def final_threshold(df: pd.DataFrame) -> float:
-    """t* modelu końcowego: ta sama reguła na P(woda) 5-krotnego OOF (po blokach) z całej tabeli.
+def final_threshold(df: pd.DataFrame) -> tuple[float, np.ndarray]:
+    """t* modelu końcowego i jego średnia krzywa BA: ta sama reguła na OOF z całej tabeli.
 
-    Co robi: `_oof_proba` na wszystkich wierszach + `_choose_threshold` na punktach `human`.
-    Dlaczego tak: model końcowy widzi wszystkie etykiety, więc próg musi pochodzić z predykcji
-      poza próbą, nie z dopasowania, które zna swoje dane.
-    Wejście → wyjście: tabela z `build_table` → float (trafia do `bundle["water_threshold"]`).
+    Co robi: `_mean_threshold_curve` na wszystkich wierszach (10 powtórzeń 5-krotnego OOF po
+      blokach) + argmax z tym samym rozstrzyganiem remisów.
+    Dlaczego tak: model końcowy widzi wszystkie etykiety, więc próg musi pochodzić z predykcji poza
+      próbą. Uśrednianie z tego samego powodu co w walidacji (plateau 0,60–0,80 w obrębie 0,01,
+      argmax pojedynczego ziarna 0,60–0,85); nie bierzemy największego t z plateau, bo powyżej 0,75
+      sceny zapadają się w ląd (2020-11-06 przy 0,80: core_water 0,40).
+    Wejście → wyjście: tabela z `build_table` → (float do `bundle["water_threshold"]`, krzywa BA).
     Jak to obronić: identyczna reguła jak w walidacji zagnieżdżonej, tylko bez zewnętrznego testu.
     """
-    return _choose_threshold(_oof_proba(df), df["y"].to_numpy(), _human_mask(df))
+    curve = _mean_threshold_curve(df)
+    return _choose_threshold_from_curve(curve), curve
 
 
 def predict_water(bundle: dict, X) -> np.ndarray:
@@ -447,11 +494,12 @@ def grouped_cv(df: pd.DataFrame, group_col: str, n_splits: int = 5) -> dict:
             raise ValueError(f"fold {i} ({group_col}) nie zawiera lądu human; za mało punktów lub grup")
     n = len(df)
     oof = {"rf": np.zeros(n, int), "rf_auto": np.zeros(n, int), "rf_t": np.zeros(n, int)}
-    thresholds = []
+    thresholds, curves = [], []
     for tr, te in folds:
         p = _fit_predict(df, tr, te, auto_only=False)
-        t = _nested_threshold(df, tr)
+        t, curve = _nested_threshold(df, tr)
         thresholds.append(t)
+        curves.append(curve)
         oof["rf"][te] = p >= 0.5
         oof["rf_t"][te] = p >= t
         oof["rf_auto"][te] = _fit_predict(df, tr, te, auto_only=True) >= 0.5
@@ -471,7 +519,7 @@ def grouped_cv(df: pd.DataFrame, group_col: str, n_splits: int = 5) -> dict:
     res["per_stratum"] = {s: sub(human & (strat == s), True) for s in sorted(set(strat[human]))}
     if "shore_low" in res["per_stratum"]:
         res["human_pooled"] = sub(human & np.isin(strat, L.HUMAN_STRATA), True)
-    res.update(folds=folds, oof=oof, group_col=group_col, thresholds=thresholds)
+    res.update(folds=folds, oof=oof, group_col=group_col, thresholds=thresholds, threshold_curves=curves)
     return res
 
 
@@ -620,7 +668,7 @@ def _mcnemar_lines(block: dict) -> list[str]:
 
 
 def render_report(res: dict, importance: pd.DataFrame, counts: dict,
-                  importance_human: pd.DataFrame | None = None) -> str:
+                  importance_human: pd.DataFrame | None = None, final_curve: np.ndarray | None = None) -> str:
     """Raport w markdown: nagłówek z licznościami i tabele A–E (liczby z 3 miejscami, CI w nawiasach).
 
     Co robi: formatuje wyniki `grouped_cv` (`by_block`, `by_scene`), ważność cech i liczności.
@@ -646,6 +694,10 @@ def render_report(res: dict, importance: pd.DataFrame, counts: dict,
             *_human_table(h, TABLE_ORDER_T), "", *_mcnemar_lines(h), "",
             f"RF t*: próg jednostronny (woda iff P ≥ t*), wybrany zagnieżdżonym CV w każdym foldzie; t* po foldach "
             f"(by_block): {bb['thresholds']}. Wynik główny M2 poniżej zostaje przy RF @ 0,5.", "",
+            *([f"Średnia krzywa BA(t) końcowa (10 powtórzeń OOF, siatka {THRESHOLD_GRID[0]}–{THRESHOLD_GRID[-1]}): "
+               + ", ".join(f"{t:.2f}={b:.3f}" for t, b in zip(THRESHOLD_GRID, final_curve))
+               + f"; t* końcowy = {_choose_threshold_from_curve(final_curve):.2f}.", ""]
+              if final_curve is not None else []),
             f"Macierz pomyłek RF [[tn, fp], [fn, tp]]: {h['rf']['confusion']}", ""]
     rfm, aw = h["rf"], h["all_water"]
     lo, hi = rfm["ci"]["oa"]

@@ -43,7 +43,7 @@ def _clean(o):
 
 
 def _public(res: dict) -> dict:
-    return {k: v for k, v in res.items() if k not in ("folds", "oof")}
+    return {k: v for k, v in res.items() if k not in ("folds", "oof", "threshold_curves")}
 
 
 def main():
@@ -70,10 +70,10 @@ def main():
     res = {"by_scene": rf.grouped_cv(df, "date"), "by_block": rf.grouped_cv(df, "block")}
     imp = rf.permutation_importance_table(df, res["by_block"]["folds"])
     imp_h = rf.permutation_importance_table(df, res["by_block"]["folds"], human_only=True)
-    report = rf.render_report(res, imp, counts, imp_h)
+    t_final, final_curve = rf.final_threshold(df)
+    report = rf.render_report(res, imp, counts, imp_h, final_curve=final_curve)
 
     model = rf.train_final(df)
-    t_final = rf.final_threshold(df)
     log.info("water_threshold (5-fold block OOF, wszystkie wiersze) = %.2f", t_final)
     h = res["by_block"]["human"]["rf"]
     human = df[df.source == "human"]
@@ -88,7 +88,12 @@ def main():
 
     metrics = {"by_scene": _public(res["by_scene"]), "by_block": _public(res["by_block"]),
                "importance": imp.to_dict("records"),
-               "importance_human": imp_h.to_dict("records"), "counts": counts, "water_threshold": t_final, "report_md": report}
+               "importance_human": imp_h.to_dict("records"), "counts": counts, "water_threshold": t_final,
+               "threshold_curves": {"grid": list(rf.THRESHOLD_GRID), "repeats": rf.THRESHOLD_REPEATS,
+                                    "by_block_per_fold": [c.tolist() for c in res["by_block"]["threshold_curves"]],
+                                    "by_scene_per_fold": [c.tolist() for c in res["by_scene"]["threshold_curves"]],
+                                    "final": final_curve.tolist()},
+               "report_md": report}
     (out / "rf_metrics.json").write_text(json.dumps(_clean(metrics), ensure_ascii=False, indent=1),
                                          encoding="utf-8")
     (out / "rf_report.md").write_text(report, encoding="utf-8")

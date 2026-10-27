@@ -7,7 +7,8 @@ Dlaczego tak: chmura i cień nie są lądem, więc nie mogą wejść do maski ja
 Wejście → wyjście: pasma + SCL + data + bundle + AOI + rdzeń jeziora → uint8 (H, W) {0, 1, 255},
   próg Otsu sceny i powierzchnia wody w km². Wspólny kod dla skryptu 04 i backendu.
 Jak to obronić: reguły chmur to `s2.cloud_mask` (te same stałe co w treningu), próg wody to
-  `rf.predict_water`, Otsu to `otsu.scene_threshold`; żadnej z tych reguł nie powielamy tutaj.
+  ta sama reguła co `rf.predict_water` (p ≥ t*, zastosowana tu inline w jednym przebiegu), Otsu to
+  `otsu.scene_threshold`; pozostałych reguł nie powielamy.
 """
 import datetime as dt
 
@@ -168,8 +169,8 @@ def scene_qc(mask: np.ndarray, mask_otsu: np.ndarray, core: np.ndarray) -> dict:
       przez Otsu - scena z qc_ok False jest wykluczana, nie naprawiana.
     Wejście → wyjście: maska RF i maska Otsu (uint8 {0, 1, 255}, po filtrze jeziora), rdzeń bool
       → słownik z 5 polami wyżej.
-    Jak to obronić: progi są stałymi `QC_*` ustalonymi bez użycia etykiet; na 221 scenach flagują
-      7 (3%), a każdą z nich da się obejrzeć na obrazku qc/flagged/.
+    Jak to obronić: progi są stałymi `QC_*` ustalonymi bez użycia etykiet; liczbę oflagowanych
+      scen raportuje 04 (zob. R21/R22), a każdą z nich da się obejrzeć na obrazku qc/flagged/.
     """
     n_core = int(core.sum())
     known = core & (mask != NODATA)

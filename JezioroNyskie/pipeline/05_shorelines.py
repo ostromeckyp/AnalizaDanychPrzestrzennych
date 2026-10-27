@@ -80,9 +80,9 @@ def main():
                         handlers=[logging.FileHandler(proc / "logs" / "05_shorelines.log", encoding="utf-8"),
                                   logging.StreamHandler()])
     grid = reference_grid()
-    stats = pd.read_csv(proc / "classify_stats.csv", dtype={"date": str, "qc_reason": str},
-                        keep_default_na=False, na_values=["nan", "NaN"])
+    stats = pd.read_csv(proc / "classify_stats.csv", dtype={"date": str, "qc_reason": str})
     stats["qc_reason"] = stats["qc_reason"].fillna("")
+    assert pd.api.types.is_float_dtype(stats["rf_otsu_ratio"]), stats["rf_otsu_ratio"].dtype
     stats = stats[stats.date.isin(usable_dates(load_config()))].reset_index(drop=True)
     rows = []
     for r in stats.itertuples():

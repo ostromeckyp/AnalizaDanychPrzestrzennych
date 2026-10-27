@@ -188,7 +188,8 @@ def test_render_report_has_tables_and_m2_line(toy_df):
     res = {"by_block": grouped_cv(toy_df, "block"), "by_scene": grouped_cv(toy_df, "date")}
     imp = permutation_importance_table(toy_df, res["by_block"]["folds"])
     imp_h = permutation_importance_table(toy_df, res["by_block"]["folds"], human_only=True)
-    md = render_report(res, imp, table_counts(toy_df), imp_h)
+    md = render_report(res, imp, table_counts(toy_df), imp_h, final_curve=np.linspace(.6, .9, 9))
+    assert "Średnia krzywa BA(t) końcowa" in md and "0.50=0.600" in md
     for s in ("Tabela A", "Tabela B", "Tabela D", "Tabela E", "Tabela E2", "M2 (OA", "McNemar", "all-water",
               "wiersze lądu"):
         assert s in md
@@ -293,15 +294,47 @@ def test_threshold_choice_never_sees_outer_test_rows(toy_df, monkeypatch):
     orig = rf._oof_proba
 
     def spy(d, *a, **k):
-        seen.append(set(d["id"]))
+        seen.append((set(d["id"]), k.get("seed")))
         return orig(d, *a, **k)
 
     monkeypatch.setattr(rf, "_oof_proba", spy)
     res = grouped_cv(toy_df, "block")
-    assert len(seen) == len(res["folds"]) and len(res["thresholds"]) == len(res["folds"])
-    for ids, (tr, te) in zip(seen, res["folds"]):
-        assert ids == set(toy_df.id.iloc[tr])
-        assert ids.isdisjoint(set(toy_df.id.iloc[te]))
+    k = rf.THRESHOLD_REPEATS
+    assert k == 10 and len(seen) == k * len(res["folds"]) and len(res["thresholds"]) == len(res["folds"])
+    for i, (tr, te) in enumerate(res["folds"]):
+        chunk = seen[i * k:(i + 1) * k]
+        assert [sd for _, sd in chunk] == list(range(rf.SEED, rf.SEED + k)) == list(range(42, 52))
+        for ids, _ in chunk:
+            assert ids == set(toy_df.id.iloc[tr])
+            assert ids.isdisjoint(set(toy_df.id.iloc[te]))
+
+
+def test_mean_curve_beats_single_seed_argmax(toy_df, monkeypatch):
+    # seed 42 sam wskazuje 0,50; średnia z 10 powtórzeń wskazuje 0,70 (R22)
+    y = toy_df["y"].to_numpy()
+    hm = rf._human_mask(toy_df)
+
+    def fake(d, n_splits=5, seed=rf.SEED):
+        k = seed - rf.SEED
+        p = np.where(d["y"].to_numpy() == 1, 0.95, 0.30)
+        land = (d["y"].to_numpy() == 0)
+        # ląd: P = 0,55 w powtórzeniu 0 (próg 0,55 wystarcza), w pozostałych 0,68 (potrzeba 0,70)
+        p[land] = 0.30 if k == 0 else 0.68
+        return p
+
+    monkeypatch.setattr(rf, "_oof_proba", fake)
+    sub = toy_df
+    single = rf._choose_threshold(fake(sub, seed=rf.SEED), y, hm)
+    assert single == 0.5
+    assert rf.final_threshold(sub)[0] == 0.7
+    assert rf._nested_threshold(sub, np.arange(len(sub)))[0] == 0.7
+
+
+def test_choose_threshold_from_curve_tie_and_nan():
+    grid = rf.THRESHOLD_GRID
+    curve = np.array([.8, .9, .9 + 1e-13, .9, .5, .5, .5, .5, .5])
+    assert rf._choose_threshold_from_curve(curve, grid) == grid[1]
+    assert rf._choose_threshold_from_curve(np.full(len(grid), np.nan), grid) == 0.5
 
 
 def test_grouped_cv_reports_rf_t(toy_df):
@@ -311,7 +344,8 @@ def test_grouped_cv_reports_rf_t(toy_df):
 
 
 def test_final_threshold_on_grid(toy_df):
-    assert rf.final_threshold(toy_df) in rf.THRESHOLD_GRID
+    t, curve = rf.final_threshold(toy_df)
+    assert t in rf.THRESHOLD_GRID and len(curve) == len(rf.THRESHOLD_GRID)
 
 
 def test_load_model_defaults_threshold_and_predict_water_uses_it(tmp_path, toy_df):
