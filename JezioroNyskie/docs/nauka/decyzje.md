@@ -37,6 +37,24 @@
 Uwagi do U1: sezonowość (listopad, poza sezonem) wpływa na domyślny zakres poziomów w aplikacji, **nie** na to, które sceny wchodzą do modelu — sceny
 pozasezonowe niosą niskie poziomy, które mierzą płycizny. R22 zostaje (ostrożność wprowadza RF∧Otsu, nie wyższy próg).
 
+## 1a. Decyzje planu 2 (backend)
+
+Źródło: `.superpowers/sdd/2026-10-27-plan2-backend-api/progress.md` (rozstrzygnięcia R1–R11 tego planu; numeracja niezależna od planu 1).
+
+- **B-R1** `create_app(settings=None, products=None, *, search_fn=None, load_fn=None)`: testy muszą wstrzykiwać wyszukiwanie i wczytanie scen, żeby nie łączyć się z siecią.
+- **B-R2** Praca na gałęzi `feat/backend` bez osobnego worktree: `data/processed` (3,2 GB, poza git) jest potrzebne do testów `real`.
+- **B-R3** Maski i statystyki odtwarzają się dokładnie, `proba` nie co do bitu: backend jej nie używa (R19 planu 1 zastąpione), więc nie ma skutku.
+- **B-R4** Stopka commitu zadania 1 mówi „Sonnet 5.5", nie „Opus 5.5": nie przepisujemy historii dla jednej stopki.
+- **B-R5** Asercja `reference_grid()` jest w `SceneContext.build` (ścieżka na żywo), nie w `load_products`: fixture 20×30 złamałby asercję przy starcie, a strefy i punkt czytają siatkę z rastra.
+- **B-R6** Wszystkie `*_pct` to (klasa ∧ akwen) / akwen × 100, więc suma = 100 (przy pustym akwenie 0); `*_km2` bez zmian, `danger_km2` wlicza ląd — to wynika z tekstu planu „udział w akwenie".
+- **B-R7** Uproszczenie osobno na strefę (wymóg planu) zostawia szwy 12–21 tys. m² (~0,08%): zostaje, do rozważenia `coverage_simplify` na 3 geometriach, jeśli będzie widoczne na mapie (plan 3).
+- **B-R8** Backend nie zmienia `os.environ`: funkcje pojemności dostają opcjonalny argument `table=`, tabela ładowana raz — bezpieczeństwo wątkowe przy odświeżaniu w tle.
+- **B-R9** PNG niepewności: skala 2× z kropką 1 px na komórkę 2×2, nie 4×: po dekodowaniu ≈ 26 MB zamiast ≈ 100 MB (pamięć telefonu).
+- **B-R10** Do pliku trafiają tylko werdykty danych (przyjęta, `not_usable`, radiometria, brak wody, `qc:*`); wyjątki przejściowe (sieć, brak modelu) idą do `last_error` i są ponawiane, `refresh()` nigdy nie rzuca — chwilowa awaria S3 nie może na stałe wyłączyć poziomu na żywo.
+- **B-R11** Fallback z pipeline'u ma `ice_unverified = False`: sceny pipeline'u przeszły przegląd lodu (`exclude_dates`).
+
+Wynik kontroli `real` (zadanie 11): obrys jeziora vs cały model w `safe_km2` — patrz `M5-backend.md` §6; nie zmieniono granic testu, tylko dopasowano definicję obszaru do ledgera.
+
 ## 2. Znane ograniczenia / do zrobienia (z listy „minor (deferred)" w ledgerze)
 
 **Dane i pobieranie (Task 1–4)**

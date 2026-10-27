@@ -39,7 +39,7 @@ Retrening to godziny (ok. 550 dopasowań), więc wymuszaj go świadomie.
 | `make test` | `pytest -q` | 182 testów |
 
 Dane surowe w `data/raw/`, logi w `data/processed/logs/`. Notatki do nauki (po polsku, z pytaniami obronnymi):
-[`docs/nauka/`](docs/nauka/) — `M1-dane.md`, `M2-klasyfikacja.md`, `M3-poziomy.md`, `M4-model-dna.md`, `decyzje.md`.
+[`docs/nauka/`](docs/nauka/) — `M1-dane.md`, `M2-klasyfikacja.md`, `M3-poziomy.md`, `M4-model-dna.md`, `M5-backend.md`, `decyzje.md`.
 
 ## Backend
 
@@ -47,7 +47,8 @@ API FastAPI serwujące produkty pipeline'u (`backend/`, pakiet `app`; pipeline `
 
 ```bash
 cd backend && uv sync && uv run pytest        # testy na syntetycznym zbiorze danych
-uv run uvicorn app.main:app                   # uruchomienie (od zadania z `main.py`)
+uv run uvicorn app.main:app                   # uruchomienie (http://127.0.0.1:8000/docs)
+uv run pytest -m real -q                      # testy na prawdziwych danych (wymagają data/processed/model/all/)
 ```
 
 Zmienne środowiskowe: `MIELIZNA_DATA_DIR` (katalog danych), `MIELIZNA_PERIOD` (domyślnie `all`),
