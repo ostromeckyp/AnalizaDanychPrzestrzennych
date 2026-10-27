@@ -6,7 +6,9 @@ Co robi: szuka w STAC najnowszych akwizycji (ostatnie 30 dni), klasyfikuje je ws
   najnowszej przyjętej sceny na żywo i ostatniej opublikowanej sceny pipeline'u.
 Dlaczego tak: scena na żywo nie ma komunikatu RZGW, więc poziom (wariant „C_live") pochodzi wyłącznie z
   powierzchni wody, z niepewnością krzywej (+ dodatek przy ekstrapolacji). Odrzucenia też są zapisywane,
-  żeby nie pobierać drugi raz tej samej złej sceny. Błąd sieci nigdy nie wywraca API: zostaje fallback.
+  żeby nie pobierać drugi raz tej samej złej sceny. Zapisujemy tylko werdykty o danych (przyjęta, not_usable,
+  radiometry, no_water, qc:*); błędy przejściowe (S3/GDAL, zapis pliku) i systemowe (ctx: brak modelu, zła
+  siatka) trafiają do `last_error` bez pliku, więc akwizycja jest ponawiana. Błąd sieci nigdy nie wywraca API: zostaje fallback.
   Powierzchnia dla krzywej to Otsu, nigdy RF (RF przy niskiej wodzie nasyca się na mule → za wysoki poziom).
 Wejście → wyjście: `search_fn`, `load_fn`, `ctx_factory` (wstrzykiwane, testy bez sieci) →
   `CurrentLevelService.get()` = słownik `CurrentLevelResponse` bez NaN/Infinity.
@@ -204,6 +206,9 @@ class CurrentLevelService:
             self._refreshing = True
         try:
             self._refresh()
+        except Exception as e:  # noqa: BLE001 - refresh() nigdy nie rzuca
+            with self._lock:
+                self._last_error = f"{type(e).__name__}: {e}"
         finally:
             with self._lock:
                 self._refreshing = False
@@ -222,23 +227,32 @@ class CurrentLevelService:
             self._last_error = None
         todo = [k for k in sorted(found, key=lambda k: k[0], reverse=True)
                 if not (self.cache_dir / f"{k[0]}_{k[1]}.json").exists()][:MAX_CHECKS]
+        if not todo:
+            return
+        if self._ctx is None:
+            try:
+                self._ctx = self.ctx_factory()
+            except Exception as e:  # noqa: BLE001 - błąd systemowy (brak modelu, zła siatka), nie werdykt o scenie
+                log.warning("ctx_factory failed: %s", e)
+                with self._lock:
+                    self._last_error = f"ctx: {type(e).__name__}: {e}"
+                return
         for (day, platform) in todo:
             name = f"{day}_{platform}"
             try:
-                if self._ctx is None:
-                    self._ctx = self.ctx_factory()
                 res = evaluate(found[(day, platform)], day, self._ctx, self.load_fn)
-            except Exception as e:  # noqa: BLE001 - jedna zła akwizycja nie blokuje reszty
-                log.warning("evaluate %s failed: %s", name, e)
-                res = f"error:{type(e).__name__}"
-            if isinstance(res, str):
-                self._write(name, {"rejected": res, "checked_at": _now()})
-            else:
-                res = dataclasses.replace(res, acq_id=name)
-                acc = dataclasses.asdict(res)
-                self._write(name, {"accepted": acc})
+                if isinstance(res, str):
+                    self._write(name, {"rejected": res, "checked_at": _now()})
+                else:
+                    res = dataclasses.replace(res, acq_id=name)
+                    acc = dataclasses.asdict(res)
+                    self._write(name, {"accepted": acc})
+                    with self._lock:
+                        self._accepted[name] = acc
+            except Exception as e:  # noqa: BLE001 - błąd przejściowy: nie zapisujemy, ponowimy przy następnym odświeżeniu
+                log.warning("acquisition %s failed: %s", name, e)
                 with self._lock:
-                    self._accepted[name] = acc
+                    self._last_error = f"{name}: {type(e).__name__}: {e}"
 
     def get(self) -> dict:
         """Nowsza z (najnowsza przyjęta scena na żywo, fallback pipeline); remis → pipeline."""

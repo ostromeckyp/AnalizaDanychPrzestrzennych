@@ -117,11 +117,41 @@ def test_winter_scene_flags_ice(service_factory):
     assert s.get()["ice_unverified"] is True
 
 
-def test_per_acquisition_error_is_rejection(service_factory, tmp_path):
-    def boom(items, grid, cfg): raise OSError("s3 down")
-    s = service_factory(search=one_acq("2026-10-26"), load=boom); s.refresh()
+def test_transient_load_error_is_retried(service_factory, tmp_path):
+    n = []
+    def flaky(items, grid, cfg):
+        n.append(1)
+        if len(n) == 1:
+            raise OSError("s3 down")
+        return _scene()
+    s = service_factory(search=one_acq("2026-10-26"), load=flaky); s.refresh()
+    assert s.get()["source"] == "pipeline" and "s3 down" in s.get()["last_error"]
+    assert not list(tmp_path.glob("current/*.json"))
+    s.refresh()
+    assert s.get()["source"] == "satellite" and s.get()["last_error"] is None
+
+
+def test_ctx_failure_writes_nothing(products, tmp_path):
+    def bad_ctx(): raise FileNotFoundError("rf_model.joblib")
+    s = CurrentLevelService(products, tmp_path / "current", one_acq("2026-10-26"), good_scene,
+                            ctx_factory=bad_ctx, clock=lambda: date(2026, 10, 27))
+    s.refresh()
+    r = s.get()
+    assert r["source"] == "pipeline" and "rf_model.joblib" in r["last_error"]
+    assert not list((tmp_path / "current").glob("*.json"))
+
+
+def test_qc_failure_is_persisted_and_publishes_nothing(service_factory, tmp_path):
+    def land_core(items, grid, cfg):
+        bands, scl = _scene()
+        land = _scene()[0]
+        hole = np.zeros((H, W), bool)
+        hole[6:13, 6:15] = True                            # ląd w rdzeniu jeziora
+        return {k: np.where(hole, land[k][0, 25], bands[k]).astype(np.float32) for k in bands}, scl
+    s = service_factory(search=one_acq("2026-10-26"), load=land_core); s.refresh()
     assert s.get()["source"] == "pipeline"
-    assert json.loads(next(tmp_path.glob("current/2026-10-26_*.json")).read_text())["rejected"] == "error:OSError"
+    rej = json.loads(next(tmp_path.glob("current/2026-10-26_*.json")).read_text())["rejected"]
+    assert rej.startswith("qc:"), rej
 
 
 def test_checks_at_most_three_newest_first(service_factory):
