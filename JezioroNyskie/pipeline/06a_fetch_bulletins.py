@@ -33,6 +33,9 @@ def main() -> int:
     log.info("sceny użyteczne: %d", len(scenes))
 
     govpl = bulletins.fetch_govpl_list()
+    if not govpl:
+        log.error("lista gov.pl jest pusta (zmieniony układ strony? usuń data/raw/rzgw/govpl_list.html)")
+        return 1
     log.info("lista gov.pl: %d komunikatów z datą, zakres %s .. %s", len(govpl), govpl[0][0], govpl[-1][0])
     wayback = bulletins.wayback_index()
     log.info("indeks Wayback: %d dat, zakres %s .. %s", len(wayback), min(wayback), max(wayback))
@@ -50,7 +53,8 @@ def main() -> int:
         log.info("  %d: %d / %d", y, got.get(y, 0), n)
     log.info("źródło: %s", df.source.value_counts().to_dict())
     log.info("ten sam dzień: %d, ±1: %d", (df.offset_days == 0).sum(), (df.offset_days != 0).sum())
-    log.info("v_npp: %s", df.groupby("v_npp").scene_date.agg(["min", "max", "count"]).to_dict("index"))
+    log.info("godzina odczytu (UTC): %s", df.reading_utc.fillna("brak").value_counts().sort_index().to_dict())
+    log.info("v_npp (grupy po zaokrągleniu do 0,1): %s", df.assign(v_npp=df.v_npp.round(1)).groupby("v_npp").scene_date.agg(["min", "max", "count"]).to_dict("index"))
     log.info("v_maxpp: %s", df.v_maxpp.round(2).value_counts().to_dict())
     return 0
 

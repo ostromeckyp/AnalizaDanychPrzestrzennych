@@ -11,6 +11,10 @@ Dlaczego tak: komunikat jest jedynym dziennym źródłem objętości, a `h_t` li
   zepsułby h_t po cichu).
 Wejście → wyjście: tekst PDF / HTML listy / lista dat scen → słownik {v_current, v_npp, v_maxpp},
   lista (data, url), DataFrame scene_date, bulletin_date, source, v_current, v_npp, v_maxpp, url.
+Gdy jednego dnia są dwa komunikaty (06 i 12 UTC), wybieramy ten o godzinie odczytu najbliższej
+  przelotu Sentinel-2 (10:00 UTC); godzina trafia do kolumny `reading_utc`. Uwaga: w logu 06a
+  `v_npp` jest grupowane po zaokrągleniu do 0,1 (65,69 to zapis 65,7 z dwoma miejscami), a CSV ma
+  wartości surowe.
 Jak to obronić: reguła wyboru dnia jest jawna i testowana (ten sam dzień przed sąsiadem), brak
   komunikatu daje brak wiersza (nie interpolację), a wszystkie PDF-y są w cache `data/raw/rzgw/`.
 """
@@ -18,8 +22,9 @@ import html as html_lib
 import logging
 import re
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -37,6 +42,7 @@ MAX_V = 200.0                 # sanity: pojemność Nysy nie przekracza ~125 mln
 MONTHS = {"stycznia": 1, "lutego": 2, "marca": 3, "kwietnia": 4, "maja": 5, "czerwca": 6,
           "lipca": 7, "sierpnia": 8, "września": 9, "października": 10, "listopada": 11,
           "grudnia": 12}
+OVERPASS_MIN = 10 * 60        # przelot Sentinel-2 nad Nysą ok. 10:00 UTC
 _last_request = [0.0]
 
 
@@ -111,10 +117,66 @@ def parse_govpl_text(text: str) -> dict | None:
 
 def text_date(text: str) -> date | None:
     """Data z nagłówka „z dnia 27 grudnia 2021 r.” (pierwsze wystąpienie) albo None."""
-    m = re.search(r"z dnia\s+(\d{1,2})\s+([a-ząćęłńóśźż]+)\s+(\d{4})", text)
+    m = re.search(r"z dnia\s+(\d{1,2})\s+([a-ząćęłńóśźż]+)\s*(\d{4})", text)
     if not m or m.group(2) not in MONTHS:
         return None
     return date(int(m.group(3)), MONTHS[m.group(2)], int(m.group(1)))
+
+
+def _hhmm(s: str) -> tuple[int, int] | None:
+    """„6:00” / „600” / „0600” / „1200” → (godzina, minuta) albo None."""
+    s = s.replace(" ", "")
+    if ":" in s:
+        h, m = s.split(":")
+    elif len(s) in (3, 4):
+        h, m = s[:-2], s[-2:]
+    else:
+        return None
+    h, m = int(h), int(m)
+    return (h, m) if h < 24 and m < 60 else None
+
+
+_READ_RZGW = re.compile(r"na godzin[ęe]\s+(\d{1,2}\s?:\d{2})\s*(?:\(\s*(\d{1,2}:\d{2})\s*UTC\s*\)|(UTC))?")
+_READ_GOVPL = re.compile(r"Sytuacja na dzień[^\n]*?na godz\.?\s*(\d{1,2}\s?:\d{2}|\d{3,4})\s*\(UTC\)")
+
+
+def reading_utc(text: str, d: date) -> str | None:
+    """Godzina odczytu komunikatu w UTC jako „HH:MM” albo None.
+
+    Co robi: czyta „na godzinę 6:00 UTC” (RZGW), „Sytuacja na dzień D na godz. 1200 (UTC)”
+      (gov.pl) i „na godzinę 16:00 (14:00 UTC)”; gdy podano tylko czas lokalny, przelicza go
+      z Europe/Warsaw na UTC dla daty `d`.
+    Dlaczego tak: tego samego dnia bywają dwa komunikaty (06 i 12 UTC), a wybieramy ten
+      najbliższy przelotowi satelity.
+    Wejście → wyjście: tekst PDF + data komunikatu → „HH:MM” (UTC) albo None.
+    Jak to obronić: wartość jest czytana z tekstu, nie zgadywana; brak = None (nigdy preferowany).
+    """
+    m = _READ_GOVPL.search(text)
+    if m and (t := _hhmm(m.group(1))):
+        return f"{t[0]:02d}:{t[1]:02d}"
+    m = _READ_RZGW.search(text)
+    if m:
+        utc = m.group(2) or (m.group(1) if m.group(3) else None)
+        if utc and (t := _hhmm(utc)):
+            return f"{t[0]:02d}:{t[1]:02d}"
+        if t := _hhmm(m.group(1)):
+            local = datetime(d.year, d.month, d.day, t[0], t[1], tzinfo=ZoneInfo("Europe/Warsaw"))
+            return local.astimezone(timezone.utc).strftime("%H:%M")
+    return None
+
+
+def pick_reading(rows: list[dict]) -> dict:
+    """Z komunikatów jednego dnia wybiera ten o odczycie najbliższym 10:00 UTC (remis → wcześniejszy).
+
+    Nieczytelna godzina (`reading_utc` None) nigdy nie wygrywa z czytelną.
+    """
+    def key(r):
+        t = _hhmm(r["reading_utc"]) if r.get("reading_utc") else None
+        if t is None:
+            return (1, 0, 0)
+        mins = t[0] * 60 + t[1]
+        return (0, abs(mins - OVERPASS_MIN), mins)
+    return min(rows, key=key)
 
 
 def list_govpl(html: str) -> list[tuple[date, str]]:
@@ -135,10 +197,12 @@ def list_govpl(html: str) -> list[tuple[date, str]]:
                                  html, flags=re.S):
         text = html_lib.unescape(re.sub(r"<[^>]+>", " ", label))
         m = re.search(r"z dnia\s+(\d{1,2})\.(\d{1,2})\.(\d{4})(?!\d)", text)
-        if not m:
+        typo = None if m else re.search(r"z dnia\s+(\d{1,2})\.(\d{1,2})\.2020(\d)(?!\d)", text)
+        if not m and not typo:
             continue
-        try:
-            d = date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        try:   # literówka „20204” → 2024 (zdublowane 0)
+            d = (date(int(m.group(3)), int(m.group(2)), int(m.group(1))) if m
+                 else date(2020 + int(typo.group(3)), int(typo.group(2)), int(typo.group(1))))
         except ValueError:
             continue
         out[url] = d
@@ -276,6 +340,8 @@ def _load(d: date, entry: dict, cache_dir: Path) -> dict | None:
         log.warning("%s: nie da się odczytać %s: %r", d, path.name, e)
         return None
     inner = text_date(text)
+    if inner is None:
+        log.warning("%s: brak daty „z dnia” w %s - nie można zweryfikować daty", d, path.name)
     if inner is not None and inner != d:
         log.warning("%s: data w PDF %s różni się od daty w nazwie (%s) - odrzucono", d, inner, path.name)
         return None
@@ -286,7 +352,7 @@ def _load(d: date, entry: dict, cache_dir: Path) -> dict | None:
     if row is None:
         log.warning("%s: brak czytelnego wiersza Nysa w %s", d, path.name)
         return None
-    return row | {"source": entry["source"], "url": entry["url"]}
+    return row | {"source": entry["source"], "url": entry["url"], "reading_utc": reading_utc(text, d)}
 
 
 def fetch_for_dates(dates: list[date], cache_dir: Path | None = None,
@@ -299,7 +365,7 @@ def fetch_for_dates(dates: list[date], cache_dir: Path | None = None,
     Dlaczego tak: nie pobieramy całego archiwum (1000+ plików), tylko dni potrzebne scenom;
       `v_npp` zostaje per scena, bo pojemność przy NPP zmieniła się między 2021 a 2024.
     Wejście → wyjście: lista dat scen → DataFrame (scene_date, bulletin_date, source, v_current,
-      v_npp, v_maxpp, url); sceny bez komunikatu nie mają wiersza.
+      v_npp, v_maxpp, reading_utc, url); sceny bez komunikatu nie mają wiersza.
     Jak to obronić: żadnej interpolacji ani dopisywania wartości; ślad w logu dla każdej straty.
     """
     cache_dir = cache_dir or data_path("raw", "rzgw")
@@ -313,7 +379,8 @@ def fetch_for_dates(dates: list[date], cache_dir: Path | None = None,
         found = False
         while (bd := choose_bulletin(sd, avail)) is not None:
             if bd not in parsed:
-                parsed[bd] = next((r for e in avail[bd] if (r := _load(bd, e, cache_dir))), None)
+                loaded = [r for e in avail[bd] if (r := _load(bd, e, cache_dir))]
+                parsed[bd] = pick_reading(loaded) if loaded else None
             if parsed[bd] is not None:
                 rows.append({"scene_date": sd, "bulletin_date": bd} | parsed[bd])
                 found = True
@@ -321,5 +388,5 @@ def fetch_for_dates(dates: list[date], cache_dir: Path | None = None,
             del avail[bd]
         if not found:
             log.info("%s: brak czytelnego komunikatu w oknie ±1 dzień", sd)
-    cols = ["scene_date", "bulletin_date", "source", "v_current", "v_npp", "v_maxpp", "url"]
+    cols = ["scene_date", "bulletin_date", "source", "v_current", "v_npp", "v_maxpp", "reading_utc", "url"]
     return pd.DataFrame(rows, columns=cols)

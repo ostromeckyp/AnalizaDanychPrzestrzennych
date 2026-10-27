@@ -4,8 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from mielizna.bulletins import (choose_bulletin, list_govpl, parse_govpl_text, parse_pl_number,
-                                parse_rzgw_text, wayback_index)
+import logging
+
+from mielizna import bulletins
+from mielizna.bulletins import (choose_bulletin, fetch_for_dates, list_govpl, parse_govpl_text,
+                                parse_pl_number, parse_rzgw_text, pick_reading, reading_utc,
+                                text_date, wayback_index)
 
 FIX = Path(__file__).parent / "fixtures"
 
@@ -81,3 +85,65 @@ def test_neighbour_tie_prefers_earlier_and_none_when_far():
     assert choose_bulletin(date(2021, 5, 10), {date(2021, 5, 11): "b"}) == date(2021, 5, 11)
     assert choose_bulletin(date(2021, 5, 10), {date(2021, 5, 12): "b"}) is None
     assert choose_bulletin(date(2021, 5, 10), {}) is None
+
+
+def test_reading_utc_formats():
+    d = date(2024, 9, 18)
+    assert reading_utc("... na godzinę 6:00 UTC (8:00 CEST). ", d) == "06:00"
+    assert reading_utc("Sytuacja na dzień 20.03.2025 r. na godz. 600 (UTC)  \nZbiorniki", d) == "06:00"
+    assert reading_utc("Sytuacja na dzień 11.09.2025 r. na godz. 1200 (UTC)", d) == "12:00"
+    assert reading_utc("z dnia 18 września 2024 r. na godzinę 16:00 (14:00 UTC) ", d) == "14:00"
+    assert reading_utc("brak godziny", d) is None
+
+
+def test_reading_utc_local_only_converted_from_warsaw():
+    assert reading_utc("z dnia 21 września 2024 r. na godzinę 16:00 ", date(2024, 9, 21)) == "14:00"  # CEST
+    assert reading_utc("z dnia 5 grudnia 2021 r. na godzinę 8:00 ", date(2021, 12, 5)) == "07:00"    # CET
+
+
+def _row(hour, v):
+    return {"v_current": v, "reading_utc": hour, "source": "govpl", "url": f"u{hour}"}
+
+
+def test_pick_reading_nearest_overpass():
+    assert pick_reading([_row("06:00", 1.0), _row("12:00", 2.0)])["v_current"] == 2.0
+    assert pick_reading([_row("12:00", 2.0), _row("06:00", 1.0)])["v_current"] == 2.0
+    assert pick_reading([_row("08:00", 1.0), _row("12:00", 2.0)])["v_current"] == 1.0  # tie 2h/2h -> earlier
+
+
+def test_pick_reading_unparseable_never_preferred():
+    assert pick_reading([_row(None, 9.0), _row("06:00", 1.0)])["v_current"] == 1.0
+    assert pick_reading([_row("06:00", 1.0), _row(None, 9.0)])["v_current"] == 1.0
+    assert pick_reading([_row(None, 9.0)])["v_current"] == 9.0
+
+
+def test_fetch_for_dates_same_day_picks_12_utc(monkeypatch):
+    rows = {"a": _row("06:00", 1.0), "b": _row("12:00", 2.0)}
+    monkeypatch.setattr(bulletins, "_load", lambda d, e, c: rows[e["file"]] | {"source": e["source"]})
+    govpl = [(date(2024, 9, 18), "https://www.gov.pl/attachment/a"), ]
+    cand = {date(2024, 9, 18): [{"source": "govpl", "url": "ua", "file": "a"},
+                                {"source": "govpl", "url": "ub", "file": "b"}]}
+    monkeypatch.setattr(bulletins, "_candidates", lambda w, g: cand)
+    df = fetch_for_dates([date(2024, 9, 18)], wayback={}, govpl=govpl, cache_dir=Path("."))
+    assert df.v_current.tolist() == [2.0] and df.reading_utc.tolist() == ["12:00"]
+
+
+def test_text_date_missing_space_before_year():
+    assert text_date("z dnia 4 października2021 r.") == date(2021, 10, 4)
+    assert text_date("z dnia 27 grudnia 2021 r.") == date(2021, 12, 27)
+
+
+def test_load_warns_when_pdf_has_no_date(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(bulletins, "_download", lambda url, dest: True)
+    monkeypatch.setattr(bulletins, "_pdf_text", lambda p: read("govpl_2024-03-12.txt"))
+    with caplog.at_level(logging.WARNING, logger="bulletins"):
+        row = bulletins._load(date(2024, 3, 12), {"source": "govpl", "url": "u", "file": "x.pdf"}, tmp_path)
+    assert row is not None and any("brak daty" in r.message for r in caplog.records)
+
+
+def test_list_govpl_recovers_typo_year():
+    html = ('<a href="https://www.gov.pl/attachment/11111111-1111-1111-1111-111111111111">'
+            'Komunikat z dnia 15.11.20204</a>'
+            '<a href="https://www.gov.pl/attachment/22222222-2222-2222-2222-222222222222">'
+            'Komunikat z dnia 15.11.20259</a>')
+    assert [d for d, _ in list_govpl(html)] == [date(2024, 11, 15)]   # 20259 nie pasuje do 2020X - pominięte
