@@ -57,8 +57,9 @@ def combine_evidence(rf: np.ndarray, otsu: np.ndarray) -> np.ndarray:
       Dowód, że względem samego RF z_max nie spada: (1) woda RF∧Otsu ⊆ woda RF; (2) ląd RF ⊆ ląd
       połączony (ląd, gdy któraś maska == 0). Zatem każda zmiana względem dowodów RF-only to: woda →
       ląd, woda → nieznane albo nieznane → ląd; nigdy ląd → woda ani ląd → nieznane. Usunięcie wody lub
-      dodanie lądu nie obniża z_max (z zastrzeżeniem σ_C ≥ σ_nonC przy dodawaniu lądu ze sceny C, jak w
-      `compute_bounds`; woda C jest i tak ignorowana, R24). Test własności na losowych maskach.
+      dodanie lądu nie obniża z_max, dla dowolnych σ: dodany ląd / usunięta woda dokłada do errors(k)
+      składnik nie malejący → k_max tylko rośnie → zbiór wód zgodnych kurczy się → min(h+kσ) po
+      podzbiorze nie spada. Test własności na losowych maskach i losowych σ.
       Wcześniejsza wersja dawała 255, gdy Otsu == 255 a RF == 0 - kasowała ląd RF i w 0,2% px obniżała z_max.
     Wejście → wyjście: dwie tablice uint8 {0,1,255} dowolnego kształtu → uint8 tego samego kształtu.
       Uwaga (R24): wodę ze scen wariantu C zamienia na 255 dopiero `compute_bounds` (ma is_c), nie ta funkcja.

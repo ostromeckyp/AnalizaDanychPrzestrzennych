@@ -239,28 +239,32 @@ def main(argv=None) -> int:
             fails.append(msg)
 
     results = {}
-    for name in periods:
-        span = cfg["periods"][name]
-        sel, rf_s, ev, is_c, res = run_period(name, span, scenes, aoi)
-        version = bottom.model_version(scenes_bytes, sel.date.tolist(), sha)
-        meta = bottom.build_meta(name, tuple(span), sel, res, aoi, version, 1.0, sha, thr)
-        out = proc / "model" / name
-        bottom.write_model(res, grid, out, meta, aoi)
-        results[name] = (sel, res)
-        qc = proc / "qc"
-        fl = res["flags"]
-        plot_map(np.where(aoi, res["z"], np.nan), qc / f"bottom_z_{name}.png", f"z dna [m] ({name}); jasnoniebieski = zawsze woda",
-                 "viridis", 193, 196.5, special=aoi & ((fl & bottom.FLAG_ALWAYS_WATER) > 0))
-        plot_map(np.where(aoi, res["unc"], np.nan), qc / f"bottom_unc_{name}.png", f"niepewność [m] ({name})",
-                 "magma", 0, 1.5)
-        obs = res["obs_count"]
-        ratio = np.where(aoi & (obs > 0), res["n_conflict"] / np.maximum(obs, 1), np.nan)
-        plot_map(ratio, qc / f"bottom_conflict_{name}.png", f"n_conflict / obs_count ({name})", "inferno", 0, 0.3)
+    try:
+        for name in periods:
+            span = cfg["periods"][name]
+            sel, rf_s, ev, is_c, res = run_period(name, span, scenes, aoi)
+            version = bottom.model_version(scenes_bytes, sel.date.tolist(), sha)
+            meta = bottom.build_meta(name, tuple(span), sel, res, aoi, version, 1.0, sha, thr)
+            out = proc / "model" / name
+            bottom.write_model(res, grid, out, meta, aoi)
+            results[name] = (sel, res)
+            qc = proc / "qc"
+            fl = res["flags"]
+            plot_map(np.where(aoi, res["z"], np.nan), qc / f"bottom_z_{name}.png", f"z dna [m] ({name}); jasnoniebieski = zawsze woda",
+                     "viridis", 193, 196.5, special=aoi & ((fl & bottom.FLAG_ALWAYS_WATER) > 0))
+            plot_map(np.where(aoi, res["unc"], np.nan), qc / f"bottom_unc_{name}.png", f"niepewność [m] ({name})",
+                     "magma", 0, 1.5)
+            obs = res["obs_count"]
+            ratio = np.where(aoi & (obs > 0), res["n_conflict"] / np.maximum(obs, 1), np.nan)
+            plot_map(ratio, qc / f"bottom_conflict_{name}.png", f"n_conflict / obs_count ({name})", "inferno", 0, 0.3)
 
-        verify_period(name, sel, rf_s, ev, is_c, res, version, aoi, lake, core, dist, grid, qc, check)
+            verify_period(name, sel, rf_s, ev, is_c, res, version, aoi, lake, core, dist, grid, qc, check)
 
-    if "pre_flood" in results and "post_flood" in results:
-        compare_periods(results["pre_flood"], results["post_flood"], aoi)
+        if "pre_flood" in results and "post_flood" in results:
+            compare_periods(results["pre_flood"], results["post_flood"], aoi)
+    except BaseException:
+        finish(["wyjątek"], proc, periods)
+        raise
     log.info("9. kontrola QGIS (nałożenie bottom_z.tif na ortofotomapę) - ręczna, poza skryptem")
     return finish(fails, proc, periods)
 

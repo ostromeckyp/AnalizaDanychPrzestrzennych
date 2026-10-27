@@ -73,7 +73,7 @@ def test_combine_evidence_otsu_255_does_not_erase_rf_land():
 
 def test_r25_combined_never_lowers_zmax_vs_rf_only():
     """Dowod: RF∧Otsu-woda ⊆ RF-woda, RF-lad ⊆ polaczony-lad => wzgledem samego RF tylko usuwamy wode lub
-    dokladamy lad => z_max (NaN = +inf) nie spada (przy sigma_C >= sigma_nonC)."""
+    dokladamy lad => z_max (NaN = +inf) nie spada, dla dowolnych sigma (takze sigma_C < sigma_nonC)."""
     for seed in range(8):
         rng = np.random.default_rng(500 + seed)
         T = 25
@@ -81,7 +81,7 @@ def test_r25_combined_never_lowers_zmax_vs_rf_only():
         ot = rng.choice([0, 1, 255], size=(T, 20, 20), p=[.3, .45, .25]).astype(np.uint8)
         h = np.round(rng.uniform(193, 197, T), 1)
         isc = rng.random(T) < .3
-        sig = np.where(isc, rng.uniform(.3, .6, T), rng.uniform(.05, .3, T))
+        sig = rng.uniform(0, .8, T)                    # dowolne sigma, bez zalozenia sigma_C >= sigma_nonC
         comb = compute_bounds(combine_evidence(rf, ot), h, sig, is_c=isc)
         base = compute_bounds(rf, h, sig, is_c=isc)
         zc = np.where(np.isnan(comb["z_max"]), np.inf, comb["z_max"])
@@ -197,14 +197,13 @@ def test_strips_do_not_change_result():
 
 
 def test_adding_land_never_lowers_zmax():
-    """Własność z U1/R24 przy sigma_C >= sigma_nonC (przypadek realny: C 0.49, B 0.15; dowód z R24 z niej
-    nie korzysta, bo woda C nie wchodzi do z_max)."""
+    """Własność z U1/R24/R25 dla dowolnych sigma (także sigma_C < sigma_nonC)."""
     rng = np.random.default_rng(1)
     T = 20
     m = rng.choice([0, 1, 255], size=(T, 20, 20), p=[.3, .4, .3]).astype(np.uint8)
     h = np.round(rng.uniform(193, 197, T), 1)
     isc = rng.random(T) < .3
-    sig = np.where(isc, rng.uniform(.3, .6, T), rng.uniform(.05, .3, T))
+    sig = rng.uniform(0, .8, T)
     old = compute_bounds(m, h, sig, is_c=isc)
     m2 = m.copy()
     flip = (m == 255) & (rng.random(m.shape) < .5)
