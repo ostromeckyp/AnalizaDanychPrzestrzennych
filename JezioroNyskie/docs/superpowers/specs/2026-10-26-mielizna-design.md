@@ -83,6 +83,16 @@ Nazwy komponentów z §16.1 briefu zachowujemy w wersji React: `MapPage`, `Point
 - **TanStack Query** — cache po kluczu z zaokrąglonych parametrów (np. `['zones', h, d, m]`), `placeholderData` = poprzedni wynik (mapa nie znika podczas przeliczania, pigułka „Przeliczam strefy…”), retry, `onlineManager` dla stanu „Brak połączenia”.
 - **Klient API** — czyste funkcje `fetch` + typy TS odpowiedzi z §8.2 briefu.
 
+### Backend (ustalone 27.10)
+- **Bez bazy danych.** Przy starcie backend wczytuje do pamięci produkty pipeline'u: `bottom_z/zmin/zmax.tif`, `obs_count.tif`, `scenes.json`, `shorelines.gpkg`, `marinas.gpkg`, `kz_pojemnosc_rzedna.csv`, krzywą powierzchnia↔poziom, `rf_model.joblib`.
+- **Endpointy:** z §8.2 briefu + `/api/current-level` (§2 pkt 6) + obrazy warstw `GET /api/layers/bottom.png` i `/api/layers/uncertainty.png` (z bbox w `/api/meta`) — decyzja Claude; kafle rastrowe odłożone.
+- **Układ kodu (decyzja Claude):** `main.py` (tylko endpointy) · `zones.py` (reguła stref §6.4 + wektoryzacja, czysta logika, testy) · `point.py` · `current.py` (najnowsza scena + RF + krzywa) · `data.py` (wczytanie plików) · `schemas.py` (Pydantic = kontrakt z frontem) · `cache.py`.
+- **Cache (autor zaakceptował propozycję, bez Redisa):**
+  1. przeglądarka — TanStack Query po `[zones, h, d, m]`;
+  2. HTTP — `Cache-Control` + `ETag` z wersją modelu (hash produktów pipeline'u);
+  3. backend — cache w pamięci (`cachetools`, LRU + TTL) po zaokrąglonych `(h, d, m, wersja modelu)`; `/api/current-level` cache'owany po dacie najnowszej sceny, sprawdzanie nowej sceny co kilka godzin.
+  Cache za małym interfejsem `get/set`, żeby ewentualna podmiana na Redis (wiele instancji) była jednym plikiem i jednym kontenerem. Redis teraz poza zakresem: jeden proces, demo lokalne.
+
 ## 4. Kod pisany pod naukę i obronę (decyzja Claude, wynika ze sposobu pracy)
 - Pipeline jako ponumerowane, liniowe skrypty (`pipeline/01_…py` … wg §9 briefu). Każdy zaczyna się od docstringu: **co robi, dlaczego tak, wejście → wyjście, jak to obronić**.
 - Prostota ponad spryt: jawne pętle/kroki numpy zamiast jednolinijkowców; nazwy zmiennych jak w briefie (`h_t`, `z_min`, `z_max`, `D_lo`, `D_hi`).
