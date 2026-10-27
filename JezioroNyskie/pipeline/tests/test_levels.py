@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from mielizna.config import data_path
-from mielizna.levels import (assign_levels, fit_area_level, load_area_level_curve, load_overrides,
+from mielizna.levels import (assign_levels, curve_areas, fit_area_level, load_area_level_curve, load_overrides,
                              save_area_level_curve, variant_b, variant_c, write_scenes_json)
 
 KNOWN_CSV = data_path("reference", "known_levels.csv")
@@ -67,8 +67,8 @@ def test_variant_c_sigma_extrapolation_and_bias_flag():
                        "area_km2": [15.0, 25.0, 15.0], "lake_nodata_pct": [0.0, 0.0, 5.0]})
     r = variant_c(sc, c)
     assert (r.h_method == "C").all()
-    assert r.h_sigma.iloc[0] == pytest.approx(c.rmse)
-    assert r.h_sigma.iloc[1] == pytest.approx(c.rmse + 0.1)
+    assert r.h_sigma.iloc[0] == pytest.approx(c.sigma)
+    assert r.h_sigma.iloc[1] == pytest.approx(c.sigma + 0.1)
     assert list(r.area_biased) == [False, False, True]
 
 
@@ -111,3 +111,56 @@ def test_scenes_json_schema(tmp_path):
     assert [r["date"] for r in rows] == ["2019-01-01", "2020-01-08"]  # posortowane
     assert s["h_t"] == 193.12 and s["area_km2"] == 12.346 and 18 < s["capacity_mln_m3"] < 40
     assert rows[0]["h_t"] is None and rows[0]["capacity_mln_m3"] is None and rows[0]["qc_ok"] is False
+
+
+def _offset_data():
+    rng = np.random.default_rng(1)
+    a = np.linspace(10, 18, 60)
+    groups = np.repeat([2017, 2018, 2019, 2020], 15)
+    off = {2017: 0.4, 2018: -0.4, 2019: 0.3, 2020: -0.3}
+    h = 192 + 0.5 * (a - 10) + np.array([off[g] for g in groups]) + rng.normal(0, 0.03, a.size)
+    perm = rng.permutation(a.size)
+    return a[perm], h[perm], groups[perm]
+
+
+def test_loyo_exceeds_loo_with_per_group_offsets_and_nan_without_groups():
+    a, h, g = _offset_data()
+    c = fit_area_level(a, h, groups=g)
+    assert np.isfinite(c.rmse_loyo) and c.rmse_loyo > c.rmse
+    assert c.sigma == c.rmse_loyo
+    c0 = fit_area_level(a, h)
+    assert np.isnan(c0.rmse_loyo) and c0.sigma == c0.rmse
+
+
+def test_variant_c_uses_loyo_sigma_and_reports_otsu_area():
+    c = fit_area_level(np.array([10, 12, 14, 16, 18.]), np.array([192, 193, 194, 195, 196.]))
+    c.rmse_loyo = 0.49
+    sc = pd.DataFrame({"date": [date(2018, 1, 1), date(2018, 1, 8)], "area_km2": [15.0, 25.0],
+                       "lake_nodata_pct": [0.0, 0.0]})
+    r = variant_c(sc, c)
+    assert r.h_sigma.iloc[0] == pytest.approx(0.49) and r.h_sigma.iloc[1] == pytest.approx(0.59)
+    assert "A_otsu=15.00 km2" in r.h_source.iloc[0]
+
+
+def test_curve_json_roundtrip_keeps_loyo_and_area_source(tmp_path):
+    a, h, g = _offset_data()
+    c = fit_area_level(a, h, groups=g)
+    save_area_level_curve(c, tmp_path / "c.json")
+    d = json.loads((tmp_path / "c.json").read_text())
+    assert d["rmse_loyo"] == pytest.approx(c.rmse_loyo) and d["rmse_loo"] == pytest.approx(c.rmse)
+    assert d["area_source"] == "area_otsu_km2 (Otsu, classify_stats.csv)"
+    assert load_area_level_curve(tmp_path / "c.json").rmse_loyo == pytest.approx(c.rmse_loyo)
+
+
+def test_curve_areas_picks_otsu_and_raises_on_missing_date():
+    cs = pd.DataFrame({"date": ["2020-01-08", "2020-01-15"], "area_km2": [1.0, 2.0], "area_otsu_km2": [11.0, 12.0]})
+    assert curve_areas(cs, [date(2020, 1, 15)]) == {date(2020, 1, 15): 12.0}
+    with pytest.raises(ValueError):
+        curve_areas(cs, [date(2020, 1, 8), date(2020, 2, 1)])
+
+
+def test_assign_levels_without_areas_does_not_label_qc_ok_scene_excluded():
+    df = assign_levels([date(2020, 2, 1), date(2020, 1, 8)], pd.DataFrame([bulletin("2020-01-08", 34.84)]),
+                       load_overrides(KNOWN_CSV)).set_index("date")
+    assert df.loc[date(2020, 1, 8), "h_method"] == "B"
+    assert df.loc[date(2020, 2, 1), "h_method"] != "qc_excluded"
