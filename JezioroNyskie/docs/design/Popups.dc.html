@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Popup punktu — warianty</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+a{color:#1C5D8C}a:hover{color:#0E3F63}
+button{font:inherit;color:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1360px; height: 560px; padding: 48px 40px; background: #E9EEF0; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 15px; line-height: 1.4; color: #0E2433; display: flex; flex-direction: column; gap: 28px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-size: 24px; font-weight: 600">Popup punktu</h1>
+<p style="margin: 0; color: #4C6475">Po kliknięciu w mapę. Dane z <code style="font-size: 14px">/api/point</code>, ocena strefy dla jachtu 1,20 m, zapas 0,30 m, poziom 195,20 m n.p.m.</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; align-items: start">
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 13px; font-weight: 600; color: #4C6475">A · Woda, wynik z modelu</span>
+<div role="dialog" aria-label="Informacje o punkcie" style="position: relative; background: #FFFFFF; border: 1px solid #D8E0E5; border-radius: 12px; box-shadow: 0 10px 30px rgba(14,36,51,.16)">
+<div style="padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 13px; color: #4C6475">Głębokość w tym miejscu</span><button aria-label="Zamknij" style="width: 36px; height: 36px; margin: -8px -8px -8px 0; border: 0; background: transparent">✕</button></div>
+<div style="font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums">1,4–1,9 m</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #F3F6F8"><span style="width: 22px; height: 14px; border-radius: 3px; flex: none; background: repeating-linear-gradient(45deg, #F2B134 0 4px, #8A5A00 4px 6.5px)"></span><span style="font-size: 14px"><strong>Ryzykowna</strong> dla jachtu 1,20 m</span></div>
+<span style="font-size: 13px; color: #4C6475; font-variant-numeric: tabular-nums">Pod kilem 0,20 do 0,70 m · wymagany zapas 0,30 m</span>
+</div>
+<dl style="margin: 0; padding: 10px 16px 14px; border-top: 1px solid #D8E0E5; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13px; font-variant-numeric: tabular-nums">
+<dt style="color: #4C6475">Wysokość dna</dt><dd style="margin: 0; text-align: right">193,55 m n.p.m. ± 0,25</dd>
+<dt style="color: #4C6475">Obserwacje satelitarne</dt><dd style="margin: 0; text-align: right">14 scen</dd>
+</dl>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 13px; font-weight: 600; color: #4C6475">B · Część zawsze zalana</span>
+<div role="dialog" aria-label="Informacje o punkcie" style="background: #FFFFFF; border: 1px solid #D8E0E5; border-radius: 12px; box-shadow: 0 10px 30px rgba(14,36,51,.16)">
+<div style="padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 13px; color: #4C6475">Głębokość w tym miejscu</span><button aria-label="Zamknij" style="width: 36px; height: 36px; margin: -8px -8px -8px 0; border: 0; background: transparent">✕</button></div>
+<div style="font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums">≥ 4,8 m</div>
+<span style="font-size: 13px; color: #4C6475">Głębiej niż 4,8 m (poniżej najniższego zaobserwowanego stanu 190,40 m n.p.m.).</span>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #F3F6F8"><span style="width: 22px; height: 14px; border-radius: 3px; flex: none; background: #2BA6A0"></span><span style="font-size: 14px"><strong>Bezpieczna</strong> dla jachtu 1,20 m</span></div>
+</div>
+<dl style="margin: 0; padding: 10px 16px 14px; border-top: 1px solid #D8E0E5; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13px; font-variant-numeric: tabular-nums">
+<dt style="color: #4C6475">Wysokość dna</dt><dd style="margin: 0; text-align: right">&lt; 190,40 m n.p.m.</dd>
+<dt style="color: #4C6475">Obserwacje satelitarne</dt><dd style="margin: 0; text-align: right">brak (zawsze woda)</dd>
+</dl>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 13px; font-weight: 600; color: #4C6475">C · Ląd przy tym poziomie</span>
+<div role="dialog" aria-label="Informacje o punkcie" style="background: #FFFFFF; border: 1px solid #D8E0E5; border-radius: 12px; box-shadow: 0 10px 30px rgba(14,36,51,.16)">
+<div style="padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 13px; color: #4C6475">W tym miejscu</span><button aria-label="Zamknij" style="width: 36px; height: 36px; margin: -8px -8px -8px 0; border: 0; background: transparent">✕</button></div>
+<div style="font-size: 30px; font-weight: 600">Ląd</div>
+<span style="font-size: 13px; color: #4C6475; font-variant-numeric: tabular-nums">Dno 0,2–0,6 m powyżej lustra wody przy 195,20 m n.p.m.</span>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #F3F6F8"><span style="width: 22px; height: 14px; border-radius: 3px; flex: none; background: #8E1B4F"></span><span style="font-size: 14px"><strong>Zbyt płytka / ląd</strong></span></div>
+</div>
+<dl style="margin: 0; padding: 10px 16px 14px; border-top: 1px solid #D8E0E5; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13px; font-variant-numeric: tabular-nums">
+<dt style="color: #4C6475">Wysokość terenu</dt><dd style="margin: 0; text-align: right">195,62 m n.p.m. ± 0,20</dd>
+<dt style="color: #4C6475">Obserwacje satelitarne</dt><dd style="margin: 0; text-align: right">31 scen</dd>
+</dl>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 13px; font-weight: 600; color: #4C6475">D · Poza obszarem modelu</span>
+<div role="dialog" aria-label="Informacje o punkcie" style="background: #FFFFFF; border: 1px solid #D8E0E5; border-radius: 12px; box-shadow: 0 10px 30px rgba(14,36,51,.16)">
+<div style="padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 13px; color: #4C6475">W tym miejscu</span><button aria-label="Zamknij" style="width: 36px; height: 36px; margin: -8px -8px -8px 0; border: 0; background: transparent">✕</button></div>
+<div style="font-size: 22px; font-weight: 600">Poza obszarem modelu</div>
+<span style="font-size: 14px; color: #33414A">Model obejmuje czaszę zbiornika do rzędnej Max PP 195,70 m n.p.m. Tutaj nie ma danych o dnie.</span>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1px dashed #AFC0CB; font-size: 13px; color: #4C6475">Bez oceny strefy</div>
+</div>
+</div>
+</div>
+
+</div>
+<p style="margin: 0; font-size: 13px; color: #4C6475">Liczby w popupach są przykładowe. Głębokość zawsze jako przedział (dolna i górna granica z niepewności modelu); ocena strefy liczona od dolnej granicy.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":560}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

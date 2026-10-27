@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Mapa — mobile</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+a{color:#1C5D8C}a:hover{color:#0E3F63}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:48px;background:transparent;margin:0;position:relative}
+input[type=range]::-webkit-slider-runnable-track{height:8px;background:transparent}
+input[type=range]::-moz-range-track{height:8px;background:transparent}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:34px;height:34px;border-radius:50%;background:var(--thumb);border:3px solid var(--accent);margin-top:-13px;box-shadow:0 1px 5px rgba(0,0,0,.3)}
+input[type=range]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:var(--thumb);border:3px solid var(--accent);box-shadow:0 1px 5px rgba(0,0,0,.3)}
+</style>
+</helmet>
+<div style="--accent: {{t.accent}}; --thumb: {{t.panel}}; position: relative; width: 390px; height: 844px; overflow: hidden; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 15px; line-height: 1.4; color: {{t.text}}; background: {{t.mapBg}}">
+
+<div style="position: absolute; inset: 0">
+<dc-import name="LakeMap" theme="{{theme}}" zones="{{layers.zones}}" bathy="{{layers.bathy}}" unc="{{layers.unc}}" history="{{layers.hist}}" marinas="{{layers.marinas}}" hint-size="100%,100%"></dc-import>
+</div>
+
+<header style="position: absolute; top: 12px; left: 12px; right: 12px; height: 52px; padding: 0 6px 0 10px; display: flex; align-items: center; gap: 10px; background: {{t.panel}}; border: 1px solid {{t.border}}; border-radius: 14px; box-shadow: 0 4px 14px rgba(14,36,51,.14)">
+<svg width="30" height="30" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="9" fill="{{t.accent}}"></rect><path d="M7 13c3-2.4 6-2.4 10 0s7 2.4 10 0M7 19c3-2.4 6-2.4 10 0s7 2.4 10 0M7 25c3-2.4 6-2.4 10 0s7 2.4 10 0" fill="none" stroke="{{t.accentText}}" stroke-width="2" stroke-linecap="round"></path></svg>
+<div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+<h1 style="margin: 0; font-size: 16px; font-weight: 600">Mielizna</h1>
+<span style="font-size: 12px; color: {{t.muted}}">Jezioro Nyskie</span>
+</div>
+<a href="History.dc.html" aria-label="Historia linii brzegowych" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: {{t.text}}; border-radius: 10px"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="1.8"></circle><path d="M11 6.5V11l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></a>
+<a href="Method.dc.html" aria-label="O metodzie" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: {{t.text}}; border-radius: 10px"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="1.8"></circle><path d="M11 10v5M11 7v.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></a>
+</header>
+
+<div style="position: absolute; top: 76px; right: 12px; display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: {{t.panel}}; border: 1px solid {{t.border}}; box-shadow: 0 4px 14px rgba(14,36,51,.12)">
+<button aria-label="Przybliż" style="width: 44px; height: 44px; border: 0; background: transparent; border-bottom: 1px solid {{t.border}}; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9h12M9 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button>
+<button aria-label="Oddal" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button>
+</div>
+
+<sc-if value="{{collapsed}}" hint-placeholder-val="{{ true }}">
+<span style="position: absolute; right: 12px; bottom: 300px; padding: 3px 8px; border-radius: 6px; background: {{t.panel}}; color: {{t.text}}; font-size: 11px; opacity: .92">© OSM · Sentinel-2 · GUGiK</span>
+</sc-if>
+
+<section aria-label="Parametry i legenda" style="position: absolute; left: 0; right: 0; bottom: 0; height: {{sheetH}}; display: flex; flex-direction: column; background: {{t.panel}}; border-top: 1px solid {{t.border}}; border-radius: 20px 20px 0 0; box-shadow: 0 -8px 28px rgba(14,36,51,.18)">
+<button onClick="{{toggleSheet}}" aria-expanded="{{expanded}}" aria-label="{{sheetLabel}}" style="flex: none; height: 28px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center"><span style="width: 40px; height: 5px; border-radius: 3px; background: {{t.borderStrong}}"></span></button>
+
+<sc-if value="{{collapsed}}" hint-placeholder-val="{{ true }}">
+<div style="padding: 0 16px 12px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 12px; color: {{t.muted}}">Zanurzenie</span>
+<div style="display: flex; align-items: center; gap: 4px">
+<button aria-label="Zmniejsz zanurzenie" onClick="{{decDraft}}" style="width: 44px; height: 44px; border-radius: 10px; border: 1px solid {{t.border}}; background: {{t.subtle}}; font-size: 20px">−</button>
+<span style="flex: 1; text-align: center; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap">{{draftStr}} m</span>
+<button aria-label="Zwiększ zanurzenie" onClick="{{incDraft}}" style="width: 44px; height: 44px; border-radius: 10px; border: 1px solid {{t.border}}; background: {{t.subtle}}; font-size: 20px">+</button>
+</div>
+</div>
+<button onClick="{{toggleSheet}}" style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 0 0 0 12px; border: 0; border-left: 1px solid {{t.border}}; background: transparent; text-align: left">
+<span style="font-size: 12px; color: {{t.muted}}">Poziom wody</span>
+<span style="min-height: 44px; display: flex; align-items: baseline; gap: 4px; padding-top: 8px"><span style="font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums">{{levelStr}}</span><span style="font-size: 13px; color: {{t.muted}}">m n.p.m.</span></span>
+</button>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 18px; height: 12px; border-radius: 3px; background: {{t.safe}}"></span>Bezpieczna</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 18px; height: 12px; border-radius: 3px; background: repeating-linear-gradient(45deg, #F2B134 0 3px, {{t.hatch}} 3px 5px)"></span>Ryzykowna</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 18px; height: 12px; border-radius: 3px; background: {{t.danger}}"></span>Zbyt płytka / ląd</span>
+</div>
+<p style="margin: 0; font-size: 13px; color: {{t.muted}}; font-variant-numeric: tabular-nums">{{summary}}</p>
+</div>
+</sc-if>
+
+<sc-if value="{{expanded}}" hint-placeholder-val="{{ false }}">
+<div style="flex: 1; overflow-y: auto; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">Parametry</h2>
+<button onClick="{{toggleSheet}}" style="min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: {{t.subtle}}; font-size: 14px; font-weight: 600">Pokaż mapę</button>
+</div>
+
+<section style="display: flex; flex-direction: column; gap: 10px">
+<label for="m-draft-{{theme}}" style="font-size: 14px; font-weight: 600">Zanurzenie jachtu</label>
+<div style="display: flex; gap: 8px">
+<button aria-label="Zmniejsz zanurzenie o 0,05 m" onClick="{{decDraft}}" style="width: 56px; min-height: 56px; border-radius: 12px; border: 1px solid {{t.border}}; background: {{t.subtle}}; font-size: 24px">−</button>
+<div style="flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 6px; border-radius: 12px; border: 1px solid {{t.borderStrong}}">
+<input id="m-draft-{{theme}}" type="text" inputmode="decimal" value="{{draftStr}}" readonly style="width: 96px; border: 0; background: transparent; padding: 12px 0 8px; font-size: 30px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; outline: none">
+<span style="font-size: 17px; color: {{t.muted}}">m</span>
+</div>
+<button aria-label="Zwiększ zanurzenie o 0,05 m" onClick="{{incDraft}}" style="width: 56px; min-height: 56px; border-radius: 12px; border: 1px solid {{t.border}}; background: {{t.subtle}}; font-size: 24px">+</button>
+</div>
+<div role="group" aria-label="Typowe jachty" style="display: flex; gap: 6px; overflow-x: auto; margin: 0 -16px; padding: 0 16px 4px">
+<sc-for list="{{presets}}" as="p" hint-placeholder-count="4">
+<button onClick="{{p.pick}}" aria-pressed="{{p.pressed}}" style="{{p.style}}"><span>{{p.label}}</span><span style="font-variant-numeric: tabular-nums; color: {{t.muted}}">{{p.val}}</span></button>
+</sc-for>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<span id="m-level-{{theme}}" style="font-size: 14px; font-weight: 600">Poziom wody</span>
+<button style="min-height: 44px; padding: 0 4px; border: 0; background: transparent; font-size: 14px; color: {{t.accent}}; font-weight: 500">Podaj pojemność (mln m³)</button>
+</div>
+<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums">{{levelStr}}</span><span style="font-size: 16px; color: {{t.muted}}">m n.p.m.</span><span style="margin-left: auto; font-size: 13px; color: {{t.muted}}; font-variant-numeric: tabular-nums">≈ {{volStr}} mln m³</span></div>
+<div style="position: relative">
+<div aria-hidden="true" style="position: absolute; left: 17px; right: 17px; top: 20px; height: 8px; border-radius: 4px; background: {{t.track}}">
+<div style="position: absolute; left: 18.7%; width: 70.6%; top: 0; bottom: 0; background: {{t.trackObs}}; border-radius: 4px"></div>
+<span style="position: absolute; left: 18.7%; top: -6px; width: 2px; height: 20px; background: {{t.text}}"></span>
+<span style="position: absolute; left: 80%; top: -6px; width: 2px; height: 20px; background: {{t.text}}"></span>
+<span style="position: absolute; left: 89.3%; top: -6px; width: 2px; height: 20px; background: {{t.text}}"></span>
+</div>
+<input type="range" min="18900" max="19650" step="5" value="{{levelCm}}" onChange="{{onLevel}}" aria-labelledby="m-level-{{theme}}" aria-valuetext="{{levelAria}}">
+<div aria-hidden="true" style="position: relative; height: 32px; margin: 0 17px; font-size: 12px; color: {{t.muted}}; font-variant-numeric: tabular-nums; line-height: 1.25">
+<span style="position: absolute; left: 18.7%; transform: translateX(-50%); text-align: center">min. obs.<br>190,40</span>
+<span style="position: absolute; left: 80%; transform: translateX(-75%); text-align: center">NPP<br>195,00</span>
+<span style="position: absolute; left: 89.3%; transform: translateX(-15%); text-align: left">Max<br>195,70</span>
+</div>
+</div>
+<sc-if value="{{outOfRange}}" hint-placeholder-val="{{ false }}">
+<div role="alert" style="padding: 10px 12px; border-radius: 10px; background: {{t.warnBg}}; color: {{t.warnText}}; font-size: 13px"><strong>Poza zakresem obserwacji.</strong> Model dna jest ekstrapolowany, wynik mniej pewny.</div>
+</sc-if>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 14px; font-weight: 600">Warstwy</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{layerList}}" as="l" hint-placeholder-count="5">
+<button onClick="{{l.toggle}}" aria-pressed="{{l.pressed}}" style="{{l.style}}">{{l.label}}</button>
+</sc-for>
+</div>
+</section>
+
+<button style="min-height: 44px; display: flex; align-items: center; justify-content: space-between; border: 0; border-top: 1px solid {{t.border}}; background: transparent; padding: 10px 0 0; font-size: 14px; font-weight: 600; text-align: left">Ustawienia zaawansowane<span style="font-weight: 400; color: {{t.muted}}; font-variant-numeric: tabular-nums">zapas 0,30 m</span></button>
+
+<section aria-label="Legenda" style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: {{t.subtle}}">
+<span style="display: flex; align-items: center; gap: 10px; font-size: 14px"><span style="width: 26px; height: 16px; border-radius: 4px; background: {{t.safe}}"></span><strong>Bezpieczna</strong><span style="color: {{t.muted}}; font-size: 13px">≥ {{needStr}} m</span></span>
+<span style="display: flex; align-items: center; gap: 10px; font-size: 14px"><span style="width: 26px; height: 16px; border-radius: 4px; background: repeating-linear-gradient(45deg, #F2B134 0 4px, {{t.hatch}} 4px 6.5px)"></span><strong>Ryzykowna</strong><span style="color: {{t.muted}}; font-size: 13px">w zapasie / niepewności</span></span>
+<span style="display: flex; align-items: center; gap: 10px; font-size: 14px"><span style="width: 26px; height: 16px; border-radius: 4px; background: {{t.danger}}"></span><strong>Zbyt płytka / ląd</strong></span>
+<p style="margin: 4px 0 0; font-size: 13px; font-variant-numeric: tabular-nums">{{summary}}</p>
+</section>
+</div>
+</sc-if>
+
+<footer style="flex: none; padding: 8px 16px 14px; background: {{t.barBg}}; color: {{t.barText}}; font-size: 12px; line-height: 1.35"><strong>Projekt naukowy. Nie służy do nawigacji.</strong> Dno modelowane z obrazów satelitarnych z niepewnością.</footer>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"expanded":{"editor":"boolean","default":false},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  state = { open: null, draft: 1.2, level: 19520, layers: { zones: true, bathy: false, unc: false, hist: false, marinas: true } };
+
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const t = theme === 'dark' ? {
+      mapBg: '#151B20', panel: '#12191F', text: '#E6EEF3', muted: '#A3B6C3', border: '#2A3640', borderStrong: '#4A5A66', subtle: '#1A232B',
+      accent: '#6FB3E0', accentSoft: '#1B3446', accentText: '#0B1A24', track: '#2A3640', trackObs: '#3D6680',
+      warnBg: '#3A2A0A', warnText: '#F6C66B', barBg: '#0A0F13', barText: '#D6E1E8', safe: '#34B8B0', danger: '#D0508A', hatch: '#6B4300'
+    } : {
+      mapBg: '#EEF0EA', panel: '#FFFFFF', text: '#0E2433', muted: '#4C6475', border: '#D8E0E5', borderStrong: '#AFC0CB', subtle: '#F3F6F8',
+      accent: '#1C5D8C', accentSoft: '#E4EFF7', accentText: '#FFFFFF', track: '#DCE4EA', trackObs: '#9FC2DA',
+      warnBg: '#FFF4DB', warnText: '#6E4300', barBg: '#0E2433', barText: '#FFFFFF', safe: '#2BA6A0', danger: '#8E1B4F', hatch: '#8A5A00'
+    };
+    const s = this.state;
+    const open = s.open === null ? !!(this.props.expanded ?? false) : s.open;
+    const f2 = (v) => v.toFixed(2).replace('.', ',');
+    const f1 = (v) => v.toFixed(1).replace('.', ',');
+    const level = s.level / 100;
+    const need = s.draft + 0.3;
+    const vol = 125 * Math.pow(Math.max(0, level - 184) / 11.7, 1.8);
+    const setDraft = (v) => this.setState({ draft: Math.round(Math.min(3, Math.max(0.1, v)) * 20) / 20 });
+    const chip = (sel) => 'flex: none; min-height: 44px; padding: 6px 14px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; white-space: nowrap; border: 1px solid ' + (sel ? t.accent : t.border) + '; background: ' + (sel ? t.accentSoft : t.panel) + '; box-shadow: ' + (sel ? 'inset 0 0 0 1px ' + t.accent : 'none');
+    const defs = [
+      { id: 'omega', label: 'Omega', val: 0.9 },
+      { id: 'sas-up', label: 'Sasanka 660 · miecz w górze', val: 0.4 },
+      { id: 'sas-down', label: 'Sasanka 660 · miecz w dole', val: 1.25 }
+    ];
+    const match = defs.find((p) => Math.abs(p.val - s.draft) < 0.001);
+    const presets = defs.map((p) => {
+      const sel = !!match && match.id === p.id;
+      return { label: p.label, val: f2(p.val) + ' m', pressed: sel ? 'true' : 'false', style: chip(sel), pick: () => setDraft(p.val) };
+    });
+    presets.push({ label: 'Własny', val: match ? '' : f2(s.draft) + ' m', pressed: match ? 'false' : 'true', style: chip(!match), pick: () => {} });
+    const layerDefs = [['zones', 'Strefy'], ['bathy', 'Model dna'], ['unc', 'Niepewność'], ['hist', 'Linie brzegowe'], ['marinas', 'Przystanie i slipy'], ['ortho', 'Ortofotomapa']];
+    const layerList = layerDefs.map(([k, label]) => ({
+      label, pressed: s.layers[k] ? 'true' : 'false', style: chip(!!s.layers[k]),
+      toggle: () => this.setState({ layers: Object.assign({}, s.layers, { [k]: !s.layers[k] }) })
+    }));
+    const pct = Math.round(Math.min(96, Math.max(3, 92 - need * 22 + (level - 195) * 7)));
+    return {
+      theme, t, layers: s.layers,
+      expanded: open, collapsed: !open,
+      sheetH: open ? '760px' : '290px',
+      sheetLabel: open ? 'Zwiń panel' : 'Rozwiń panel parametrów',
+      toggleSheet: () => this.setState({ open: !open }),
+      draftStr: f2(s.draft),
+      decDraft: () => setDraft(s.draft - 0.05), incDraft: () => setDraft(s.draft + 0.05),
+      presets, layerList,
+      levelCm: s.level, levelStr: f2(level), volStr: f1(vol), levelAria: f2(level) + ' metra nad poziomem morza',
+      onLevel: (e) => this.setState({ level: Number(e.target.value) }),
+      outOfRange: level < 190.4 || level > 195.7,
+      needStr: f2(need),
+      summary: 'Jacht ' + f2(s.draft) + ' m · poziom ' + f2(level) + ' m n.p.m. · bezpieczne ' + pct + '% akwenu'
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Historia linii brzegowych</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+a{color:#1C5D8C}a:hover{color:#0E3F63}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #1C5D8C;outline-offset:2px}
+input[type=checkbox]{width:20px;height:20px;accent-color:#1C5D8C;margin:0;flex:none}
+</style>
+</helmet>
+<div style="position: relative; width: 100%; height: 100vh; min-height: 760px; overflow: hidden; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 15px; line-height: 1.4; color: #0E2433; background: #EEF0EA">
+
+<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 36px">
+<dc-import name="LakeMap" theme="light" zones="{{ false }}" history="{{ true }}" marinas="{{ false }}" hint-size="100%,100%"></dc-import>
+</div>
+
+<aside aria-label="Sceny satelitarne" style="position: absolute; top: 16px; left: 16px; bottom: 52px; width: 400px; max-width: calc(100% - 32px); display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #D8E0E5; border-radius: 14px; box-shadow: 0 8px 28px rgba(14,36,51,.14); overflow: hidden">
+<header style="padding: 18px 20px 10px; display: flex; align-items: center; gap: 12px">
+<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="9" fill="#1C5D8C"></rect><path d="M7 13c3-2.4 6-2.4 10 0s7 2.4 10 0M7 19c3-2.4 6-2.4 10 0s7 2.4 10 0M7 25c3-2.4 6-2.4 10 0s7 2.4 10 0" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"></path></svg>
+<div style="display: flex; flex-direction: column">
+<span style="font-size: 18px; font-weight: 600">Mielizna</span>
+<span style="font-size: 13px; color: #4C6475">Jezioro Nyskie · gdzie przepłynę?</span>
+</div>
+</header>
+<nav aria-label="Widoki" style="display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid #D8E0E5">
+<a href="Main.dc.html" style="min-height: 44px; display: flex; align-items: center; padding: 0 10px; font-size: 14px; font-weight: 500; text-decoration: none; color: #4C6475; border-bottom: 3px solid transparent">Mapa</a>
+<a href="History.dc.html" aria-current="page" style="min-height: 44px; display: flex; align-items: center; padding: 0 10px; font-size: 14px; font-weight: 600; text-decoration: none; color: #0E2433; border-bottom: 3px solid #1C5D8C">Historia linii brzegowych</a>
+<a href="Method.dc.html" style="min-height: 44px; display: flex; align-items: center; padding: 0 10px; font-size: 14px; font-weight: 500; text-decoration: none; color: #4C6475; border-bottom: 3px solid transparent">O metodzie</a>
+</nav>
+
+<div style="padding: 16px 20px 12px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px solid #D8E0E5">
+<h1 style="margin: 0; font-size: 17px; font-weight: 600">Poziom wody na scenach Sentinel-2</h1>
+<div style="position: relative">
+<svg viewBox="0 0 360 120" style="width: 100%; height: auto; display: block" role="img" aria-label="Wykres poziomu wody w czasie dla zaobserwowanych scen">
+<line x1="34" y1="18" x2="356" y2="18" stroke="#E3E9ED"></line>
+<line x1="34" y1="54" x2="356" y2="54" stroke="#E3E9ED"></line>
+<line x1="34" y1="90" x2="356" y2="90" stroke="#E3E9ED"></line>
+<line x1="34" y1="24" x2="356" y2="24" stroke="#1C5D8C" stroke-dasharray="4 4"></line>
+<text x="356" y="20" font-size="10" text-anchor="end" fill="#1C5D8C" font-family="IBM Plex Sans, sans-serif">NPP 195,00</text>
+<text x="28" y="22" font-size="11" text-anchor="end" fill="#4C6475" font-family="IBM Plex Sans, sans-serif">195</text>
+<text x="28" y="58" font-size="11" text-anchor="end" fill="#4C6475" font-family="IBM Plex Sans, sans-serif">193</text>
+<text x="28" y="94" font-size="11" text-anchor="end" fill="#4C6475" font-family="IBM Plex Sans, sans-serif">191</text>
+<polyline points="{{spark}}" fill="none" stroke="#7E98A8" stroke-width="1.5"></polyline>
+<text x="34" y="114" font-size="11" fill="#4C6475" font-family="IBM Plex Sans, sans-serif">2019</text>
+<text x="356" y="114" font-size="11" text-anchor="end" fill="#4C6475" font-family="IBM Plex Sans, sans-serif">2026</text>
+</svg>
+<sc-for list="{{dots}}" as="d" hint-placeholder-count="12">
+<span aria-hidden="true" style="{{d.style}}"></span>
+</sc-for>
+</div>
+<div role="group" aria-label="Filtr roku" style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{years}}" as="y" hint-placeholder-count="8">
+<button onClick="{{y.pick}}" aria-pressed="{{y.pressed}}" style="{{y.style}}">{{y.label}}</button>
+</sc-for>
+</div>
+</div>
+
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; font-size: 13px; color: #4C6475">
+<span>{{countLabel}}</span>
+<span>Nałóż na mapę</span>
+</div>
+
+<sc-if value="{{empty}}" hint-placeholder-val="{{ false }}">
+<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px 32px; text-align: center">
+<svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="28" r="26" fill="#F3F6F8"></circle><path d="M14 30c4-3 8-3 14 0s10 3 14 0M18 38c3-2 6-2 10 0s7 2 10 0" fill="none" stroke="#AFC0CB" stroke-width="2.2" stroke-linecap="round"></path><path d="M22 20h12" stroke="#AFC0CB" stroke-width="2.2" stroke-linecap="round"></path></svg>
+<span style="font-size: 16px; font-weight: 600">Brak scen dla tego filtra</span>
+<span style="font-size: 14px; color: #4C6475">W {{year}} r. żadna scena nie przeszła filtra zachmurzenia. Wybierz inny rok.</span>
+<button onClick="{{clearFilter}}" style="min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid #1C5D8C; background: #FFFFFF; color: #1C5D8C; font-weight: 600">Pokaż wszystkie sceny</button>
+</div>
+</sc-if>
+
+<sc-if value="{{hasRows}}" hint-placeholder-val="{{ true }}">
+<ul style="flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+<li style="{{r.rowStyle}}">
+<button onClick="{{r.select}}" aria-pressed="{{r.pressed}}" style="flex: 1; min-height: 48px; display: grid; grid-template-columns: 14px 92px 1fr 64px; align-items: center; gap: 10px; border: 0; background: transparent; padding: 0 0 0 8px; text-align: left; font-variant-numeric: tabular-nums">
+<span style="width: 14px; height: 14px; border-radius: 50%; background: {{r.color}}"></span>
+<span style="font-weight: 600">{{r.date}}</span>
+<span>{{r.level}} <span style="color: #4C6475; font-size: 13px">m n.p.m.</span></span>
+<span style="text-align: right">{{r.area}} <span style="color: #4C6475; font-size: 13px">km²</span></span>
+</button>
+<label style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer"><input type="checkbox" checked="{{r.overlay}}" onChange="{{r.toggle}}" aria-label="{{r.overlayLabel}}"></label>
+</li>
+</sc-for>
+</ul>
+</sc-if>
+</aside>
+
+<sc-if value="{{hasSel}}" hint-placeholder-val="{{ true }}">
+<div style="position: absolute; top: 16px; right: 16px; width: 300px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; background: #FFFFFF; border: 1px solid #D8E0E5; border-radius: 12px; box-shadow: 0 4px 14px rgba(14,36,51,.12)">
+<span style="font-size: 13px; color: #4C6475">Wybrana scena</span>
+<span style="font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums">{{sel.date}}</span>
+<dl style="margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; font-variant-numeric: tabular-nums">
+<dt style="color: #4C6475">Poziom</dt><dd style="margin: 0; text-align: right">{{sel.level}} m n.p.m.</dd>
+<dt style="color: #4C6475">Powierzchnia</dt><dd style="margin: 0; text-align: right">{{sel.area}} km²</dd>
+<dt style="color: #4C6475">Źródło</dt><dd style="margin: 0; text-align: right">Sentinel-2 · zachm. {{sel.cloud}}%</dd>
+</dl>
+<a href="Main.dc.html" style="min-height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: #1C5D8C; color: #FFFFFF; text-decoration: none; font-weight: 600; font-size: 14px">Ustaw ten poziom na mapie</a>
+</div>
+</sc-if>
+
+<section aria-label="Legenda linii brzegowych" style="position: absolute; right: 16px; bottom: 52px; width: 300px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: #FFFFFF; border: 1px solid #D8E0E5; border-radius: 12px; box-shadow: 0 4px 14px rgba(14,36,51,.12)">
+<span style="font-size: 14px; font-weight: 600">Kolor linii = poziom wody</span>
+<span aria-hidden="true" style="height: 12px; border-radius: 6px; background: linear-gradient(90deg, #9CC9E4, #4F97C7, #2A6FA3, #143F66)"></span>
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: #4C6475; font-variant-numeric: tabular-nums"><span>190,0</span><span>192,0</span><span>194,0</span><span>195,5 m n.p.m.</span></div>
+<span style="font-size: 12px; color: #4C6475">Niższe poziomy rysowane dodatkowo linią przerywaną, żeby dało się je odróżnić bez koloru.</span>
+</section>
+
+<footer style="position: absolute; left: 0; right: 0; bottom: 0; min-height: 36px; padding: 8px 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 24px; background: #0E2433; color: #FFFFFF; font-size: 13px">
+<span><strong>Projekt naukowy. Nie służy do nawigacji.</strong> Dno modelowane z obrazów satelitarnych z niepewnością.</span>
+<span style="opacity: .85">© OpenStreetMap contributors · Copernicus Sentinel-2 · GUGiK</span>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  state = { year: 'all', sel: '2026-07-18', overlay: { '2026-07-18': true, '2023-10-21': true, '2021-11-02': true } };
+
+  renderVals() {
+    const s = this.state;
+    const scenes = [
+      ['2026-07-18', 194.88, 20.2, 4], ['2026-04-09', 195.12, 20.8, 11], ['2025-09-30', 193.40, 17.3, 2],
+      ['2025-06-12', 195.15, 20.8, 7], ['2024-08-14', 194.62, 19.8, 0], ['2024-05-03', 195.08, 20.7, 9],
+      ['2023-10-21', 192.30, 15.2, 3], ['2023-07-09', 193.85, 18.1, 5], ['2022-09-17', 191.10, 12.9, 1],
+      ['2022-04-25', 194.90, 20.3, 12], ['2021-11-02', 190.62, 11.8, 6], ['2019-09-27', 190.40, 11.2, 2]
+    ];
+    const f2 = (v) => v.toFixed(2).replace('.', ',');
+    const f1 = (v) => v.toFixed(1).replace('.', ',');
+    const fd = (d) => d.slice(8, 10) + '.' + d.slice(5, 7) + '.' + d.slice(0, 4);
+    const stops = [[190, [156, 201, 228]], [192, [79, 151, 199]], [194, [42, 111, 163]], [195.5, [20, 63, 102]]];
+    const color = (lv) => {
+      let a = stops[0], b = stops[stops.length - 1];
+      for (let i = 0; i < stops.length - 1; i++) if (lv >= stops[i][0] && lv <= stops[i + 1][0]) { a = stops[i]; b = stops[i + 1]; }
+      const k = Math.min(1, Math.max(0, (lv - a[0]) / (b[0] - a[0])));
+      const c = a[1].map((v, i) => Math.round(v + (b[1][i] - v) * k));
+      return 'rgb(' + c.join(',') + ')';
+    };
+    const t0 = Date.parse('2019-01-01'), t1 = Date.parse('2026-12-31');
+    const px = (d) => 34 + (Date.parse(d) - t0) / (t1 - t0) * 322;
+    const py = (lv) => 18 + (195.33 - lv) * 18;
+    const sorted = scenes.slice().sort((a, b) => a[0] < b[0] ? -1 : 1);
+    const spark = sorted.map((r) => px(r[0]).toFixed(1) + ',' + py(r[1]).toFixed(1)).join(' ');
+    const dots = sorted.map((r) => { const sz = r[0] === s.sel ? 13 : 9; return { style: 'position: absolute; left: ' + (px(r[0]) / 3.6).toFixed(2) + '%; top: ' + (py(r[1]) / 1.2).toFixed(2) + '%; width: ' + sz + 'px; height: ' + sz + 'px; margin: -' + (sz / 2) + 'px 0 0 -' + (sz / 2) + 'px; border-radius: 50%; border: 1.5px solid #FFFFFF; background: ' + color(r[1]) }; });
+
+    const yearOpts = ['all', '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019'];
+    const chip = (sel) => 'min-height: 36px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-variant-numeric: tabular-nums; border: 1px solid ' + (sel ? '#1C5D8C' : '#D8E0E5') + '; background: ' + (sel ? '#E4EFF7' : '#FFFFFF') + '; font-weight: ' + (sel ? '600' : '400');
+    const years = yearOpts.map((y) => ({ label: y === 'all' ? 'Wszystkie' : y, pressed: s.year === y ? 'true' : 'false', style: chip(s.year === y), pick: () => this.setState({ year: y }) }));
+
+    const filtered = scenes.filter((r) => s.year === 'all' || r[0].slice(0, 4) === s.year);
+    const rows = filtered.map((r) => {
+      const isSel = r[0] === s.sel;
+      return {
+        date: fd(r[0]), level: f2(r[1]), area: f1(r[2]), color: color(r[1]),
+        pressed: isSel ? 'true' : 'false',
+        rowStyle: 'display: flex; align-items: center; border-radius: 10px; background: ' + (isSel ? '#E4EFF7' : 'transparent') + '; box-shadow: ' + (isSel ? 'inset 3px 0 0 #1C5D8C' : 'none'),
+        overlay: !!s.overlay[r[0]],
+        overlayLabel: 'Nałóż linię brzegową z ' + fd(r[0]),
+        select: () => this.setState({ sel: r[0] }),
+        toggle: () => this.setState({ overlay: Object.assign({}, s.overlay, { [r[0]]: !s.overlay[r[0]] }) })
+      };
+    });
+    const selRow = scenes.find((r) => r[0] === s.sel);
+    const n = filtered.length;
+    const nOver = Object.keys(s.overlay).filter((k) => s.overlay[k]).length;
+    const plural = n === 1 ? 'scena' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? 'sceny' : 'scen';
+    return {
+      spark, dots, years, rows,
+      year: s.year,
+      empty: n === 0, hasRows: n > 0,
+      clearFilter: () => this.setState({ year: 'all' }),
+      countLabel: n + ' ' + plural + ' · nałożone: ' + nOver,
+      hasSel: !!selRow,
+      sel: selRow ? { date: fd(selRow[0]), level: f2(selRow[1]), area: f1(selRow[2]), cloud: selRow[3] } : { date: '', level: '', area: '', cloud: '' }
+    };
+  }
+}
+</script>
+</body>
+</html>

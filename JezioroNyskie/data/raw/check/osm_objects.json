@@ -1,0 +1,57 @@
+[
+ {
+  "type": "node",
+  "id": 2287182937,
+  "lat": 50.4731184,
+  "lon": 17.2845411,
+  "tags": {
+   "leisure": "slipway",
+   "seamark:small_craft_facility:category": "slipway",
+   "seamark:type": "small_craft_facility"
+  }
+ },
+ {
+  "type": "node",
+  "id": 2638165798,
+  "lat": 50.4675215,
+  "lon": 17.2765905,
+  "tags": {
+   "leisure": "marina",
+   "name": "Przystań żeglarska",
+   "seamark:harbour:category": "marina",
+   "seamark:type": "harbour"
+  }
+ },
+ {
+  "type": "node",
+  "id": 14099067081,
+  "lat": 50.4678417,
+  "lon": 17.2767667,
+  "tags": {
+   "leisure": "slipway"
+  }
+ },
+ {
+  "type": "relation",
+  "id": 2908769,
+  "bounds": {
+   "minlat": 50.4345293,
+   "minlon": 17.214182,
+   "maxlat": 50.4733045,
+   "maxlon": 17.3062509
+  },
+  "tags": {
+   "alt_name": "Jezioro Głębinowskie",
+   "name": "Jezioro Nyskie",
+   "name:cs": "Nyské jezero",
+   "name:de": "Neisser Stausee",
+   "name:pl": "Jezioro Nyskie",
+   "natural": "water",
+   "source": "http://sdi.opolskie.pl/mapa_bazowa/request.aspx",
+   "type": "multipolygon",
+   "water": "reservoir",
+   "wikidata": "Q1163471",
+   "wikipedia": "pl:Jezioro Nyskie"
+  }
+ }
+]
