@@ -121,4 +121,32 @@ describe('LevelControl', () => {
     expect(f).toHaveAttribute('aria-invalid', 'true');
     expect(f).toHaveValue(s);
   });
+
+  describe('variant mobile', () => {
+    it('level mode: link-button „Podaj pojemność (mln m³)” instead of the segmented control', async () => {
+      const p = setup({ variant: 'mobile' });
+      expect(screen.queryByRole('group', { name: 'Sposób podania poziomu' })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Podaj pojemność (mln m³)' }));
+      expect(p.onModeChange).toHaveBeenCalledWith('capacity');
+    });
+
+    it('capacity mode: field labelled with the short text, way back to the level', async () => {
+      const p = setup({ variant: 'mobile', mode: 'capacity' });
+      expect(screen.getByLabelText('Podaj pojemność (mln m³)')).toHaveValue('45,6');
+      await userEvent.click(screen.getByRole('button', { name: 'Wróć do rzędnej' }));
+      expect(p.onModeChange).toHaveBeenCalledWith('level');
+    });
+
+    it('short alert text, still role=alert, no numbers needed', () => {
+      setup({ variant: 'mobile', warnings: ['h_out_of_range'] });
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Poza zakresem obserwacji. Model dna jest ekstrapolowany, wynik mniej pewny.',
+      );
+    });
+
+    it('desktop variant keeps the long text by default', () => {
+      setup({ warnings: ['h_out_of_range'] });
+      expect(screen.getByRole('alert')).toHaveTextContent('Poziom poza zakresem obserwacji (192,90–197,92');
+    });
+  });
 });

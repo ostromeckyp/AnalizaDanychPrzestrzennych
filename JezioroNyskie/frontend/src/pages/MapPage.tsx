@@ -1,6 +1,8 @@
 import { AppNav } from '../components/chrome/AppNav';
 import { Footer } from '../components/chrome/Footer';
 import { Legend } from '../components/legend/Legend';
+import { BottomSheet } from '../components/mobile/BottomSheet';
+import { MobileHeader } from '../components/mobile/MobileHeader';
 import { MapView } from '../components/map/MapView';
 import { ParameterPanel } from '../components/panel/ParameterPanel';
 import { PointPopup } from '../components/popup/PointPopup';
@@ -9,11 +11,14 @@ import { LoadingSkeleton } from '../components/states/LoadingSkeleton';
 import { OfflineBar } from '../components/states/OfflineBar';
 import { RecalcPill } from '../components/states/RecalcPill';
 import { useMapPageVm } from '../vm/useMapPageVm';
+import { useViewport } from '../vm/useViewport';
 import './mapPage.css';
 
-// Układ desktop (§16.2): mapa pod spodem, nad nią pływający panel, legenda, popup i stany.
+// Mapa pod spodem i stany są wspólne; desktop (§16.2) dokłada pływający panel i legendę, mobile nagłówek i arkusz.
+// Jedno VM, dwa widoki.
 export function MapPage() {
   const vm = useMapPageVm();
+  const mobile = useViewport() === 'mobile';
   const { meta, map, zonesState: z, point } = vm;
 
   const metaFailed = meta.status === 'error';
@@ -21,7 +26,7 @@ export function MapPage() {
   const failed = metaFailed || z.status === 'error';
 
   return (
-    <main className="mappage" aria-label="Mapa">
+    <main className={mobile ? 'mappage mappage--mobile' : 'mappage'} aria-label="Mapa">
       <div className={failed ? 'mappage__map mappage__map--dim' : 'mappage__map'}>
         {meta.data && (
           <MapView
@@ -45,15 +50,25 @@ export function MapPage() {
         )}
       </div>
 
-      <div className="mappage__panel">
-        <AppNav />
-        <div className="mappage__scroll">{vm.panel && <ParameterPanel {...vm.panel} />}</div>
-      </div>
-
-      {vm.legend && (
-        <div className="mappage__legend">
-          <Legend {...vm.legend} />
+      {mobile ? (
+        <>
+          <MobileHeader />
+          <BottomSheet panel={vm.panel} legend={vm.legend} />
+        </>
+      ) : (
+        <>
+        <div className="mappage__panel">
+          <AppNav />
+          <div className="mappage__scroll">{vm.panel && <ParameterPanel {...vm.panel} />}</div>
         </div>
+
+        {vm.legend && (
+          <div className="mappage__legend">
+            <Legend {...vm.legend} />
+          </div>
+        )}
+
+        </>
       )}
 
       {!map.pin && !loading && !failed && <p className="mappage__hint">Kliknij w wodę, aby sprawdzić głębokość</p>}
@@ -68,7 +83,7 @@ export function MapPage() {
         />
       )}
       {z.status === 'offline' && <OfflineBar lastOkAt={z.lastOkAt} onRetry={z.retry} />}
-      <Footer />
+      {!mobile && <Footer />}
     </main>
   );
 }

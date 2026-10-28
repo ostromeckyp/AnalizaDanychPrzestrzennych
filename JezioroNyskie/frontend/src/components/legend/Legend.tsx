@@ -12,33 +12,36 @@ export type LegendProps = {
 export function Legend({ draft, margin, summary, compact }: LegendProps) {
   // Zaokrąglenie usuwa szum typu 1,4999999.
   const need = Math.round((draft + margin) * 100) / 100;
+  // Tryb mobilny: krótkie opisy z Mobile.dc.html; strefa „Zbyt płytka” bez opisu, więc bez separatora dla czytników.
+  const desc = compact
+    ? { safe: `≥ ${fmtNum(need, 2)}\u00a0m`, risk: 'w zapasie / niepewności', danger: undefined }
+    : {
+        safe: `głębokość ≥ zanurzenie + zapas (${fmtNum(need, 2)} m)`,
+        risk: 'mieści się w zapasie lub niepewności modelu',
+        danger: 'głębokość mniejsza niż zanurzenie',
+      };
+  const rows = [
+    ['safe', 'Bezpieczna'],
+    ['risk', 'Ryzykowna'],
+    ['danger', 'Zbyt płytka / ląd'],
+  ] as const;
   return (
     <section aria-label="Legenda" className={compact ? 'legend legend--compact' : 'legend'}>
       <h2 className="legend__title">Strefy dla jachtu</h2>
-      <div className="legend__row">
-        <span className="swatch swatch--safe" aria-hidden="true" />
-        <div className="legend__text">
-          <span className="legend__name">Bezpieczna</span>
-          <span className="sr-only">: </span>
-          <span className="legend__desc">głębokość ≥ zanurzenie + zapas ({fmtNum(need, 2)} m)</span>
+      {rows.map(([key, name]) => (
+        <div className="legend__row" key={key}>
+          <span className={`swatch swatch--${key}`} aria-hidden="true" />
+          <div className="legend__text">
+            <span className="legend__name">{name}</span>
+            {desc[key] && (
+              <>
+                <span className="sr-only">: </span>
+                <span className="legend__desc">{desc[key]}</span>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-      <div className="legend__row">
-        <span className="swatch swatch--risk" aria-hidden="true" />
-        <div className="legend__text">
-          <span className="legend__name">Ryzykowna</span>
-          <span className="sr-only">: </span>
-          <span className="legend__desc">mieści się w zapasie lub niepewności modelu</span>
-        </div>
-      </div>
-      <div className="legend__row">
-        <span className="swatch swatch--danger" aria-hidden="true" />
-        <div className="legend__text">
-          <span className="legend__name">Zbyt płytka / ląd</span>
-          <span className="sr-only">: </span>
-          <span className="legend__desc">głębokość mniejsza niż zanurzenie</span>
-        </div>
-      </div>
+      ))}
       {summary && <p className="legend__summary">{summary}</p>}
     </section>
   );

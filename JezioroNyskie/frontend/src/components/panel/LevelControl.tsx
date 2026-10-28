@@ -5,6 +5,8 @@ import { useDecimalField } from './useDecimalField';
 import './panel.css';
 
 export type LevelControlProps = {
+  /** „mobile”: krótkie teksty z Mobile.dc.html (przycisk pojemności zamiast przełącznika, krótkie ostrzeżenie). */
+  variant?: 'desktop' | 'mobile';
   mode: LevelMode;
   h: number;
   slider: SliderProps;
@@ -23,6 +25,7 @@ export type LevelControlProps = {
 export function LevelControl(p: LevelControlProps) {
   const id = useId();
   const { slider: s } = p;
+  const mobile = p.variant === 'mobile';
   const pct = (x: number) => `${((x - s.min) / (s.max - s.min)) * 100}%`;
   const cap = useDecimalField({
     value: p.capacity.value,
@@ -38,8 +41,16 @@ export function LevelControl(p: LevelControlProps) {
     if (code === 'h_out_of_range') {
       alerts.push(
         <Alert key={code}>
-          <strong>Poziom poza zakresem obserwacji</strong> ({obs} m n.p.m.). Model dna jest tu ekstrapolowany, wynik jest
-          mniej pewny.
+          {mobile ? (
+            <>
+              <strong>Poza zakresem obserwacji.</strong> Model dna jest ekstrapolowany, wynik mniej pewny.
+            </>
+          ) : (
+            <>
+              <strong>Poziom poza zakresem obserwacji</strong> ({obs} m n.p.m.). Model dna jest tu ekstrapolowany, wynik
+              jest mniej pewny.
+            </>
+          )}
         </Alert>,
       );
     } else if (code === 'below_observed_bottom') {
@@ -63,14 +74,24 @@ export function LevelControl(p: LevelControlProps) {
         <span id={`${id}-label`} className="field__label">
           Poziom wody
         </span>
-        <div role="group" aria-label="Sposób podania poziomu" className="segmented">
-          <button type="button" aria-pressed={p.mode === 'level'} onClick={() => p.onModeChange('level')}>
-            Rzędna
+        {mobile ? (
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => p.onModeChange(p.mode === 'level' ? 'capacity' : 'level')}
+          >
+            {p.mode === 'level' ? 'Podaj pojemność (mln m³)' : 'Wróć do rzędnej'}
           </button>
-          <button type="button" aria-pressed={p.mode === 'capacity'} onClick={() => p.onModeChange('capacity')}>
-            Pojemność
-          </button>
-        </div>
+        ) : (
+          <div role="group" aria-label="Sposób podania poziomu" className="segmented">
+            <button type="button" aria-pressed={p.mode === 'level'} onClick={() => p.onModeChange('level')}>
+              Rzędna
+            </button>
+            <button type="button" aria-pressed={p.mode === 'capacity'} onClick={() => p.onModeChange('capacity')}>
+              Pojemność
+            </button>
+          </div>
+        )}
       </div>
 
       {p.mode === 'level' ? (
@@ -81,7 +102,7 @@ export function LevelControl(p: LevelControlProps) {
       ) : (
         <div className="field">
           <label htmlFor={`${id}-cap`} className="hint">
-            Pojemność z komunikatu RZGW [mln m³]
+            {mobile ? 'Podaj pojemność (mln m³)' : 'Pojemność z komunikatu RZGW [mln m³]'}
           </label>
           <div className="stepper__box">
             <input
