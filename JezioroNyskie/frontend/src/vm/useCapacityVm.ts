@@ -37,8 +37,9 @@ export function useCapacityVm(mode: 'level' | 'capacity', input: number): Capaci
   }
   let aboveNpp: string | undefined;
   if (slider) {
-    const diff = value - slider.npp;
-    aboveNpp = `${fmtM(Math.abs(round05(diff)))} ${diff >= 0 ? 'powyżej' : 'poniżej'} NPP`;
+    const diff = round05(value - slider.npp);
+    aboveNpp =
+      diff === 0 ? 'na poziomie NPP' : `${fmtM(Math.abs(diff))} ${diff > 0 ? 'powyżej' : 'poniżej'} NPP`;
   }
   return { capacityAtLevel: lvl.data?.v ?? undefined, aboveNpp, inTable: lvl.data?.in_table };
 }

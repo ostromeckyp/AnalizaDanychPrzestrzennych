@@ -17,7 +17,7 @@ function setup(over: Partial<LevelControlProps> = {}) {
     mode: 'level',
     h: 195.2,
     slider,
-    level: { capacityAtLevel: 45.6, aboveNpp: -0.71 },
+    level: { capacityAtLevel: 45.6, aboveNpp: '0,70\u00a0m poniżej NPP' },
     capacity: { value: 45.6, hFromCapacity: 195.2, inTable: true },
     currentLevel: { h: 195.1, label: 'Aktualny: 195,10 m n.p.m.' } as never,
     warnings: [],
@@ -49,7 +49,7 @@ describe('LevelControl', () => {
   });
 
   it('level mode shows the big value, capacity and NPP delta', () => {
-    setup({ level: { capacityAtLevel: 45.6, aboveNpp: 0.2 } });
+    setup({ level: { capacityAtLevel: 45.6, aboveNpp: '0,20\u00a0m powyżej NPP' } });
     expect(screen.getByText(/195,20.*m n\.p\.m\./)).toBeInTheDocument();
     expect(screen.getByText(/≈ 45,6.*mln m³ · 0,20.*m powyżej NPP/)).toBeInTheDocument();
   });

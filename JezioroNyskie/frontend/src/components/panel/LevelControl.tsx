@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { fmtCapacity, fmtLevel, fmtM, fmtNum, levelValueText } from '../../format';
+import { fmtCapacity, fmtLevel, fmtNum, levelValueText } from '../../format';
 import type { LevelMode, SliderProps } from './types';
 import { useDecimalField } from './useDecimalField';
 import './panel.css';
@@ -8,8 +8,8 @@ export type LevelControlProps = {
   mode: LevelMode;
   h: number;
   slider: SliderProps;
-  /** Pojemność i wysokość nad NPP dla bieżącej rzędnej (useCapacityVm). */
-  level: { capacityAtLevel?: number; aboveNpp?: number };
+  /** Pojemność i gotowy tekst „… powyżej NPP” dla bieżącej rzędnej (useCapacityVm). */
+  level: { capacityAtLevel?: number; aboveNpp?: string };
   /** Tryb „Pojemność”: wpisana wartość i jej przeliczenie na rzędną. */
   capacity: { value: number; hFromCapacity?: number; inTable?: boolean };
   currentLevel?: { label: string; note?: string };
@@ -19,11 +19,6 @@ export type LevelControlProps = {
   onLevelChange: (h: number) => void;
   onCapacityChange: (v: number) => void;
 };
-
-function nppText(aboveNpp: number): string {
-  if (aboveNpp === 0) return 'na poziomie NPP';
-  return `${fmtM(Math.abs(aboveNpp))} ${aboveNpp > 0 ? 'powyżej' : 'poniżej'} NPP`;
-}
 
 export function LevelControl(p: LevelControlProps) {
   const id = useId();
@@ -59,7 +54,7 @@ export function LevelControl(p: LevelControlProps) {
 
   const extra = [
     p.level.capacityAtLevel !== undefined ? `≈ ${fmtCapacity(p.level.capacityAtLevel)}` : null,
-    p.level.aboveNpp !== undefined ? nppText(p.level.aboveNpp) : null,
+    p.level.aboveNpp ?? null,
   ].filter(Boolean);
 
   return (

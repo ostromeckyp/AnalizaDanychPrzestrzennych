@@ -94,4 +94,10 @@ describe('useCapacityVm', () => {
     expect(bad.result.current.aboveNpp).toBeUndefined();
     expect(api.levelToCapacity).not.toHaveBeenCalled();
   });
+
+  it('level at NPP (within rounding) says "na poziomie NPP"', async () => {
+    vi.mocked(api.levelToCapacity).mockResolvedValue({ h: 195.9, v: 40, in_table: true });
+    const { result } = renderHook(() => useCapacityVm('level', 195.9), { wrapper: wrap() });
+    await waitFor(() => expect(result.current.aboveNpp).toBe('na poziomie NPP'));
+  });
 });
