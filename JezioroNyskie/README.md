@@ -3,6 +3,11 @@
 Model dna Jeziora Nyskiego budowany z obrazów Sentinel-2 (siatka wzorcowa EPSG:2180, 10 m),
 wraz z backendem i frontendem do wizualizacji mielizn.
 
+**Projekt naukowy. Nie służy do nawigacji.** Dokładność modelu (m.in. bias względem NMT LiDAR i mapy KŻ) i jego ograniczenia
+opisuje raport: [`docs/raport.md`](docs/raport.md).
+
+![Aplikacja: strefy żeglugi dla zadanego poziomu wody i zanurzenia](docs/img/m6-desktop-light.png)
+
 ## Uruchomienie
 
 Wymagany jest Docker Compose v2 oraz gotowe `data/processed/` i `data/reference/` (wynik pipeline'u; montowane tylko do odczytu).
@@ -16,6 +21,7 @@ bash scripts/compose_smoke.sh    # test dymny: buduje, sprawdza /, /api/meta, /h
 Tryb na żywo (odświeżanie bieżącego poziomu z Sentinel-2, potrzebna sieć wychodząca) jest domyślnie włączony;
 `MIELIZNA_LIVE=0` w pliku `.env` obok `docker-compose.yml` go wyłącza (plik jest w `.gitignore`). Port frontu: 8080.
 Cache bieżącego poziomu leży w wolumenie Dockera (`/cache/current`, `MIELIZNA_CURRENT_DIR`), bo dane są montowane tylko do odczytu.
+Po aktualizacji ze starszego układu compose (wcześniejszy wolumen cache) uruchom raz `docker compose down -v`.
 
 ## Szybki start pipeline'u
 
@@ -49,11 +55,17 @@ Retrening to godziny (ok. 550 dopasowań), więc wymuszaj go świadomie.
 | `make bulletins` | `06a_fetch_bulletins.py` | komunikaty RZGW → `bulletins.csv` |
 | `make levels` | `06_water_levels.py` | → `scenes.json`, `model/area_level_curve.json` |
 | `make bottom` | `07_bottom_model.py` | → `model/{all,pre_flood,post_flood}/bottom_*.tif`, `model_meta.json` |
-| `make all` | wszystkie po kolei | staje przed `rf`, jeśli < 150 ręcznych etykiet klas |
-| `make test` | `pytest -q` | 182 testów |
+| `make nmt` | `02_fetch_nmt.py` | skorowidze WFS GUGiK → `lidar/inventory.csv`, arkusze NMT i LAZ w `../raw/` |
+| `make lidar-epochs` / `make levels-a` | `06b_lidar_levels.py` | → `lidar/epochs.csv` (data nalotu, poziom wody) / `levels_a.csv` (wariant A) |
+| `make kz-georef kz-spots kz-contours kz-gravel` | `09_kz_digitize.py` | mapa KŻ → `kz/kz_meta.json`, `kz_spot_ocr.gpkg`, `kz_contours.gpkg`, `../reference/zwirownia.gpkg` |
+| `make kz-qc-ui` | `tools/label_server.py --kz` | ręczna kontrola punktów KŻ → `../reference/kz_spot_qc.csv` |
+| `make variant-d kz-compare kz-overlay` | `10_kz_compare.py` | → `kz/levels_d.csv`, `eval/{variant_d,kz_points,kz_contours,kz_compare}.json`, `docs/img/kz-overlay.png` |
+| `make evaluate` | `08_evaluate.py` | → `eval/{bottom_vs_nmt,levels,bottom_change,model_choice,mask}.json`, `docs/img/eval-*.png` |
+| `make all` | łańcuch planu 1 (`osm` … `bottom`) | staje przed `rf`, jeśli < 150 ręcznych etykiet klas; pełny przebieg od zera: raport §9 |
+| `make test` | `pytest -q` | wszystkie testy pipeline'u (w tym spójność liczb raportu) |
 
 Dane surowe w `data/raw/`, logi w `data/processed/logs/`. Notatki do nauki (po polsku, z pytaniami obronnymi):
-[`docs/nauka/`](docs/nauka/) — `M1-dane.md`, `M2-klasyfikacja.md`, `M3-poziomy.md`, `M4-model-dna.md`, `M5-backend.md`, `M6-frontend.md`, `decyzje.md`.
+[`docs/nauka/`](docs/nauka/) — `M1-dane.md`, `M2-klasyfikacja.md`, `M3-poziomy.md`, `M4-model-dna.md`, `M5-backend.md`, `M6-frontend.md`, `M7-lidar-kz.md`, `decyzje.md`.
 
 ## Backend
 
@@ -87,6 +99,22 @@ npm run gen:api    # odświeża src/api/schema.ts po zmianie openapi.json
 
 ## Dokumentacja
 
+- Raport (dane, metoda, ocena dokładności, ograniczenia): [`docs/raport.md`](docs/raport.md)
 - Brief: [`docs/BRIEF.md`](docs/BRIEF.md)
 - Spec: [`docs/superpowers/specs/2026-10-26-mielizna-design.md`](docs/superpowers/specs/2026-10-26-mielizna-design.md)
 - Plan 1: [`docs/superpowers/plans/2026-10-27-plan1-pipeline-model-dna.md`](docs/superpowers/plans/2026-10-27-plan1-pipeline-model-dna.md)
+
+## Licencje
+
+**Kod** (pipeline, backend, frontend, skrypty): licencja MIT, © 2026 Paweł Ostromecki — plik [`LICENSE`](LICENSE).
+Licencja MIT **nie obejmuje danych** ani materiałów pochodzących z mapy KŻ; te mają własne warunki:
+
+| dane | źródło | warunki |
+|---|---|---|
+| Sentinel-2 L2A | Copernicus (ESA / Komisja Europejska), przez Earth Search (AWS) | dane Copernicus: bezpłatny, pełny i otwarty dostęp; atrybucja „zawiera zmodyfikowane dane Copernicus Sentinel 2017–2026” |
+| NMT 1 m i chmury punktów LiDAR | GUGiK (Geoportal, PZGiK) | dane PZGiK udostępniane bezpłatnie; źródło: GUGiK |
+| obrys jeziora, zapora, przystanie | OpenStreetMap | ODbL 1.0, „© współtwórcy OpenStreetMap” (atrybucja na mapie aplikacji) |
+| komunikaty o pojemności zbiornika Nysa, znane poziomy | RZGW Wrocław / PGW Wody Polskie | informacja publiczna; źródło: PGW Wody Polskie |
+| mapa „Jezioro Nyskie (amatorska mapka dla wodniaków)”, `docs/JN_2023_05_23__KZ.pdf`, oraz wszystko, co z niej wyprowadzono (`data/reference/kz_*.csv`, `zwirownia*.{gpkg,csv}`, `data/processed/kz/`, `docs/img/kz-overlay.png`, warstwa żwirowni w aplikacji) | Wiktor Wróblewski, KŻ Nysa, aktualizacja 23.05.2023 | **tylko niekomercyjnie**; dane pozyskane sposobem amatorskim, mogą zawierać błędy; całość ryzyka ponosi użytkownik; **każda kopia musi zawierać warunki „UWAGA”** — pełny tekst: [`data/reference/KZ_ZRODLO_I_WARUNKI.md`](data/reference/KZ_ZRODLO_I_WARUNKI.md) |
+
+Projekt jest naukowy i niekomercyjny (bez przychodów, reklam i płatnych funkcji).

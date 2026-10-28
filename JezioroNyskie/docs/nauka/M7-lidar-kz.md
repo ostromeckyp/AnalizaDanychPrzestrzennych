@@ -1,4 +1,21 @@
-# M7 — LiDAR i mapa KŻ (SZKIC, w trakcie)
+# M7 — LiDAR, mapa KŻ, ocena dokładności i raport
+
+Stan: koniec planu 4 (gałąź `feat/plan4`). Pełne zestawienie wyników z odnośnikami do plików: [`docs/raport.md`](../raport.md);
+decyzje planu 4 (P4-R1 … P4-R32): [`decyzje.md`](decyzje.md) §1d. Sekcje 1–8 powstawały w trakcie zadań 2–11; tam, gdzie liczby
+zmieniły się później (np. po kontroli ręcznej punktów KŻ), stara wartość jest wyraźnie oznaczona jako historyczna.
+
+## 0. Co powstało (pliki)
+
+| plik | co to jest |
+|---|---|
+| `pipeline/02_fetch_nmt.py` → `data/processed/lidar/inventory.csv`, `data/raw/{nmt,lidar}/` | skorowidze WFS GUGiK (stronicowane), arkusze NMT 1 m i LAZ nad jeziorem |
+| `pipeline/06b_lidar_levels.py` → `lidar/epochs.csv`, `levels_a.csv`, `levels_a_detail.csv` | data nalotu, poziom wody epoki, wariant A per scena |
+| `pipeline/09_kz_digitize.py` → `kz/kz_meta.json`, `kz_spot_ocr.gpkg`, `kz_contours.gpkg`, `data/reference/zwirownia.gpkg` | georeferencja (K1), OCR rzędnych (K2), poziomice i żwirownia (K3) |
+| `data/reference/kz_gcp.csv`, `kz_spot_qc.csv`, `zwirownia_vertices.csv` | punkty dopasowania mapy, ręczna kontrola 149 punktów, wierzchołki żwirowni (w repo) |
+| `pipeline/10_kz_compare.py` → `kz/levels_d.csv`, `eval/{variant_d,kz_points,kz_contours,kz_compare}.json`, `docs/img/kz-overlay.png` | wariant D, porównanie K5, nakładka |
+| `pipeline/08_evaluate.py` → `eval/{bottom_vs_nmt,levels,bottom_change,model_choice,mask}.json`, `docs/img/eval-*.png` | ocena §7 i wybór modelu w aplikacji |
+| `docker-compose.yml`, `scripts/compose_smoke.sh` | uruchomienie jednym poleceniem |
+| `docs/raport.md`, `pipeline/tests/test_report_numbers.py` | raport i test, że jego liczby zgadzają się z `eval/*.json` |
 
 Po ludzku: chmury punktów LiDAR z GUGiK są jak „zdjęcia” jeziora zrobione laserem w konkretny dzień. Skoro woda odbija laser, to mediana wysokości punktów wody mówi, jaki był poziom jeziora w dniu nalotu. To nasz najlepszy pomiar poziomu (wariant A) — o ile znamy datę i układ wysokości.
 
@@ -14,7 +31,7 @@ Po ludzku: chmury punktów LiDAR z GUGiK są jak „zdjęcia” jeziora zrobione
 Co z tego wynika i na co uważać:
 - **Klasa wody to 9** (ASPRS), nie 8 jak w briefie; zdecydowały dane (kolumna `water_class`).
 - **Czas GPS:** arkusze 2011 (3 z 4) mają „GPS week time” — nie da się z nich odczytać daty, więc nie zgadujemy (data 2011 pochodzi z jednego arkusza; poziomy ze wszystkich arkuszy zgadzają się co do 1 cm, poza małą próbką 1 894 punktów: 194,68 m).
-- **2017 ma dwa dni nalotu** nad wodą (27.02 i 25.03), rozstęp 26 dni > progu 14 dni. Poziomy wszystkich arkuszy są zgodne (193,37–193,40 m), ale epoka nie ma jednej daty — do dalszej decyzji.
+- **2017 ma dwa dni nalotu** nad wodą (27.02 i 25.03), rozstęp 26 dni > progu 14 dni. Poziomy wszystkich arkuszy są zgodne (193,37–193,40 m). Rozstrzygnięte (P4-R4): epoka zostaje jedna, `date` = pierwszy dzień, `date_span_days` = 26, a przy remisie epok wariant A wybiera mniejszy rozstęp. Uwaga: 27.02.2017 jest wykluczony z serii Sentinel-2 za lód na jeziorze (`exclude_dates`), więc część punktów „wody” 2017 mogła leżeć na lodzie (wpływ prawdopodobnie centymetrowy, niezweryfikowany).
 - **Poprawka układu** pochodzi z siatek quasi-geoidy GUGiK (`pl_gugik_geoid2011-PL-KRON86-NH` i `pl_gugik_geoid2021-PL-EVRF2007-NH`, `mielizna/datum.py`), nie ze stałej; zmienia się o ok. 1 cm wzdłuż jeziora.
 - Poziomy 2011 i 2017 w KRON86 przed porównaniem z 2022 i 2024 trzeba sprowadzić do EVRF2007 (kolumna `h_water_evrf`).
 
@@ -65,7 +82,7 @@ Po ludzku: na mapie KŻ są setki małych liczb („188,5” = dno na rzędnej 1
 - Historia liczby przyjętych: kropka tylko z lewej 94 → dowolna strona 123 → plus przebieg 2× 200 → po usunięciu ogonków przecinków, podwójnych kotwic, legendy i krzyżyków 149. Wcześniejsze „200” zawierało fałszywe kotwice (ogonki przecinków, legenda), więc nie było realną liczbą punktów.
 - Znane fałszywe kotwice: kilka etykiet komunikatów („193,9 bet.”, czarne, podkreślone) dostaje kropkę z kropki po „bet”; mają kolor niezgodny z regułą (czarne < 195,0), więc trafiają do warstwy „podejrzane” w kontroli; `rejected` je wyłapie.
 - Zapis z kropką dziesiętną („194.3”) w tekście OCR to 10 słów; na mapie to błędnie odczytane przecinki albo legenda, więc **nie są akceptowane**.
-- Kontrola ręczna: `make kz-qc-ui` → http://localhost:8765/kz, cel = min(200, liczba punktów) = 149 (autor ocenia wszystkie 149); wynik `data/reference/kz_spot_qc.csv` (kolumny `id, ocr_z, qc, z_qc, px, py`; wiersze są przypisywane do punktów po kotwicy ≤ 3 px i tej samej rzędnej, `kz.match_qc`, bo numery `id` zmieniają się po ponownym OCR). Błąd OCR = `kz.ocr_error_rate` z wagami warstw (udział warstwy w populacji ÷ udział w próbie).
+- Kontrola ręczna: `make kz-qc-ui` → http://localhost:8765/kz, cel = min(200, liczba punktów) = 149; **autor ocenił wszystkie 149: 138 `ok`, 9 `corrected`, 2 `rejected`**; wynik `data/reference/kz_spot_qc.csv` (kolumny `id, ocr_z, qc, z_qc, px, py`; wiersze są przypisywane do punktów po kotwicy ≤ 3 px i tej samej rzędnej, `kz.match_qc`, bo numery `id` zmieniają się po ponownym OCR). Błąd OCR = `kz.ocr_error_rate` z wagami warstw (udział warstwy w populacji ÷ udział w próbie).
 
 ## 5. Mapa KŻ — poziomice 192,5 i 195,0 m oraz obrys żwirowni (`09_kz_digitize.py contours | gravel` → `kz_contours.gpkg`, `qc_contours.png`, `data/reference/zwirownia.gpkg`)
 
@@ -80,12 +97,12 @@ Po ludzku: poziomice na mapie mają wszystkie ten sam granatowy kolor (mierzone:
 
 Po ludzku: z rzędnych punktowych i poziomic mapy KŻ budujemy powierzchnię dna (siatka trójkątów, interpolacja liniowa na siatce 10 m). Potem dla każdej sceny pytamy: przy jakiej rzędnej wody poziomica tej powierzchni najlepiej pokrywa się z linią brzegową widoczną na zdjęciu? Odpowiedź (`h_t_d`) jest **kontrolą** `h_t` (innym źródłem niż komunikaty, LiDAR i krzywa), nigdy jego źródłem. `scenes.json` dostaje `h_t_d` i `h_diff_d = h_t_d − h_t` dopiero z `06_water_levels.py` (czyta `kz/levels_d.csv`).
 
-- Wejście: punkty KŻ — **107 z 149** (wszystkie `ocr_ok`: kolor zgodny z rzędną i pewność OCR ≥ 80; kontroli ręcznej `kz_spot_qc.csv` jeszcze nie było, `kz.load_qc_spots` po jej pojawieniu użyje ocen `ok`/`corrected`), poziomice 192,5 (19 linii, 2,40 km) i 195,0 m (49 linii, 7,01 km; próbka precyzyjna, nie komplet brzegu), siatka poziomów 192,5–198,0 co 0,05 m, punkty brzegu co 10 m, minimum 50 punktów z powierzchnią na scenę. Powierzchnia jest NaN poza otoczką wypukłą danych i w żwirowni; brzeg w żwirowni jest pomijany.
-- **Pokrycie powierzchni: 79,2 % obszaru jeziora** ma wartość.
+- *Liczby punktów, pokrycia i odległości w tym oraz w dwóch kolejnych punktach opisują przebieg sprzed kontroli ręcznej (historyczne; `h_max_valid` = 194,95 m i podział 107/111 scen się nie zmieniły); aktualny wynik jest w punkcie „Po kontroli ręcznej” niżej.* Wejście: punkty KŻ — **107 z 149** (wszystkie `ocr_ok`: kolor zgodny z rzędną i pewność OCR ≥ 80; kontroli ręcznej `kz_spot_qc.csv` jeszcze nie było, `kz.load_qc_spots` po jej pojawieniu użyje ocen `ok`/`corrected`), poziomice 192,5 (19 linii, 2,40 km) i 195,0 m (49 linii, 7,01 km; próbka precyzyjna, nie komplet brzegu), siatka poziomów 192,5–198,0 co 0,05 m, punkty brzegu co 10 m, minimum 50 punktów z powierzchnią na scenę. Powierzchnia jest NaN poza otoczką wypukłą danych i w żwirowni; brzeg w żwirowni jest pomijany.
+- **Pokrycie powierzchni: 79,2 % obszaru jeziora** ma wartość (przed kontrolą; po kontroli 81,9 %).
 - Dopasowano 218 scen (pominięto 3 odrzucone przez QC; żadna nie padła na minimum punktów). Mediana średniej odległości brzeg–poziomica: 122 m (10./90. percentyl 115/147 m), czyli dopasowanie jest luźne.
 - **Zakres ważności:** `h_max_valid` = najwyższa rzędna, do której długość poziomicy powierzchni ≥ 50 % jej długości na 194,0 m (`variant_d.h_max_valid`). Wynik: **194,95 m** (poziomica 195,0 ma 6 km wobec 20,6 km na 194,0; 195,25 już 0,7 km). Fit jest ważny (`d_valid`, kolumna w `levels_d.csv`) gdy: poziom odniesienia sceny `h_t` < `h_max_valid` (dziedzina metody: powierzchnia opisuje tylko niskie poziomy; `h_t` bierzemy ze `scenes.json` z chwili uruchomienia), h fitu < `h_max_valid` − 0,05 m i nie leży na brzegu siatki poziomów. Średnia odległość brzeg–poziomica (`dist_m`) jest tylko kolumną informacyjną: wcześniejszy próg 150 m usunięto, bo nie rozróżnia fitów (poniżej) i zawyżał wynik, odrzucając fity niezgodne z `h_t`. W `scenes.json` `h_t_d`/`h_diff_d` trafiają wyłącznie dla fitów ważnych (inaczej null). `variant_d.json`: `population` = „h_t < h_max_valid and d_valid”, `n_fitted` 218, **`n_valid` 107** (= wszystkie sceny w dziedzinie), `n_out_of_domain` 111 (`h_t` ≥ 194,95 m).
 - **Zdolność rozdzielcza fitu jest rzędu tolerancji 0,2 m:** profil średniej odległości po rzędnych jest płaski (2017-04-01: 120,3 / 118,2 / 121,3 m dla 194,25 / 194,50 / 194,75 m), więc różnica 0,2–0,3 m w `h` zmienia średnią o kilka metrów przy rozrzucie rzędu 100 m. D nie potrafi więc poświadczyć `h_t` dokładniej niż mniej więcej ±0,2–0,3 m, a „zgodność ≤ 0,2 m” jest zarazem jego granicą rozdzielczości.
-- **Zgodność z `h_t` (sceny w dziedzinie, fity ważne): n = 107, udział |D − h_t| ≤ 0,2 m = 46,7 %, mediana |D − h_t| = 0,25 m, mediana D − h_t = +0,04 m.** Wszystkie 218 fitów bez filtrów: 22,9 % i 0,68 m (klucz `all_fits_unfiltered`).
+- **[Historyczne, przed kontrolą ręczną] Zgodność z `h_t` (sceny w dziedzinie, fity ważne): n = 107, udział |D − h_t| ≤ 0,2 m = 46,7 %, mediana |D − h_t| = 0,25 m, mediana D − h_t = +0,04 m.** Wszystkie 218 fitów bez filtrów: 22,9 % i 0,68 m (klucz `all_fits_unfiltered`).
 
 | metoda `h_t` | n | udział ≤ 0,2 m | mediana abs. [m] | mediana D − h_t [m] |
 |---|---|---|---|---|
@@ -96,7 +113,7 @@ Po ludzku: z rzędnych punktowych i poziomic mapy KŻ budujemy powierzchnię dna
 
   Przed powodzią (do 31.08.2024, n = 76): 52,6 %, mediana abs. 0,14 m. Sceny A zgadzają się najlepiej, B gorzej, C (poziom z krzywej, sigma ok. 0,5 m) słabo. Poprzednia wersja z filtrem odległości (n = 94) dawała 50,0 % i 0,20 m: różnicę robiło 13 fitów w dziedzinie, które odpadały wyłącznie na `dist_m`, w tym wyraźne niezgodności (np. 2017-10-20 sceny A: D 192,65 m wobec `h_t` 194,30 m; 2026-06-20 sceny B: 193,05 wobec 194,87 m).
 - **Dlaczego średnia odległość brzeg–poziomica nigdy nie schodzi poniżej ok. 115 m (mediana 122 m)? Zbadane: to nie błąd jednostek ani odległości, tylko ogon rozkładu.** Dla sceny A z 2017-04-01 (h_t_d = 194,45 m, najlepszy typ fitu): rozkład odległości punktów brzegu od poziomicy 194,45 m (pct. 5/25/50/75/95/100) = 6 / 26 / 70 / 155 / 385 / 901 m, a 28 % punktów leży bliżej niż 30 m; druga scena A (2017-07-12) daje 6 / 30 / 76 / 176 / 407 / 897 m. Czyli w dużej części brzegu poziomica i brzeg pokrywają się co do kilku–kilkudziesięciu metrów (zgodnie z dokładnością georeferencji i linii brzegowej), ale średnia jest windowana przez odcinki, gdzie powierzchnia KŻ nie opisuje brzegu: rzędna powierzchni na punktach brzegu ma pct. 5/25/50/75/95 = 190,3 / 193,4 / 194,4 / 195,0 / 195,0 m (a powinna być ≈ h), bo trójkąty TIN przy krawędzi otoczki łączą odległe punkty, a odcinki brzegu bez poziomic KŻ w pobliżu mają najbliższy wierzchołek setki metrów dalej. Średnia (wg specyfikacji) jest więc wskaźnikiem pokrycia danych, nie jakości samego fitu, i nie rozróżnia dobrych fitów od złych (dlatego nie jest kryterium ważności). Medianę zamiast średniej pozostawiam jako możliwą zmianę metody po kontroli ręcznej punktów (nie strojone tu).
-- **Wniosek:** w swojej dziedzinie (`h_t` < 194,95 m, 107 scen) D zgadza się z `h_t` w ±0,2 m dla 47 % scen (sceny A: 92 %, B: 26 %, C: 10 %). Potwierdza niskie poziomy typu A, a dla B i C jest zbyt zgrubny albo ich poziomy są niepewne; nie potrafimy tego rozstrzygnąć. Dla wysokiej wody (poza dziedziną, 111 scen) nic nie kontroluje. Nie jest podstawą żadnej korekty `h_t`. Stan wejść: 107 punktów bez kontroli ręcznej i część poziomicy 195,0. Po kontroli: `uv run python 10_kz_compare.py variant-d` i `06_water_levels.py`.
+- *[Historyczny wniosek sprzed kontroli ręcznej, nieaktualny: „D zgadza się w ±0,2 m dla 47 % scen, A 92 %”. Po kontroli ręcznej wynik jest wyraźnie słabszy — patrz niżej.]*
 - **Po kontroli ręcznej (149 punktów ocenionych: 138 `ok`, 9 `corrected`, 2 `rejected`) i wykluczeniu 2 punktów o błędnej kotwicy: wynik główny D na pełnym zbiorze punktów po kontroli (145 punktów: 138 `qc_ok`, 7 `qc_corrected`).** Zbiór jest zasadniczy: wszystko, co autor sprawdził, plus nieocenione dobre punkty, minus odrzucone i błędne kotwice; poziomice 192,5 i 195,0 m zawsze wchodzą do TIN. Wynik główny: n_valid 107, **27,1 %** scen w ±0,2 m, mediana abs. 0,28 m, mediana D − h_t −0,20 m; przed powodzią (n = 76) 30,3 % i 0,27 m; metody: A (36) 55,6 % i 0,19 m, B (61) 14,8 % i 0,39 m, C (10) 0 % i 0,72 m. Pokrycie powierzchni 81,9 %, mediana średniej odległości brzeg-poziomica 104 m. Wcześniejsze 46,7 % dotyczyło mniejszego, wstępnie przefiltrowanego zbioru i nie jest już aktualne.
 
   **Analiza czułości na wyborze zbioru punktów** (te same 218 linii brzegowych, `h_t` tylko do wyznaczenia dziedziny; wiersze 1-5 ablacja recenzenta, wiersz 6 policzony w zadaniu 9):
@@ -110,7 +127,8 @@ Po ludzku: z rzędnych punktowych i poziomic mapy KŻ budujemy powierzchnię dna
   | 5. tylko punkty ≥ 192,5 m (filtr „orientacyjne” samej mapy), bez 2 kotwic | 50 w TIN | 109 | 13,8 % | 0,58 m | +0,58 m | 2,8 % / +0,59 m |
   | **6. wynik główny: pełny zbiór po kontroli, bez 2 kotwic** | 145 | 107 | **27,1 %** | **0,28 m** | **−0,20 m** | 55,6 % / −0,19 m |
 
-  Wnioski: spadek z 46,7 % do 27,1 % (wiersz 1 → 2) tłumaczą 23 głębokie punkty < 192,5 m dopuszczone dopiero przez kontrolę (po ich usunięciu 48,6 %), ale pominięcie tylko ich byłoby arbitralne (odrzucałoby punkty sprawdzone, zostawiając niesprawdzone), więc wynikiem głównym jest pełny zbiór. Filtr punktów ≥ 192,5 m (wiersz 5) nie jest przyjęty: usuwa wszystkie rzędne poniżej poziomicy 192,5 m, pokrycie spada do 67 % (mediana odległości 165 m), a poziomice D lądują o ok. 0,6 m za wysoko. **Kluczowe zastrzeżenie: wynik D zmienia się o ±0,3-0,6 m zależnie od wyboru zbioru punktów (mediana D − h_t od −0,42 do +0,58 m), więcej niż rozdzielczość ±0,2 m, której szukamy. D jest więc tylko zgrubną kontrolą i nie służy do oceny `h_t`; nie jest podstawą żadnej korekty. „Większość scen ±0,2 m” nie jest spełnione w żadnym wariancie z kontrolą ręczną.** Opcja `variant_d.kz_surface(min_spot_z=...)` służy wyłącznie tej analizie (domyślnie wyłączona).
+  Wnioski: spadek z 46,7 % do 27,1 % (wiersz 1 → 2) tłumaczą 23 głębokie punkty < 192,5 m dopuszczone dopiero przez kontrolę (po ich usunięciu 48,6 %), ale pominięcie tylko ich byłoby arbitralne (odrzucałoby punkty sprawdzone, zostawiając niesprawdzone), więc wynikiem głównym jest pełny zbiór. Filtr punktów ≥ 192,5 m (wiersz 5) nie jest przyjęty: usuwa wszystkie rzędne poniżej poziomicy 192,5 m, pokrycie spada do 67 % (mediana odległości 165 m), a poziomice D lądują o ok. 0,6 m za wysoko. **Kluczowe zastrzeżenie: wynik D zmienia się o ±0,3-0,6 m zależnie od wyboru zbioru punktów (mediana D − h_t od −0,42 do +0,58 m), więcej niż rozdzielczość ±0,2 m, której szukamy. D jest więc tylko zgrubną kontrolą i nie służy do oceny `h_t`; nie jest podstawą żadnej korekty. „Większość scen ±0,2 m” nie jest spełnione w żadnym wariancie z kontrolą ręczną.** Opcja `variant_d.kz_surface(min_spot_z=...)` służy wyłącznie tej analizie (domyślnie wyłączona). Historia decyzji: filtr z wiersza 5 został najpierw przyjęty (P4-R31), a po sprawdzeniu, że pogarsza wynik, cofnięty (P4-R32).
+- **Wniosek (aktualny):** w swojej dziedzinie (`h_t` < 194,95 m, 107 scen) D zgadza się z `h_t` w ±0,2 m dla 27,1 % scen (A 55,6 %, B 14,8 %, C 0 %), a wynik przesuwa się o ±0,3–0,6 m zależnie od wyboru punktów. D jest zgrubną kontrolą, nie źródłem `h_t` i nie podstawą korekty; dla wysokiej wody (111 scen poza dziedziną) nic nie kontroluje.
 - **Kontrola ręczna nie przesuwa kotwic, a lokalizator kotwicy bywa mylony.** Wiersz QC ocenia rzędną, nie położenie punktu; szukacz kotwicy czasem trafia w przecinek lub kropkę zamiast w kropkę sondażu, więc część punktów `ok` może mieć błąd położenia rzędu dziesiątek metrów. Dwa takie przypadki wykryto i wykluczono listą `kz.spot_position_reject` w `config.yaml` (dopasowanie po kotwicy ≤ 3 px i `ocr_z`, jak `match_qc`, z powodem przy każdym wpisie): id QC 107 (kotwica na przecinku „.195,1”, prawdziwa kropka 195,1 leży ok. 47 px na lewo, na wyspie) i id QC 98 (kotwica na kropce napisu „193,6 bet.”, etykieta obiektu, nie sondaż). `data/reference/kz_spot_qc.csv` pozostaje bez zmian (oceny autora).
 
 ## 7. Ocena dokładności (`08_evaluate.py` → `data/processed/eval/{bottom_vs_nmt,levels,bottom_change,model_choice,mask}.json`, `docs/img/eval-*.png`)
@@ -146,9 +164,9 @@ Metoda: dno modelu (`z`) vs NMT uśredniony do 10 m (średnia komórek 1 m, wym�
 | 2024 | M-33-59-D-a-3-2 | 195.96 |
 | 2024 | M-33-59-D-a-3-3 | brak dominanty (ląd) |
 
-- **Dno vs NMT: model `all` ma stałe obciążenie ok. +1,2 m (model wyżej niż NMT).** MAE 1,35 / 1,40 / 0,92 / 1,20 m, RMSE 1,53 / 1,64 / 1,15 / 1,41 m, bias +1,16 / +1,19 / −0,21 / +1,16 m (epoki 2011 / 2017 / 2022 / 2024; n = 4 154 / 1 466 / 65 / 2 792); NMT w [z_min, z_max] tylko 5,8 / 7,1 / 4,6 / 7,1 %. Razem 8 477 pikseli: bias +1,16, RMSE 1,51 m, NMT w granicach 6,4 % (blok zbiorczy `all` w `bottom_vs_nmt.json`; `pre_flood` zbiorczo po epokach 2011–2024: n = 1 781, RMSE 0,96, bias +0,20 m, w granicach 12,3 %). Rozrzut NMT na ocenianych pikselach to 0,11–0,69 m, korelacja 0,31 / 0,86 / −0,18 / 0,21. Przedziały są więc przeufne (w granicach 5–7 % zamiast oczekiwanych kilkudziesięciu).
+- **Dno vs NMT: model `all` jest zbiorczo o +1,16 m wyżej niż NMT** (2011, 2017 i 2024 ok. +1,2 m; 2022 −0,21 m przy n = 65, więc nie jest to stała). MAE 1,35 / 1,40 / 0,92 / 1,20 m, RMSE 1,53 / 1,64 / 1,15 / 1,41 m, bias +1,16 / +1,19 / −0,21 / +1,16 m (epoki 2011 / 2017 / 2022 / 2024; n = 4 154 / 1 466 / 65 / 2 792); NMT w [z_min, z_max] tylko 5,8 / 7,1 / 4,6 / 7,1 %. Razem 8 477 pikseli: bias +1,16, RMSE 1,51 m, NMT w granicach 6,4 % (blok zbiorczy `all` w `bottom_vs_nmt.json`; `pre_flood` zbiorczo po epokach 2011–2024: n = 1 781, RMSE 0,96, bias +0,20 m, w granicach 12,3 %). Rozrzut NMT na ocenianych pikselach to 0,11–0,69 m, korelacja 0,31 / 0,86 / −0,18 / 0,21. Przedziały są więc przeufne (w granicach 5–7 % zamiast oczekiwanych kilkudziesięciu).
 - **`pre_flood` jest modelem właściwym dla wszystkich epok, bo NMT 2024 pochodzi z 06.09.2024, czyli sprzed powodzi z połowy września:** vs 2017: MAE 0,64, RMSE 0,82, bias +0,30 m, korelacja 0,76, w granicach 25 % (n = 700); vs 2011: RMSE 1,08, bias +0,14 (n = 834; epoka sprzed serii S-2, część różnic to realne zmiany dna); vs 2022: RMSE 1,05, bias −0,67 (n = 43, rozrzut NMT 0,09 m); vs 2024: RMSE 0,86, bias +0,31 (n = 204). `post_flood` vs 2024 jest tylko informacyjne (NMT sprzed powodzi vs model po): RMSE 1,46, bias +1,29 m.
-- **Otwarte ustalenie (bez poprawki modelu):** resztkowe +1,2 m dla `all`. Hipotezy: maska lądu w zarośniętych i zalewanych marginesach brzegu (piksele 10 m mieszane woda/ląd/roślinność), a także różnica „osiągalności" wody vs wysokość terenu (woda dochodzi do piksela przy poziomie wyższym niż jego wysokość NMT). Do zbadania osobno.
+- **Otwarte ustalenie (bez poprawki modelu):** resztkowe ok. +1,2 m dla `all`; histogram błędów jest dwumodalny (szczyty ok. +0,6 i +2,2 m). Hipotezy: maska lądu w zarośniętych i zalewanych marginesach brzegu (piksele 10 m mieszane woda/ląd/roślinność), różnica „osiągalności" wody vs wysokość terenu (woda dochodzi do piksela przy poziomie wyższym niż jego wysokość NMT), nieznany udział przesunięcia RZGW ↔ EVRF2007 (jeśli RZGW = KRON86, przesunięcie ma przeciwny znak, ok. −0,2 m, więc nie tłumaczy +1,16 m). Do zbadania osobno.
 - **Poziomy wody:** A vs B (n = 92 dni z obiema wartościami): MAE 0,47, RMSE 0,58, bias −0,08 m (A − B); wg epoki LiDAR: 2017 −0,35, 2022 −0,33, 2024 +0,59 m (mieszanka układu EVRF2007 vs RZGW i błędu metod; niekorygowane). Punkt kontrolny R 2025 (197,92 m, 28.04 i 01.05): B −0,13 m (n = 2), C −0,61 m (krzywa refitowana bez R, sigma LOYO 0,48 m), A brak. Punkt 12.09.2024 (194,70 m; brak sceny tego dnia, sceny 03 i 06.09): B −0,07 / −0,09, A −0,30 / −0,29, C +0,59 / +0,47 m. `h_sigma` mediana: A 0,22 (0,04–0,30), B 0,15, C 0,49, R 0,08 m; próg M3 (A < 0,3 m) spełniony.
 - **Ustalenie (bez poprawki):** w dniu własnego nalotu, 2024-09-06, wariant A daje 194,41 m, a powierzchnia wody w NMT/LiDAR tego dnia to 194,88–194,89 m na większości arkuszy, czyli A jest ok. 0,48 m za niski w dniu własnego nalotu.
 - **Zmiana dna po powodzi:** pre_flood vs post_flood: oba modele mają `z` na 8 438 pikselach (3,4 % akwenu wspólnego, 250 292 px obserwowanych w obu okresach); |Δz| > unc_pre + unc_post dla 3 743 px = **1,5 % akwenu wspólnego** (wg ograniczenia projektu; poniżej progu 5 %), więc `model_choice.json` = **`all`**. Dla porównania udział liczony względem pikseli z `z` w obu modelach (`share_significant_overlap`) to 44,4 %, ale to wąski pas przedziałów, a część Δz to różne zakresy poziomów obu okresów (pre 192,9–196,8 m, post 193,8–197,9 m), nie realna zmiana dna. Kryterium |Δz| > suma niepewności jest słabym dowodem, bo przedziały są przeufne (w granicach 5–7 %).
@@ -182,3 +200,70 @@ Po ludzku: mapa KŻ jest niezależnym źródłem dna (amatorskim, aktualizacja 2
 - **Pomiar `/api/zones` przez nginx** (localhost:8080, `draft=1.2&margin=0.3`, 7 różnych `h` 194,00–197,30, każde pierwsze żądanie bez cache backendu): mediana 0,092 s, maksimum 0,134 s (rozmiar odpowiedzi 143–251 kB). Powtórzone żądanie (cache backendu): ok. 3 ms. Kryterium M5 (< 1 s) i §11 (≤ 2 s) spełnione z dużym zapasem.
 - **Obrazy:** backend 2,41 GB (pakiet `mielizna` ciągnie scikit-learn, matplotlib, laspy itd.), frontend 77 MB.
 - **Pułapki:** slim wymaga `libexpat1` dla rasterio; kontekst budowania backendu to katalog `JezioroNyskie/` (zależność `../pipeline`), stąd `.dockerignore` w korzeniu, który wyklucza `data/`.
+
+## 9. Raport, test liczb i porządki (Task 12)
+
+- **`docs/raport.md`** ma sekcje wymagane przez BRIEF §11 pkt 3: dane i CRS (z licencjami i listą wykluczonych scen), klasyfikacja,
+  `h_t`, model dna, tabela §7, porównanie z KŻ, aplikacja, ograniczenia, odtwarzalność.
+- **Test spójności** `pipeline/tests/test_report_numbers.py`: każda liczba wzięta z `eval/*.json` ma w źródle raportu komentarz HTML
+  `eval:plik.json:ścieżka.klucza` bezpośrednio za sobą; test parsuje liczbę (przecinek dziesiętny, znak „−”, spacje tysięcy, `%` = ×100),
+  szuka klucza (kropki rozdzielają segmenty, nawiasy `[195.0]` chronią kropki w nazwie, liczba = indeks listy) i sprawdza
+  zgodność z dokładnością do wyświetlonej liczby miejsc. Bez `data/processed/eval/` test jest pomijany. Po co: liczby w raporcie
+  nie mogą się rozjechać z danymi po ponownym przeliczeniu (jak w UI: liczby tylko z API).
+- **`LICENSE`** (MIT) obejmuje tylko kod; README ma osobną tabelę licencji danych, a materiały z mapy KŻ są niekomercyjne i
+  każda kopia niesie warunki „UWAGA”.
+- BRIEF §13: odhaczone „data nalotu LiDAR” i „KRON86 → EVRF2007”; pozostałe mają tylko odnośnik do raportu.
+
+## 10. Pytania, które może zadać prowadzący
+
+**1. Skąd znasz datę nalotu LiDAR?**
+Z czasu GPS zapisanego przy każdym punkcie LAZ. Gdy bit 0 pola `global_encoding` = 1, czas to „adjusted standard GPS time”
+(sekundy od 6.01.1980 minus 10⁹), więc dodaję 10⁹, przeliczam na UTC (minus 18 s przestępnych) i biorę datę dla punktów wody.
+Gdy bit = 0, czas to „GPS week time” (sekundy od początku tygodnia, bez numeru tygodnia) — daty nie da się odczytać i jej nie
+zgaduję. Dlatego data 2011 pochodzi z 1 z 4 arkuszy. Skorowidz WFS podaje tylko rok.
+
+**2. Dlaczego poziom wody z LiDAR-u to mediana punktów klasy 9?**
+Laser odbija się od lustra wody; klasa 9 (ASPRS) to „woda” w tych danych (brief zakładał 8, zdecydowały dane). Mediana jest odporna
+na odbicia od fal, łodzi i brzegu; rozrzut (IQR) 3–4 cm.
+
+**3. Dlaczego szachownica bloków 500 m?**
+Żeby uniknąć przecieku: NMT, z którego wariant A bierze poziom wody, nie może potem oceniać dna zbudowanego z tego poziomu. Bloki
+„kalibracyjne” i „walidacyjne” na przemian (`(i + j) % 2`) dzielą każdy odcinek brzegu mniej więcej po równo, więc oba zbiory mają
+podobne warunki (nasypy, trzciny, zatoki). Podział „pół na pół” (np. północ/południe) dałby dwa różne typy brzegu.
+
+**4. Dlaczego A nie wygrywa z B, skoro LiDAR jest „niezależny od RZGW”?**
+Bo w danych A okazał się obciążony zależnie od epoki NMT (A − B: −0,35 m dla 2017, +0,59 m dla 2024), a z A krzywa C była gorsza.
+A uzupełnia luki B (37 scen), a w dniach z B jest diagnostyką (P4-R8, P4-R11).
+
+**5. Dlaczego wariant D nie jest źródłem `h_t`?**
+(1) Przeciek: punkty KŻ walidują dno, więc gdyby z nich pochodziło też `h_t`, walidowalibyśmy KŻ samą sobą. (2) D jest zgrubny:
+zgodność z `h_t` w ±0,2 m tylko w 27 % scen, rozdzielczość dopasowania rzędu 0,2–0,3 m, a wynik przesuwa się o ±0,3–0,6 m zależnie od
+wyboru punktów. (3) D działa tylko poniżej 194,95 m (powierzchnia KŻ nie opisuje wyższych poziomów). Dlatego D jest tylko kontrolą.
+
+**6. Co znaczy bias +0,31 m względem KŻ?**
+Bias = model − KŻ. Dodatni: dno modelu leży średnio 0,31 m wyżej niż rzędna z mapy, czyli model pokazuje wodę płytszą niż mapa
+(kierunek ostrożny). To średnia z 32 punktów w paśmie 192,5–195 m; RMSE 0,84 m jest prawie 3× większe, więc pojedyncze miejsca
+bywają w modelu głębsze niż na mapie. Bias jest bliski przesunięciu KRON86 → EVRF2007 (+0,199 m), ale układ rzędnych KŻ jest
+nieznany, więc to może być przypadek. |bias| < 0,5 m → decyzja `go` (próg roboczy z briefu).
+
+**7. Dlaczego model jest o 1,2 m wyżej niż NMT, a względem KŻ tylko o 0,3 m?**
+To różne miejsca i różne modele: NMT ocenia odsłonięty brzeg (ląd w dniu nalotu, często zarośnięty), KŻ — dno pod wodą w paśmie
+192,5–195 m; z KŻ porównujemy `pre_flood` (vs NMT też tylko +0,20 m). Przyczyny +1,16 m dla `all` nie ustaliłem (hipotezy w §7);
+to otwarte ustalenie, a nie wynik do obrony.
+
+**8. Czy RMSE georeferencji 0,13 m znaczy, że mapa KŻ jest dokładna do 13 cm?**
+Nie. Punkty kontrolne leżą na tej samej siatce co punkty dopasowania, więc 0,13 m mówi tylko, że skan jest spójny ze swoją siatką.
+Treść mapy sprawdza zapora (rozrzut 11,9 m), czyli położenie znamy z dokładnością kilkunastu metrów.
+
+**9. Czy błąd OCR 7,4 % spełnia kryterium?**
+Spełnia próg ≤ 10 %, ale nie wielkość próby (≥ 200): mapa ma tylko 149 rozpoznanych rzędnych i autor sprawdził wszystkie.
+Kontrola dotyczy wartości; położenie kropki może być błędne (2 takie punkty wykluczono, P4-R30).
+
+**10. Dlaczego aplikacja używa modelu `all`, a nie `post_flood`?**
+Reguła (spec §6a): przejście na `post_flood` tylko gdy ≥ 5 % akwenu wspólnego ma |Δz| większe niż suma niepewności. Wyszło 1,5 %.
+Zastrzeżenie: przedziały są przeufne, więc to kryterium ma małą moc, a `post_flood` nie widział dna poniżej 193,8 m.
+
+**11. Do czego ten model się nie nadaje?**
+Do nawigacji (napis w aplikacji: „Projekt naukowy. Nie służy do nawigacji.”), do głębokości z dokładnością lepszą niż ok. 1 m, do dna
+poniżej ok. 192,9 m i do rejonu żwirowni. Lista: raport §8.
+

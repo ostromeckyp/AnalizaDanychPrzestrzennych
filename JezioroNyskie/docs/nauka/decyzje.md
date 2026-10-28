@@ -68,6 +68,64 @@ Wynik kontroli `real` (zadanie 11): ledger planu 1 liczył `safe_km2` z zapasem 
 - **F-R8** `fitBounds` mapy uwzględnia panel (desktop) i dolny arkusz (mobile); wykryte dopiero na zrzucie z prawdziwej przeglądarki, jsdom tego nie pokaże.
 - **F-R9** B-R7 (szwy stref) sprawdzone przy zoomie 15–16: niewidoczne, zostaje bez zmian.
 
+## 1d. Decyzje planu 4 (LiDAR, mapa KŻ, ocena dokładności)
+
+Źródło: `.superpowers/sdd/2026-10-28-plan4-lidar-kz-evaluation/progress.md` (rozstrzygnięcia R1–R32 tego planu, numeracja niezależna od planów 1–3; tu z prefiksem P4).
+Liczby i skutki: `docs/raport.md`, `docs/nauka/M7-lidar-kz.md`. Gdy dwie decyzje się różnią, wygrywa późniejsza (P4-R32 cofa P4-R31).
+
+**Kolejność i kontrakty między zadaniami**
+- **P4-R1** `kz.load_qc_spots(ocr, qc)` powstaje w zadaniu wariantu D (Task 7), a porównanie K5 (Task 9) go używa; działa bez pliku kontroli (wtedy tylko punkty z kolorem zgodnym i pewnością OCR ≥ 80): zależność kolejności zadań. Koszt: brak.
+- **P4-R2** Wariant D zapisuje `kz/levels_d.csv`, a do `scenes.json` (`h_t_d`, `h_diff_d`) wpisuje go dopiero `06_water_levels.py`: inaczej każde ponowne uruchomienie 06 gubiłoby D. Koszt: mały.
+- **P4-R27** Zadanie 9 (K5) czekało na kontrolę punktów przez autora, więc zadania 10 i 11 (API, Docker) poszły wcześniej. Koszt: brak.
+
+**LiDAR i układy wysokości**
+- **P4-R3** Test przeliczenia KRON86 → EVRF2007 używa siatek PROJ GUGiK, gdy są lokalnie, inaczej jest pomijany z powodem; wartość poprawki (+0,199 m) jest zapisana w `epochs.csv`. Koszt: brak.
+- **P4-R4** Epoka 2017 zostaje jedną epoką mimo dwóch dni nalotu (27.02 i 25.03, rozstęp 26 dni): poziomy arkuszy są zgodne (193,37–193,40 m), a NMT to jeden produkt; `date` = pierwszy dzień, `date_span_days` = 26, a przy remisie epok wygrywa mniejszy rozstęp. Koszt: dopasowanie scen do epoki 2017 z błędem daty ≤ 26 dni.
+- **P4-R5** Data 2011 z jednego z 4 arkuszy (pozostałe mają „GPS week time” bez daty); poziom = mediana wszystkich arkuszy (194,44 m). Koszt: data może być zła, jeśli ten arkusz pochodzi z innego nalotu.
+- **P4-R6** Stałe 18 s sekund przestępnych przy dekodowaniu czasu GPS (jak w briefie); datę zmieniłyby tylko naloty tuż przed północą. Koszt: pomijalny dla nalotów dziennych.
+- **P4-R7** NMT 2011 i 2017 przeliczany z KRON86 do EVRF2007 przed liczeniem wariantu A; poziom wody nalotu = `h_water_evrf`. Spójność z `h_datum` w `scenes.json`. Koszt: brak.
+
+**Wariant A i pierwszeństwo poziomów**
+- **P4-R8** Pierwszeństwo **R > B > A > C**: A tylko uzupełnia luki B (specyfikacja §5 pkt 7), zamiast wygrywać z B (wcześniejsze brzmienie planu i spec §6a). Powód: A ma obciążenie zależne od epoki (A − B: 2017 −0,28, 2024 +0,62 m) i pogarszał krzywą C. Gdy są A i B, `h_t` = B, a `h_t_a`, `h_t_b`, `h_diff_ab` zostają jako diagnostyka. Koszt pomyłki: A niewykorzystane w dniach z B; zmiana jedną stałą (`levels.PRECEDENCE`).
+- **P4-R9** Bramka `h_sigma` < 0,3 m (kryterium M3) dla wariantu A. Koszt: mniej scen A (bez niej 54 sceny z rozrzutem do 0,73 m).
+- **P4-R10** Testy backendu na prawdziwych danych (hash wersji modelu, pole strefy bezpiecznej) przepięte na nowy stan danych po P4-R8: przypięte wartości śledzą dane, a dane zmieniły się zasadnie. Koszt: brak.
+- **P4-R11** Krzywa powierzchnia → rzędna (wariant C) dopasowana tylko na R i B; A wyłączone z dopasowania (LOO 0,466 m bez A wobec 0,508 m z A). C nie dziedziczy obciążenia A. Koszt: brak.
+- **P4-R12** Bez korekty obciążenia A per epoka: korekta „pod B” byłaby nową, niezrecenzowaną metodą. Obciążenie raportujemy. Koszt: ok. 37 poziomów A w lukach B (głównie 2017) prawdopodobnie ok. 0,3 m za nisko.
+
+**Mapa KŻ: OCR, poziomice, żwirownia**
+- **P4-R13** Fikstura testu OCR to prawdziwy wycinek mapy z co najmniej 3 odczytanymi rzędnymi (albo syntetyczny w stylu mapy, gdyby licencja nie pozwalała). Koszt: brak.
+- **P4-R14** Kotwica rzędnej = najbliższa izolowana kropka z dowolnej strony (promień ∝ wysokość tekstu, jedna kropka na jedną liczbę, niejednoznaczne odrzucane, strona zapisana w `anchor_side`): reguła „kropka po lewej” z briefu była za ostra dla prawdziwej mapy (tylko 94 przyjęte punkty). Koszt: część fałszywych kotwic, łapanych przez kontrolę.
+- **P4-R15** Jeden dodatkowy przebieg OCR (powiększenie 2×), zostawiony, bo pomógł. Koszt: czas działania.
+- **P4-R16** Cel kontroli ręcznej = min(200, liczba punktów): mapa ma mniej niż 200 rozpoznanych rzędnych (ostatecznie 149, wszystkie ocenione). Koszt: słabsze oszacowanie błędu OCR niż wymaga brief (próba < 200).
+- **P4-R17** Wiersze kontroli przypisywane do punktów po kotwicy (≤ 3 px) i odczycie, nie po numerze `id`: ponowny OCR zmienia numerację, a 20 minut pracy autora musi przetrwać zmiany kodu. Koszt: brak.
+- **P4-R18** Rzędna poziomicy z sąsiedniego wypełnienia (biały pas 192,5–195,0 m, błękit głębiej, ląd powyżej), bo mapa rysuje wszystkie poziomice jednym kolorem (brief zakładał dwa). Koszt: niska kompletność 192,5 m.
+- **P4-R19** Żwirownia = obrys „REJON EKSPLOATACJI KRUSZYWA (2023)” w jeziorze (zagrożenie dla żeglugi, warstwa `/api/gravel`); wyrobisko na lądzie pominięte. Koszt: brak.
+- **P4-R20** Poziomice KŻ to próbka „najpierw precyzja” (49 linii 195,0 m zamiast fałszywych 173): porównanie poziomic raportuje pokrycie (km porównane / km poziomicy modelu) i jest orientacyjne. Koszt: słabszy dowód z K3.
+- **P4-R30** Dwa punkty z ewidentnie złą kotwicą (id QC 107: przecinek „.195,1”; id QC 98: kropka napisu „193,6 bet.”) wykluczone jawną listą `config.yaml: kz.spot_position_reject` z powodem przy każdym wpisie; plik ocen autora zostaje nietknięty. Powód: kontrola ręczna ocenia rzędną, nie przesuwa kropki. Koszt: 2 punkty mniej (autor poinformowany).
+
+**Wariant D**
+- **P4-R21** D ważny tylko poniżej sufitu powierzchni KŻ (`h_max_valid`); dopasowania nasycone (poziomica „przyklejona” do górnej granicy powierzchni) nie trafiają do `scenes.json` ani do metryk głównych: nasycone D niczego nie kontroluje. Koszt: D kontroluje tylko sceny o niskim poziomie.
+- **P4-R22** Dziedzina D = sceny z `h_t` < `h_max_valid` (194,95 m); zbadano też dolną granicę średniej odległości brzeg–poziomica (ok. 115 m) — to ogon rozkładu, nie błąd. Koszt: D kontroluje 107 z 218 scen.
+- **P4-R23** Usunięty filtr odległości (≤ 150 m) z ważności D: nie rozróżniał dobrych i złych dopasowań, a odrzucał właśnie niezgodne z `h_t` (zawyżał wynik). Populacja zapisana jawnie (`population`). Koszt: niższa, ale uczciwa zgodność.
+- **P4-R31** *(cofnięte przez P4-R32)* TIN wariantu D tylko z punktów ≥ 192,5 m (zastrzeżenie „orientacyjne” samej mapy), wybrane po analizie ablacyjnej. Okazało się, że kontroler źle odczytał ablację: filtr pogorszył zgodność do 13,8 %.
+- **P4-R32** Cofnięcie P4-R31: D liczony na pełnym zbiorze punktów po kontroli (145; zgodność w ±0,2 m 27,1 %); ablacja zostaje jako analiza czułości (±0,3–0,6 m zależnie od zbioru punktów); D to tylko zgrubna kontrola. Powód: pominięcie wyłącznie punktów dopuszczonych przez kontrolę ręczną byłoby arbitralne. Koszt: słabszy wynik główny D, ale uczciwy.
+
+**Ocena dokładności i wybór modelu**
+- **P4-R24** Ocena dna vs NMT pomija wodę w NMT: komórki ≤ powierzchnia wody arkusza (dominanta histogramu) + 0,1 m, piksele płaskie (odchylenie < 0,03 m) i żwirownię. Powód: arkusze niosą płaską wodę na różnych rzędnych (do ok. 1 m różnicy), a jeden poziom na epokę liczył wodę jako ląd (37–86 % pikseli). Koszt: mniejsze n; stałe niewalidowane.
+- **P4-R25** Udział istotnej zmiany dna liczony względem **akwenu wspólnego** (ograniczenie globalne planu wiąże bardziej niż brief): 1,5 % < 5 %, więc aplikacja serwuje `all`. Stary mianownik (piksele z `z` w obu modelach, 44,4 %) zostaje jako `share_significant_overlap`. Koszt pomyłki: aplikacja nie przechodzi na model po powodzi, gdyby zmiana jednak była istotna.
+- **P4-R26** NMT 2024 (06.09.2024) jest sprzed powodzi, więc porównujemy go z `pre_flood` i `all`; `post_flood` vs 2024 tylko informacyjnie. Koszt: brak.
+- **P4-R28** Brakujący zbiorczy `share_in_bounds` w `bottom_vs_nmt.json` uzupełniony w rundzie zadania 10 (API go potrzebowało). Koszt: małe przekroczenie zakresu zadania.
+
+**Uruchomienie (Docker)**
+- **P4-R29** Cache poziomu na żywo w osobnym wolumenie poza `data/processed` (`MIELIZNA_CURRENT_DIR`): wolumen zagnieżdżony w montowaniu tylko do odczytu nie działał, gdy `data/processed/current` nie istniało. Koszt: po aktualizacji ze starszego układu jednorazowo `docker compose down -v`.
+
+**Odłożone ustalenia planu 4** (bez poprawki; opis w raporcie §8):
+- model `all` ok. +1,2 m powyżej NMT na lądzie (2022: −0,21 m przy n = 65, więc nie „stała”), przedziały przeufne; hipotezy: maska lądu w zarośniętych marginesach, osiągalność wody vs wysokość, nieznany udział przesunięcia RZGW ↔ EVRF2007;
+- epoki LiDAR mieszają naloty (wody arkuszy 2011: 194,43–194,69 m, 2024: 194,89 vs 195,95 m); wariant A 0,48 m za nisko w dniu własnego nalotu 2024;
+- łańcuch `make levels` ma nieaktualne daty (`config.yaml`, `labels.gpkg`) i może wymusić retrening RF; kroki oceny zależą tylko od kodu;
+- stałe oceny (dominanta 2 %, płaskość 0,03 m, zapas 0,1 m) niewalidowane;
+- drobne: kolumna bajtów w inwentarzu, brak `try` per plik przy pobieraniu, niespójna precyzja pikseli GCP, brak ostrzeżenia o niedopasowanych wpisach `spot_position_reject`, import wewnątrz `load_qc_spots`, `uv run` przepisuje `backend/uv.lock`.
+
 ## 2. Znane ograniczenia / do zrobienia (z listy „minor (deferred)" w ledgerze)
 
 **Dane i pobieranie (Task 1–4)**

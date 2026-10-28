@@ -417,17 +417,17 @@ Kolejność krytyczna: **M1 → M3**. Jeśli NMT nie pozwala skalibrować poziom
 
 ## 13. Otwarte kwestie do ustalenia
 
-- [ ] Rzędne NPP i Max PP w m n.p.m. (wg tabeli KŻ: NPP ≈ 195,9, Max PP ≈ 198,9) i układ wysokości stosowany przez RZGW. Potwierdzić w instrukcji gospodarowania wodą / operacie / RZGW.
-- [ ] Rozbieżność interpelacja vs tabela KŻ (194,70 m przy 45,62 mln m³ vs ok. 194,57 m według tabeli): zamulenie zbiornika, inny układ wysokości czy dokładność tabeli?
-- [ ] Kontakt z autorem mapy KŻ (Wiktor Wróblewski, KŻ Nysa): dane cyfrowe punktów, źródło tabeli pojemność ↔ rzędna, sposób pomiaru rzędnych; przy okazji poinformować o użyciu w projekcie naukowym (niekomercyjnym).
-- [ ] Zakres rzędnych objęty seriami scen (najniższy zaobserwowany poziom) wobec zakresu wiarygodnych danych mapy KŻ (≥ 192,5 m).
+- [ ] Rzędne NPP i Max PP w m n.p.m. (wg tabeli KŻ: NPP ≈ 195,9, Max PP ≈ 198,9) i układ wysokości stosowany przez RZGW. Potwierdzić w instrukcji gospodarowania wodą / operacie / RZGW. *Stan: nierozstrzygnięte, wskazówki w [raporcie](raport.md) §3.4.*
+- [ ] Rozbieżność interpelacja vs tabela KŻ (194,70 m przy 45,62 mln m³ vs ok. 194,57 m według tabeli): zamulenie zbiornika, inny układ wysokości czy dokładność tabeli? *Stan: nierozstrzygnięte, [raport](raport.md) §3.4–3.5.*
+- [ ] Kontakt z autorem mapy KŻ (Wiktor Wróblewski, KŻ Nysa): dane cyfrowe punktów, źródło tabeli pojemność ↔ rzędna, sposób pomiaru rzędnych; przy okazji poinformować o użyciu w projekcie naukowym (niekomercyjnym). *Stan: digitalizacja K1–K3 zamiast danych od autora, [raport](raport.md) §6.*
+- [ ] Zakres rzędnych objęty seriami scen (najniższy zaobserwowany poziom) wobec zakresu wiarygodnych danych mapy KŻ (≥ 192,5 m). *Wynik: [raport](raport.md) §4 i §6.4.*
 - [x] Źródła danych zweryfikowane pobraniem z komputera autora (25.10.2026, §5.1).
 - [x] BBOX poprawiony według obrysu z OSM (§4).
 - [x] Archiwum komunikatów RZGW: Wayback 11.2019–03.2024 plus gov.pl co najmniej od 06.2025 (§5.1). IMGW ma tylko stację rzeczną.
-- [ ] Data nalotu LiDAR dla każdej epoki (GPS time z LAZ) i poziom wody tego dnia (punkty klasy 8). Zrobić w M1.
-- [ ] Jak daleko wstecz sięga lista komunikatów krajowych gov.pl (czy obejmuje 03.2024–06.2025)?
-- [ ] Zmiana pojemności przy NPP / Max PP między 2021 (66,3 / 122,1) a 2024+ (65,7 / 121,7): która krzywa V ↔ h obowiązywała kiedy?
-- [ ] Przeliczenie epok KRON86 (2011, 2017) do EVRF2007.
+- [x] Data nalotu LiDAR dla każdej epoki (GPS time z LAZ) i poziom wody tego dnia (punkty klasy 8). Zrobić w M1. *Zrobione (klasa wody to 9): [raport](raport.md) §3.2, `data/processed/lidar/epochs.csv`.*
+- [ ] Jak daleko wstecz sięga lista komunikatów krajowych gov.pl (czy obejmuje 03.2024–06.2025)? *Wynik: [raport](raport.md) §1.1.*
+- [ ] Zmiana pojemności przy NPP / Max PP między 2021 (66,3 / 122,1) a 2024+ (65,7 / 121,7): która krzywa V ↔ h obowiązywała kiedy? *Stan: nierozstrzygnięte, [raport](raport.md) §3.1.*
+- [x] Przeliczenie epok KRON86 (2011, 2017) do EVRF2007. *Zrobione siatkami quasi-geoidy GUGiK (+0,199 m): [raport](raport.md) §1.2.*
 - [ ] Ostateczny termin oddania projektu i forma obrony (pierwszy termin, link do repo, minął 17.10.2026).
 - [ ] Zanurzenia przykładowych jachtów do presetów.
 - [ ] Wybór MapLibre vs OpenLayers (MapLibre prostszy dla GeoJSON + kafli; OpenLayers lepszy przy WMS/WCS i niestandardowych CRS).
