@@ -31,7 +31,7 @@ Bramka `h_sigma` < 0,3 m to kryterium M3 (`MAX_SIGMA` w `06b_lidar_levels.py`, o
 Wyniki (221 scen):
 - **A ma 129 scen** (2017: 90, 2022: 13, 2024: 26). Odpadło 92: 56 przez h_sigma ≥ 0,3 m, 17 przez pokrycie < 3 sektorów (2 przez oba), 20 bez epoki z niższą wodą (szacunek sceny < ok. 193,8 m, najniższa epoka to 2017: 193,59 m), 1 bez szacunku (qc_excluded).
 - **Realnie uzupełnia luki w 37 scenach** (2017: 36, 2022: 1) z 63 scen bez B/R; w `scenes.json`: B 155, A 37, C 26, R 2, qc_excluded 1. h_sigma tych 37: mediana 0,22, maks. 0,30 m. Pozostałe 92 sceny z A mają B, więc A jest tylko diagnostyką.
-- **Krzywa powierzchnia–rzędna, błąd LOO (pomiar, Otsu):** bez A 0,466 m (LOYO 0,488, n_obs=131); z A w dopasowaniu 0,508 m (LOYO 0,583, n_obs=164). A pogarsza krzywą, ale dotyczy tylko scen C; zostawione bez zmian (do decyzji).
+- **Krzywa powierzchnia–rzędna dopasowana tylko na R i B (A wyłączone z dopasowania, R11):** błąd LOO 0,466 m, LOYO 0,488 m (n_obs=131; Otsu). Dla porównania, gdy A było w dopasowaniu: LOO 0,508 m, LOYO 0,583 m (n_obs=164). A nadal uzupełnia luki w `scenes.json`, ale nie wpływa na wariant C.
 - **Obciążenie zależne od epoki (A − B, 92 dni z oboma):** mediana −0,16 m, std 0,57, |różnica| > 0,2 m w 70 z 92.
 
 | epoka NMT | n | mediana A−B [m] | std | min | maks |
@@ -40,6 +40,6 @@ Wyniki (221 scen):
 | 2022 | 12 | −0,26 | 0,26 | −0,95 | −0,04 |
 | 2024 | 26 | +0,62 | 0,17 | +0,02 | +0,76 |
 
-  Znak różnicy zależy od epoki (2024 powyżej B, 2017 i 2022 poniżej), więc to raczej obciążenie metody/pokrycia NMT (2017 i 2022: tylko wschodni nasyp, ≥ 3 z 8 sektorów; stromy profil; położenie linii brzegowej ±10 m) niż jedno stałe przesunięcie układu RZGW. Wniosek do Task 8: A traktować jako uzupełnienie z niepewnością większą niż deklarowane `h_sigma`.
+  Znak różnicy zależy od epoki (2024 powyżej B, 2017 i 2022 poniżej), więc to raczej obciążenie metody/pokrycia NMT (2017 i 2022: tylko wschodni nasyp, ≥ 3 z 8 sektorów; stromy profil; położenie linii brzegowej ±10 m) niż jedno stałe przesunięcie układu RZGW. **Uwaga (R12): poziomy A wypełniające luki B (głównie epoka 2017, 36 z 37 scen) są prawdopodobnie ok. 0,3 m za niskie względem B (mediana A−B dla 2017: −0,28 m); nie robimy korekty epokowej.** Wniosek do Task 8: A traktować jako uzupełnienie z niepewnością większą niż deklarowane `h_sigma`.
 - **Pokrycie NMT:** epoki 2017 i 2022 mają NMT tylko dla 2 arkuszy; 7 (2017) i 10 (2022) scen odpadło na sektorach.
 - **M3 (2024-09-06, cel 194,70 ± 0,3):** h_t = B = 194,61 m (A = 194,41 m, epoka 2017).

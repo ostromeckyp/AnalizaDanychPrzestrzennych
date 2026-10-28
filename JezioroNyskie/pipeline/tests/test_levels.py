@@ -205,3 +205,32 @@ def test_scenes_json_writes_b_fields(tmp_path):
     write_scenes_json(df, tmp_path / "s.json")
     rows = json.loads((tmp_path / "s.json").read_text())
     assert rows[1]["h_t_b"] == 193.0 and rows[1]["h_t_a"] == 193.12 and rows[1]["h_diff_ab"] == 0.12 and rows[0]["h_t_b"] is None
+
+
+def test_curve_is_fitted_on_r_and_b_only_not_a():
+    dates = [date(2020, 1, 8), date(2020, 1, 15), date(2020, 1, 22), date(2020, 1, 29), date(2020, 2, 5),
+             date(2020, 2, 12), date(2020, 2, 19)]
+    bulls = pd.DataFrame([bulletin("2020-01-08", 34.84), bulletin("2020-01-15", 36.0), bulletin("2020-01-22", 38.0),
+                          bulletin("2020-01-29", 40.0)])
+    areas = dict(zip(dates, [12.0, 12.6, 13.4, 14.0, 13.0, 15.0, 15.5]))
+    kw = dict(areas=areas, qc_ok={d: True for d in dates}, nodata_pct={d: 0.0 for d in dates})
+    none = _a_override(date(2001, 1, 1), 1.0)
+    base = assign_levels(dates, bulls, none, **kw)
+    ov = pd.concat([_a_override(date(2020, 2, 5), 190.0), _a_override(date(2020, 2, 12), 199.0)], ignore_index=True)
+    with_a = assign_levels(dates, bulls, ov, **kw)
+    assert with_a.set_index("date").loc[date(2020, 2, 5), "h_method"] == "A"
+    assert with_a.attrs["curve"].n_obs == base.attrs["curve"].n_obs == 4
+    assert with_a.attrs["curve"].rmse == pytest.approx(base.attrs["curve"].rmse)
+    assert with_a.set_index("date").loc[date(2020, 2, 19), "h_t"] == pytest.approx(
+        base.set_index("date").loc[date(2020, 2, 19), "h_t"])
+
+
+def test_curve_fit_still_excludes_high_nodata_scenes():
+    dates = [date(2020, 1, 8), date(2020, 1, 15), date(2020, 1, 22), date(2020, 1, 29), date(2020, 2, 5)]
+    bulls = pd.DataFrame([bulletin("2020-01-08", 34.84), bulletin("2020-01-15", 36.0), bulletin("2020-01-22", 38.0),
+                          bulletin("2020-01-29", 40.0)])
+    nd = {d: 0.0 for d in dates}
+    nd[date(2020, 1, 29)] = 5.0
+    df = assign_levels(dates, bulls, _a_override(date(2001, 1, 1), 1.0), areas=dict(zip(dates, [12.0, 12.6, 13.4, 14.0, 13.0])),
+                       qc_ok={d: True for d in dates}, nodata_pct=nd)
+    assert df.attrs["curve"].n_obs == 3

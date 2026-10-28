@@ -311,7 +311,8 @@ def assign_levels(scene_dates: list[date], bulletins: pd.DataFrame, overrides: p
         ar = pd.Series([areas[d] for d in df.date], index=df.index)
         yr = np.array([d.year for d in df.date])
         nd = pd.Series([(nodata_pct or {}).get(d, 0.0) for d in df.date], index=df.index)
-        fit = df.h_method.isin(["B", "R", "A"]) & ok & (nd <= max_nodata_pct)
+        # A (NMT, obciążone zależnie od epoki) NIE zasila krzywej
+        fit = df.h_method.isin(["B", "R"]) & ok & (nd <= max_nodata_pct)
         curve = fit_area_level(ar[fit].to_numpy(), df.h_t[fit].to_numpy(), groups=yr[fit.to_numpy()])
         df.attrs["curve"] = curve
         todo = df.h_method.isna() & ok
