@@ -69,7 +69,7 @@ export function toPopupModel(p: Point, meta: Meta): PopupModel {
         variant: 'B',
         title: 'Głębokość w tym miejscu',
         value: num(p.depth_min) ? `≥ ${fmtM(p.depth_min)}` : 'Głęboko',
-        note: `${num(p.depth_min) ? `Głębiej niż ${fmtM(p.depth_min)}` : 'Głęboko'} (poniżej najniższego zaobserwowanego stanu ${fmtLevel(meta.h_min_obs)})`,
+        note: `${num(p.depth_min) ? `Głębiej niż ${fmtM(p.depth_min)}` : 'Głęboko'} (poniżej najniższego zaobserwowanego stanu ${fmtLevel(meta.h_min_obs)}).`,
         zone: zoneOf(p, true),
         rows: [
           ...(num(floor) ? [{ term: 'Wysokość dna', desc: `< ${fmtLevel(floor)}` }] : []),

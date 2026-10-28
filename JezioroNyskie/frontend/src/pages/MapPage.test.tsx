@@ -18,12 +18,13 @@ import { MapPage } from './MapPage';
 // Atrapa mapy: zapamiętuje ostatnie propsy i pozwala „kliknąć” w mapę.
 const mapProps = vi.hoisted(() => ({ last: undefined as Record<string, unknown> | undefined }));
 vi.mock('../components/map/MapView', () => ({
-  MapView: (props: { onMapClick: (lon: number, lat: number) => void } & Record<string, unknown>) => {
+  MapView: (props: { onMapClick: (lon: number, lat: number) => void; pin?: unknown } & Record<string, unknown>) => {
     mapProps.last = props;
     return (
       <div data-testid="map">
         <button onClick={() => props.onMapClick(17.05, 50.45)}>klik-mapa</button>
         <button onClick={() => props.onMapClick(17.07, 50.43)}>klik-mapa-2</button>
+        {props.pin ? (props.pinOverlay as React.ReactNode) : null}
       </div>
     );
   },
@@ -210,5 +211,37 @@ describe('MapPage', () => {
     expect(mapProps.last!.bbox).toEqual(meta.bbox_wgs84);
     expect((mapProps.last!.bottomLayer as { url: string }).url).toBe('/api/layers/bottom.png?theme=light');
     expect(mapProps.last!.basemap).toBe('osm');
+  });
+
+  it('?h= does not wait for a slow current-level query', async () => {
+    m.currentLevel.mockReturnValue(new Promise(() => {}));
+    renderPage('/?h=195.25');
+    await waitFor(() => expect(m.zones).toHaveBeenCalledWith(expect.objectContaining({ h: 195.25 }), expect.anything()));
+  });
+
+  it('Escape closes the focused popup', async () => {
+    renderPage();
+    await screen.findByText('Kliknij w wodę, aby sprawdzić głębokość');
+    await userEvent.click(screen.getByRole('button', { name: 'klik-mapa' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Informacje o punkcie' });
+    await waitFor(() => expect(dlg).toHaveFocus());
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('capacity mode: map level always equals the panel result after mode round-trips', async () => {
+    renderPage('/?h=194');
+    await screen.findByText('Kliknij w wodę, aby sprawdzić głębokość');
+    await userEvent.click(screen.getByRole('button', { name: 'Pojemność' }));
+    await screen.findByText(/→ poziom/);
+    await waitFor(() => expect(m.zones).toHaveBeenLastCalledWith(expect.objectContaining({ h: 195 }), expect.anything()));
+    await userEvent.click(screen.getByRole('button', { name: 'Rzędna' }));
+    fireEvent.change(screen.getByRole('slider'), { target: { value: '196' } });
+    await waitFor(() => expect(m.zones).toHaveBeenLastCalledWith(expect.objectContaining({ h: 196 }), expect.anything()));
+    await userEvent.click(screen.getByRole('button', { name: 'Pojemność' }));
+    await screen.findByText(/→ poziom/);
+    // strefy dla 195 są już w cache, więc sprawdzamy to, co dostaje mapa
+    await waitFor(() => expect((mapProps.last!.zones as { params: { h: number } }).params.h).toBe(195));
+    expect(screen.getByRole('slider')).toHaveValue('195');
   });
 });

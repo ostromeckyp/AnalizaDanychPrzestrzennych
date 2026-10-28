@@ -80,26 +80,25 @@ export function useMapPageVm(): MapPageVm {
   // Poziom początkowy ustalamy raz: ?h= > bieżący poziom > domyślny z meta. Czekamy na bieżący poziom
   // tylko do czasu, aż jego zapytanie się rozstrzygnie (sukces lub błąd).
   const initialH = useRef<number>();
-  if (initialH.current === undefined && meta && slider && level.status !== 'loading') {
-    const raw = parseUrlH(search.get('h')) ?? level.level?.h ?? meta.defaults.h;
+  const urlH = parseUrlH(search.get('h'));
+  if (initialH.current === undefined && meta && slider && (urlH !== undefined || level.status !== 'loading')) {
+    const raw = urlH ?? level.level?.h ?? meta.defaults.h;
     initialH.current = clampH(raw, slider.min, slider.max);
   }
-  const h = hUser ?? initialH.current ?? NaN;
+  const baseH = hUser ?? initialH.current ?? NaN;
   const draft = draftUser ?? meta?.defaults.draft ?? NaN;
   const margin = marginUser ?? meta?.defaults.margin ?? NaN;
+  const capacity = useCapacityVm(mode, mode === 'level' ? baseH : (capacityValue ?? NaN));
+  const hFromCapacity = capacity.hFromCapacity;
+  // W trybie pojemności poziom wynika z przeliczenia (bez stanu pośredniego, więc panel i mapa się zgadzają).
+  const h =
+    mode === 'capacity' && hFromCapacity !== undefined && slider
+      ? clampH(hFromCapacity, slider.min, slider.max)
+      : baseH;
   const params = { h, draft, margin };
 
   const zonesVm = useZonesVm(params);
-  const capacity = useCapacityVm(mode, mode === 'level' ? h : (capacityValue ?? NaN));
   const point = usePointVm(pin, params);
-
-  // Tryb pojemności: wynik przeliczenia ustawia poziom.
-  const hFromCapacity = capacity.hFromCapacity;
-  const lastApplied = useRef<number>();
-  if (mode === 'capacity' && slider && hFromCapacity !== undefined && lastApplied.current !== hFromCapacity) {
-    lastApplied.current = hFromCapacity;
-    setHUser(clampH(hFromCapacity, slider.min, slider.max));
-  }
 
   // Ostrzeżenie z API wymusza warstwę niepewności, ale nie przestawia wyboru użytkownika.
   const forceUnc = zonesVm.warnings.length > 0;
@@ -130,9 +129,14 @@ export function useMapPageVm(): MapPageVm {
               if (m === 'capacity' && capacityValue === undefined && capacity.capacityAtLevel !== undefined) {
                 setCapacityValue(Math.round(capacity.capacityAtLevel * 10) / 10);
               }
+              if (m === 'level') setHUser(h); // zachowaj poziom wynikający z pojemności
               setMode(m);
             },
-            onLevelChange: (x) => setHUser(clampH(x, slider.min, slider.max)),
+            // Ruch suwaka w trybie pojemności przełącza na tryb rzędnej.
+            onLevelChange: (x) => {
+              setHUser(clampH(x, slider.min, slider.max));
+              setMode('level');
+            },
             onCapacityChange: setCapacityValue,
           },
           layers: {

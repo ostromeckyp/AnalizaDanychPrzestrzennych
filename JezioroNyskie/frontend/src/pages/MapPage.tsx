@@ -35,6 +35,11 @@ export function MapPage() {
             basemap={map.basemap}
             npp={meta.data.npp}
             pin={map.pin}
+            pinOverlay={
+              map.pin && (
+                <PointPopup model={point.popup} state={point.status === 'error' ? 'error' : 'loading'} onClose={vm.closePopup} />
+              )
+            }
             onMapClick={vm.onMapClick}
           />
         )}
@@ -51,14 +56,7 @@ export function MapPage() {
         </div>
       )}
 
-      {map.pin ? (
-        <div className="mappage__popup">
-          <PointPopup model={point.popup} state={point.status === 'error' ? 'error' : 'loading'} onClose={vm.closePopup} />
-        </div>
-      ) : (
-        !loading &&
-        !failed && <p className="mappage__hint">Kliknij w wodę, aby sprawdzić głębokość</p>
-      )}
+      {!map.pin && !loading && !failed && <p className="mappage__hint">Kliknij w wodę, aby sprawdzić głębokość</p>}
 
       {loading && <LoadingSkeleton />}
       {!loading && z.status === 'recalculating' && <RecalcPill draft={vm.draft} />}

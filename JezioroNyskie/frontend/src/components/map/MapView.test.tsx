@@ -32,7 +32,8 @@ const h = vi.hoisted(() => {
     }),
   };
   const MapCtor = vi.fn();
-  return { handlers, sources, layers, imageSource, fns, MapCtor };
+  const markers: { opts: { element: HTMLElement; anchor: string; offset: number[] }; lngLat?: number[]; removed: boolean }[] = [];
+  return { markers, handlers, sources, layers, imageSource, fns, MapCtor };
 });
 
 vi.mock('maplibre-gl', () => {
@@ -45,7 +46,28 @@ vi.mock('maplibre-gl', () => {
   class AttributionControl {
     constructor(public opts: unknown) {}
   }
-  return { default: { Map: FakeMap, AttributionControl }, Map: FakeMap, AttributionControl };
+  class ScaleControl {
+    constructor(public opts: unknown) {}
+  }
+  class Marker {
+    rec: (typeof h.markers)[number];
+    constructor(opts: (typeof h.markers)[number]['opts']) {
+      this.rec = { opts, removed: false };
+      h.markers.push(this.rec);
+    }
+    setLngLat(l: number[]) {
+      this.rec.lngLat = l;
+      return this;
+    }
+    addTo() {
+      return this;
+    }
+    remove() {
+      this.rec.removed = true;
+      return this;
+    }
+  }
+  return { default: { Map: FakeMap, AttributionControl, ScaleControl, Marker }, Map: FakeMap, AttributionControl };
 });
 
 import { fireEvent, screen } from '@testing-library/react';
@@ -74,6 +96,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  h.markers.length = 0;
   h.layers.clear();
   h.layers.add('basemap-osm').add('basemap-orto'); // z obiektu style
   for (const k of Object.keys(h.sources)) delete h.sources[k];
@@ -162,5 +185,24 @@ describe('MapView', () => {
   it('zamyka mapę przy odmontowaniu', () => {
     mount().unmount();
     expect(h.fns.remove).toHaveBeenCalled();
+  });
+
+  it('adds a metric scale control at bottom-left', () => {
+    mount();
+    const call = h.fns.addControl.mock.calls.find(([c]) => c?.constructor?.name === 'ScaleControl');
+    expect(call).toBeDefined();
+    expect(call![0].opts).toEqual({ unit: 'metric', maxWidth: 100 });
+    expect(call![1]).toBe('bottom-left');
+  });
+
+  it('anchors pinOverlay in a marker at the pin and removes it when the pin is cleared', () => {
+    const { rerender } = mount({ pin: { lon: 17.05, lat: 50.45 }, pinOverlay: <p>nakładka</p> });
+    expect(h.markers).toHaveLength(1);
+    expect(h.markers[0].lngLat).toEqual([17.05, 50.45]);
+    expect(h.markers[0].opts.anchor).toBe('bottom');
+    expect(h.markers[0].opts.element.textContent).toBe('nakładka');
+    rerender(<MapView {...base} pin={undefined} pinOverlay={undefined} />);
+    expect(h.markers[0].removed).toBe(true);
+    expect(h.markers[0].opts.element.textContent).toBe('');
   });
 });

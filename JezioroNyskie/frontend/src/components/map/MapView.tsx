@@ -1,6 +1,8 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
+import './map.css';
 import maplibregl, { type ImageSource, type GeoJSONSource, type Map as MlMap } from 'maplibre-gl';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { POI_COLORS, ZONE_COLORS, type ThemeName } from '../../theme';
 import { withTheme } from '../../urls';
 import {
@@ -30,6 +32,8 @@ export interface MapViewProps {
   basemap: 'osm' | 'orto';
   npp?: number;
   pin?: { lon: number; lat: number };
+  /** Treść zakotwiczona nad pinezką (popup); mapa nie zna jej zawartości. */
+  pinOverlay?: ReactNode;
   onMapClick: (lon: number, lat: number) => void;
   onReady?: () => void;
 }
@@ -74,6 +78,7 @@ export function MapView(props: MapViewProps) {
     const [w, s, e, n] = p.bbox;
     map.fitBounds([[w, s], [e, n]], { padding: 24, animate: false });
     map.addControl(new maplibregl.AttributionControl({ compact: false, customAttribution: ATTRIBUTION }), 'bottom-right');
+    map.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 100 }), 'bottom-left');
     map.on('click', (ev: { lngLat: { lng: number; lat: number } }) =>
       propsRef.current.onMapClick(ev.lngLat.lng, ev.lngLat.lat),
     );
@@ -115,6 +120,26 @@ export function MapView(props: MapViewProps) {
     if (!ready) return;
     setData(IDS.pin, pin ? { type: 'Feature', geometry: { type: 'Point', coordinates: [pin.lon, pin.lat] }, properties: {} } as GeoJsonData : EMPTY);
   }, [ready, pin]);
+
+  // Popup jako marker przy pinezce; klik w popup nie może przechodzić do mapy.
+  const [overlayEl, setOverlayEl] = useState<HTMLElement | null>(null);
+  const hasOverlay = !!props.pinOverlay;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map || !pin || !hasOverlay) return;
+    const element = document.createElement('div');
+    element.className = 'pin-overlay';
+    for (const ev of ['click', 'dblclick', 'mousedown', 'touchstart', 'pointerdown', 'wheel'])
+      element.addEventListener(ev, (e) => e.stopPropagation());
+    const marker = new maplibregl.Marker({ element, anchor: 'bottom', offset: [0, -12] })
+      .setLngLat([pin.lon, pin.lat])
+      .addTo(map);
+    setOverlayEl(element);
+    return () => {
+      marker.remove();
+      setOverlayEl(null);
+    };
+  }, [ready, pin, hasOverlay]);
 
   // Linie poniżej NPP rysujemy przerywane.
   useEffect(() => {
@@ -186,6 +211,7 @@ export function MapView(props: MapViewProps) {
         <button type="button" aria-label="Oddal" style={btn} onClick={() => mapRef.current?.zoomOut()}>−</button>
         <button type="button" aria-label="Północ" style={btn} onClick={() => mapRef.current?.resetNorth()}>N</button>
       </div>
+      {overlayEl && createPortal(props.pinOverlay, overlayEl)}
     </div>
   );
 }

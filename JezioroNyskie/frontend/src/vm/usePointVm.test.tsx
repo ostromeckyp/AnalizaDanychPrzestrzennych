@@ -59,7 +59,7 @@ describe('toPopupModel', () => {
 
   it('B: deeper-than sentence uses lowest observed level from meta; bottom below floor', () => {
     const m = toPopupModel(pointAlwaysWater, meta);
-    expect(m.note).toBe(`Głębiej niż 1,95${NB}m (poniżej najniższego zaobserwowanego stanu 192,90${NB}m n.p.m.)`);
+    expect(m.note).toBe(`Głębiej niż 1,95${NB}m (poniżej najniższego zaobserwowanego stanu 192,90${NB}m n.p.m.).`);
     expect(m.rows).toContainEqual({ term: 'Wysokość dna', desc: `< 193,05${NB}m n.p.m.` });
     expect(m.rows).toContainEqual({ term: 'Obserwacje satelitarne', desc: 'brak (zawsze woda)' });
     expect(m.zone?.name).toBe('Bezpieczna');

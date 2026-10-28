@@ -29,7 +29,6 @@
 }
 .mappage__scroll { flex: 1; overflow-y: auto; padding: 20px; }
 .mappage__legend { position: absolute; right: 16px; bottom: 52px; width: 308px; z-index: 2; }
-.mappage__popup { position: absolute; top: 16px; right: 72px; z-index: 3; }
 .mappage__hint {
   position: absolute;
   left: 50%;

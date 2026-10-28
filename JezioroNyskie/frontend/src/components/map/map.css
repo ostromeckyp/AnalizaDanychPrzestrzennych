@@ -1,0 +1,8 @@
+/* Skala obok panelu parametrów (360 px + 16 px marginesu) i nad stopką. */
+.maplibregl-ctrl-bottom-left {
+  left: 392px;
+  bottom: 0;
+}
+.pin-overlay {
+  z-index: 3;
+}
