@@ -781,3 +781,35 @@ def vertices_to_polygon(verts, t: "KzTransform"):
     if poly.area <= 0:
         raise ValueError("obrys o zerowym polu")
     return poly
+
+
+def load_qc_spots(ocr: "gpd.GeoDataFrame", qc: pd.DataFrame | None) -> "gpd.GeoDataFrame":
+    """Punkty rzędnych mapy KŻ nadające się do użycia (wariant D, K5): po kontroli ręcznej, a bez niej po filtrze.
+
+    Co robi: wiersze QC przypisuje do punktów OCR po kotwicy (`match_qc`: ≤ 3 px i ta sama `ocr_z`). Punkt z
+      `qc = ok` zostaje z rzędną OCR, z `corrected` dostaje `z_qc`, z `rejected` odpada.
+    Dlaczego tak: punkt nieoceniony (brak wiersza QC albo `skip`) dostaje regułę „bez kontroli”: zostaje tylko gdy
+      kolor zgadza się z rzędną (`color_ok`) i pewność OCR ≥ `LOW_CONF` (czyli nie jest `is_suspect`). Gdy QC jest
+      kompletne, nieocenionych nie ma i reguła nic nie dotyka; gdy QC jest częściowe albo go brak, działa tylko na
+      nieocenionych, więc oceny ręczne zawsze wygrywają z filtrem.
+    Wejście → wyjście: GeoDataFrame OCR (id, z, px, py, conf, color_ok, geometry) i QC (ocr_z, qc, z_qc, px, py)
+      lub None -> GeoDataFrame tych punktów z kolumną `z` (po korekcie) i `z_source` in {ocr_ok, qc_ok, qc_corrected}.
+    Jak to obronić: testy obu ścieżek; kolor i pewność to te same progi co warstwa „podejrzane” w kontroli."""
+    out = ocr.copy()
+    out["z_source"] = "unchecked"
+    if qc is not None and len(qc):
+        matched, _ = match_qc(qc, out)
+        judged = matched[matched["qc"].isin(["ok", "corrected", "rejected"])].drop_duplicates("id", keep="last")
+        verdict = judged.set_index("id")["qc"]
+        zq = pd.to_numeric(judged.set_index("id")["z_qc"], errors="coerce")
+        v = out["id"].map(verdict)
+        out.loc[v == "ok", "z_source"] = "qc_ok"
+        fixed = v == "corrected"
+        out.loc[fixed, "z"] = out.loc[fixed, "id"].map(zq).to_numpy(float)
+        out.loc[fixed, "z_source"] = "qc_corrected"
+        out.loc[v == "rejected", "z_source"] = "qc_rejected"
+    unchecked = out["z_source"] == "unchecked"
+    keep_unchecked = unchecked & ~is_suspect(out)
+    out.loc[keep_unchecked, "z_source"] = "ocr_ok"
+    keep = out["z_source"].isin(["ocr_ok", "qc_ok", "qc_corrected"])
+    return out[keep].reset_index(drop=True)

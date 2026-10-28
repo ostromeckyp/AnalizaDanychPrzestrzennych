@@ -349,6 +349,7 @@ def write_scenes_json(df: pd.DataFrame, path: Path) -> None:
                     "h_datum": None if h is None else r.h_datum,
                     "h_t_b": num(getattr(r, "h_t_b", None), 2), "h_t_a": num(getattr(r, "h_t_a", None), 2),
                     "h_diff_ab": num(getattr(r, "h_diff_ab", None), 2),
+                    "h_t_d": num(getattr(r, "h_t_d", None), 2), "h_diff_d": num(getattr(r, "h_diff_d", None), 2),
                     "area_km2": num(r.area_km2, 3),
                     "area_otsu_km2": num(r.area_otsu_km2, 3),
                     "lake_nodata_pct": num(r.lake_nodata_pct, 3), "otsu_threshold": num(r.otsu_threshold, 3),

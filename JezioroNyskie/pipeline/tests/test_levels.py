@@ -105,7 +105,7 @@ def test_scenes_json_schema(tmp_path):
     write_scenes_json(sample_df(), tmp_path / "s.json")
     rows = json.loads((tmp_path / "s.json").read_text())
     s = rows[1]
-    assert set(s) == {"date", "tiles", "h_t", "h_method", "h_source", "h_sigma", "h_datum", "h_t_b", "h_t_a", "h_diff_ab", "area_km2",
+    assert set(s) == {"date", "tiles", "h_t", "h_method", "h_source", "h_sigma", "h_datum", "h_t_b", "h_t_a", "h_diff_ab", "h_t_d", "h_diff_d", "area_km2",
                       "area_otsu_km2", "lake_nodata_pct", "otsu_threshold", "local_cloud_pct", "capacity_mln_m3",
                       "qc_ok", "qc_reason"}
     assert [r["date"] for r in rows] == ["2019-01-01", "2020-01-08"]  # posortowane
@@ -205,6 +205,15 @@ def test_scenes_json_writes_b_fields(tmp_path):
     write_scenes_json(df, tmp_path / "s.json")
     rows = json.loads((tmp_path / "s.json").read_text())
     assert rows[1]["h_t_b"] == 193.0 and rows[1]["h_t_a"] == 193.12 and rows[1]["h_diff_ab"] == 0.12 and rows[0]["h_t_b"] is None
+
+
+def test_scenes_json_writes_d_fields(tmp_path):
+    df = sample_df()
+    df["h_t_d"] = [193.2, np.nan]
+    df["h_diff_d"] = [0.077, np.nan]
+    write_scenes_json(df, tmp_path / "s.json")
+    rows = json.loads((tmp_path / "s.json").read_text())
+    assert rows[1]["h_t_d"] == 193.2 and rows[1]["h_diff_d"] == 0.08 and rows[0]["h_t_d"] is None
 
 
 def test_curve_is_fitted_on_r_and_b_only_not_a():

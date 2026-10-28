@@ -75,3 +75,24 @@ Po ludzku: poziomice na mapie mają wszystkie ten sam granatowy kolor (mierzone:
 - Wynik (`kz_contours_stats.json`): **192,5 m: 19 linii, 2,40 km; 195,0 m: 49 linii, 7,01 km**. Pierwsza wersja (26 + 173 linie, 3,5 + 25,7 km) zawierała głównie fałszywe linie (siatka, drogi, poziomice > 195, ciemna zieleń), więc nie jest podstawą żadnych liczb.
 - **Granice precyzji 195,0 m:** na mapie poziomice nie różnią się kolorem, a wypełnienie lądu przy brzegu bywa niemal identyczne po obu stronach (jasna zieleń „zieleń niska” = dno z roślinnością, odcień różni się o kilka jednostek RGB). Takich odcinków (głównie południe, wschód i zachód brzegu) nie rozstrzygamy, więc **większość brzegu 195,0 m jest pominięta** (precyzja kosztem kompletności: zostają brzegi wysp i półwyspów z wyraźną wodą po jednej stronie). Wśród zachowanych linii są wiązki 2–3 równoległych poziomic; wybór „bliższej wody” jest regułą, nie pomiarem, więc pojedyncze linie mogą być poziomicą 195,5–196 m. Nie używać 195,0 m do metryk bez ręcznego przeglądu; 192,5 m to próbka tam, gdzie z jednej strony jest biały pas.
 - Żwirownia: na mapie to różowy prostokąt „REJON EKSPLOATACJI KRUSZYWA (2023)”, z przekątną po południowo-wschodniej stronie. 5 wierzchołków wskazanych ręcznie (`data/reference/zwirownia_vertices.csv`, dokładność kilka–kilkanaście px = 5–15 m), lewa krawędź nie jest narysowana, więc zamykamy ją prostą. **Pole 176 ha, 99 % w obrysie jeziora OSM.** Atrybuty `source`, `licence_ref`.
+
+## 6. Wariant D — kontrola poziomów wody z powierzchni KŻ (`10_kz_compare.py variant-d` → `kz/levels_d.csv`, `kz/kz_surface.tif`, `eval/variant_d.json`)
+
+Po ludzku: z rzędnych punktowych i poziomic mapy KŻ budujemy powierzchnię dna (siatka trójkątów, interpolacja liniowa na siatce 10 m). Potem dla każdej sceny pytamy: przy jakiej rzędnej wody poziomica tej powierzchni najlepiej pokrywa się z linią brzegową widoczną na zdjęciu? Odpowiedź (`h_t_d`) jest **kontrolą** `h_t` (innym źródłem niż komunikaty, LiDAR i krzywa), nigdy jego źródłem. `scenes.json` dostaje `h_t_d` i `h_diff_d = h_t_d − h_t` dopiero z `06_water_levels.py` (czyta `kz/levels_d.csv`).
+
+- Wejście: punkty KŻ — **107 z 149** (wszystkie `ocr_ok`: kolor zgodny z rzędną i pewność OCR ≥ 80; kontroli ręcznej `kz_spot_qc.csv` jeszcze nie było, `kz.load_qc_spots` po jej pojawieniu użyje ocen `ok`/`corrected`), poziomice 192,5 (19 linii, 2,40 km) i 195,0 m (49 linii, 7,01 km; próbka precyzyjna, nie komplet brzegu), siatka poziomów 192,5–198,0 co 0,05 m, punkty brzegu co 10 m, minimum 50 punktów z powierzchnią na scenę. Powierzchnia jest NaN poza otoczką wypukłą danych i w żwirowni; brzeg w żwirowni jest pomijany.
+- **Pokrycie powierzchni: 79,2 % obszaru jeziora** ma wartość.
+- Dopasowano 218 scen (pominięto 3 odrzucone przez QC; żadna nie padła na minimum punktów). Mediana średniej odległości brzeg–poziomica: 122 m (min. 108 m), czyli dopasowanie jest luźne.
+- **Zgodność z `h_t` (wszystkie sceny): udział |D − h_t| ≤ 0,2 m = 22,9 %, mediana |D − h_t| = 0,68 m, mediana D − h_t = −0,55 m.** D nie zgadza się z `h_t` dla większości scen.
+
+| metoda `h_t` | n | udział ≤ 0,2 m | mediana abs. [m] | mediana D − h_t [m] |
+|---|---|---|---|---|
+| A | 37 | 89,2 % | 0,06 | +0,05 |
+| B | 153 | 10,5 % | 0,77 | −0,76 |
+| R | 2 | 0 % | 3,12 | −3,12 |
+| C | 26 | 3,8 % | 1,13 | −1,04 |
+
+- **Dlaczego tak źle (diagnoza, nie poprawka):** `h_t_d` prawie się nie zmienia (od 192,65 do 194,80 m, 136 z 218 scen w 194,40–194,45 m), a `h_t` sięga 192,9–197,9 m. Powierzchnia ponad ok. 195 m prawie nie jest opisana: ląd ma tylko 7 czarnych punktów, a poziomica 195,0 to wybrane fragmenty, więc dla scen z wysoką wodą (B, C: wiosna i powódź 2024) nie ma poziomicy, do której brzeg mógłby się dopasować, i D „zatrzymuje się” blisko 194,4–194,8. Zgodność z A jest wysoka, bo sceny A mają wodę ok. 194,2–194,6 m, czyli dokładnie w zakresie, gdzie powierzchnia jest dobra.
+- Warstwa dopisana **po** obejrzeniu wyniku (nie jest wynikiem głównym, nie zastępuje go): sceny z `h_t` < 195,0 m (n = 109): udział ≤ 0,2 m = 45,9 %, mediana abs. = 0,26 m, mediana D − h_t = +0,04 m. Czyli bez obciążenia, ale rozrzut nadal ponad 0,2 m.
+- Przed powodzią (sceny do 31.08.2024, n = 155): 25,8 % w ±0,2 m, mediana abs. 0,76 m.
+- **Wniosek:** wariant D w obecnej postaci (149 punktów, w tym 107 bez kontroli ręcznej, i połowa poziomicy 195,0) potwierdza niskie poziomy (A) i nie nadaje się do kontroli wysokich (B/C). Nie jest podstawą żadnej korekty `h_t`. Poprawa zależy od kontroli ręcznej punktów i od uzupełnienia rzędnych lądu/poziomicy 195,0; po zmianie wejść: `uv run python 10_kz_compare.py variant-d` i `06_water_levels.py`.

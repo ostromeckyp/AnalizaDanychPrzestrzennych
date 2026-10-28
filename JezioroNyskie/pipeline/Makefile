@@ -29,11 +29,13 @@ BOTTOM  := $(PROC)/model/all/model_meta.json
 KZMETA  := $(PROC)/kz/kz_meta.json
 KZSPOTS := $(PROC)/kz/kz_spot_ocr.gpkg
 KZCONT  := $(PROC)/kz/kz_contours.gpkg
+LEVELSD := $(PROC)/kz/levels_d.csv
+EVALD   := $(PROC)/eval/variant_d.json
 ZWIR    := $(REF)/zwirownia.gpkg
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel test clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d test clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -135,6 +137,13 @@ $(KZCONT): $(KZMETA) $(LAKE)                       # 09 contours: poziomice 192,
 kz-gravel: $(ZWIR)
 $(ZWIR): $(KZMETA) $(LAKE) $(REF)/zwirownia_vertices.csv   # 09 gravel: obrys rejonu eksploatacji kruszywa (wierzchołki ręczne) -> zwirownia.gpkg
 	$(UV) 09_kz_digitize.py gravel
+
+# variant-d: kontrola h_t z powierzchni KŻ. Zależy tylko od punktów, poziomic i żwirowni (shorelines.gpkg i scenes.json
+# są odczytywane, ale nie są zależnościami: łańcuch make ma nieaktualne daty i wymusiłby retrening RF); NIE dotyka kz_spot_ocr.gpkg
+# (kz.py/variant_d.py nie są zależnością). Wynik wchodzi do scenes.json dopiero przy `make levels`/06_water_levels.py.
+variant-d: $(EVALD)
+$(EVALD): $(KZSPOTS) $(KZCONT) $(ZWIR)
+	$(UV) 10_kz_compare.py variant-d
 
 test:
 	uv run pytest -q

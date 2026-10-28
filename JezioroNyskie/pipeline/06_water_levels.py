@@ -6,7 +6,7 @@ Co robi: łączy powierzchnie scen z shorelines.gpkg z komunikatami RZGW (bullet
 Dlaczego tak: poziom wody jest osią całej analizy (mielizny = f(poziom)); sceny bez komunikatu
   (2017-2019 i luki) dostają poziom z krzywej, a sceny odrzucone przez QC tylko z komunikatu.
 Wejście → wyjście: data/processed/{shorelines.gpkg, bulletins.csv, scenes_candidates.csv},
-  data/reference/known_levels.csv, (opcjonalnie) data/processed/levels_a.csv z 06b → {out-dir}/scenes.json, {out-dir}/model/area_level_curve.json,
+  data/reference/known_levels.csv, (opcjonalnie) data/processed/levels_a.csv z 06b i kz/levels_d.csv z 10 (kontrola D: h_t_d, h_diff_d; nigdy źródło h_t) → {out-dir}/scenes.json, {out-dir}/model/area_level_curve.json,
   {out-dir}/qc/area_vs_level.png, shorelines.gpkg (kolumny h_t, h_method; reszta bez zmian).
   Opcje: --shorelines (domyślnie processed/shorelines.gpkg, ZAPISYWANY w miejscu) i --out-dir
   (domyślnie processed) pozwalają na próbny przebieg na kopii. Skrypt jest idempotentny.
@@ -96,6 +96,16 @@ def main(argv=None) -> int:
     curve = lv.attrs["curve"]
     df = build_scene_table(gdf, cand, lv)
     df["area_otsu_km2"] = [otsu[d] for d in df.date]
+
+    # wariant D (10_kz_compare.py variant-d): kontrola h_t z powierzchni KŻ, opcjonalna jak levels_a.csv
+    d_csv = proc / "kz" / "levels_d.csv"
+    if d_csv.exists():
+        d = pd.read_csv(d_csv, dtype={"date": str}).set_index("date").h_t_d
+        df["h_t_d"] = [float(d.get(x.isoformat(), np.nan)) for x in df.date]
+        df["h_diff_d"] = df.h_t_d - df.h_t
+        log.info("wariant D (kontrola): %d scen z levels_d.csv", int(df.h_t_d.notna().sum()))
+    else:
+        log.info("brak levels_d.csv - bez kontroli D")
 
     # gpkg: tylko h_t i h_method (kolumny QC bez zmian)
     gdf["h_t"] = [float(df.set_index("date").h_t[d]) for d in dates]
