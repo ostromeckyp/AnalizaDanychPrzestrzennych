@@ -52,7 +52,7 @@ def load_index(kind: str, src: str, year: int, cfg: dict, bbox, refresh: bool):
 
 def build_plan(cfg: dict, refresh: bool) -> pd.DataFrame:
     lc = cfg["lidar"]
-    lake = gpd.read_file(data_path("processed", "lake.gpkg"), layer="lake").geometry.union_all()
+    lake = gpd.read_file(data_path("processed", "lake.gpkg"), layer="lake").to_crs(gugik.CRS).geometry.union_all()
     band = lake.boundary.buffer(lc["shore_band_m"])
     bbox = band.bounds
     rows = []
@@ -70,7 +70,9 @@ def build_plan(cfg: dict, refresh: bool) -> pd.DataFrame:
             else:
                 sel = gugik.pick_laz_sheets(gugik.select_sheets(idx, lake, [year]), lake,
                                             lc["laz_sheets_per_epoch"])
-            sel = sel.drop_duplicates(["godlo", "akt_rok", "uklad_h"])
+            # ten sam arkusz w dwóch układach: wybieramy EVRF2007 (ścieżka pliku zależy tylko od roku i godła)
+            sel = (sel.assign(_pref=sel.uklad_h.str.contains("EVRF2007").map({True: 0, False: 1}))
+                   .sort_values("_pref", kind="stable").drop_duplicates(["godlo", "akt_rok"]))
             for r in sel.itertuples():
                 rows.append({"kind": kind, "year": year, "godlo": r.godlo, "uklad_h": r.uklad_h,
                              "blad_sr_wys": r.blad_sr_wys_m if hasattr(r, "blad_sr_wys_m") else r.blad_sr_wys,
@@ -109,13 +111,13 @@ def fetch(plan: pd.DataFrame) -> pd.DataFrame:
     for r in plan.itertuples():
         root = data_path("raw", "nmt" if r.kind == "nmt" else "lidar", r.year)
         ext = gugik.file_ext(r.url, r.godlo) if r.kind == "nmt" else "laz"
-        path, n, status = gugik.download(r.url, root / f"{r.godlo}.{ext}")
+        path, n, status = gugik.download(
+            r.url, root / f"{r.godlo}.{ext}", size=None if pd.isna(r.est_bytes) else int(r.est_bytes))
         log.info("%s %s %s: %s (%.1f MB)", r.kind, r.year, r.godlo, status, n / 1e6)
         out = path
         if r.kind == "nmt":
             out = root / f"{r.godlo}.tif"
-            if not out.exists():
-                gugik.nmt_to_geotiff(path, out, r.uklad_h)
+            gugik.ensure_geotiff(path, out, r.uklad_h, force=status != "skipped")
         inv.append({"kind": r.kind, "year": r.year, "godlo": r.godlo, "uklad_h": r.uklad_h,
                     "blad_sr_wys": r.blad_sr_wys, "path": str(out), "bytes": out.stat().st_size})
         time.sleep(1.0)
@@ -136,6 +138,10 @@ def main():
     total = print_summary(plan, cfg["lidar"]["epochs"])
     if a.dry_run:
         return 0
+    n_unknown = int(plan.est_bytes.isna().sum())
+    if n_unknown and not a.force_size:
+        print(f"STOP: {n_unknown} arkuszy bez znanego rozmiaru (HEAD nie zadziałał); użyj --force-size")
+        return 2
     if total > cfg["lidar"]["max_download_gb"] and not a.force_size:
         print(f"STOP: {total:.1f} GB > limit {cfg['lidar']['max_download_gb']} GB (użyj --force-size)")
         return 2

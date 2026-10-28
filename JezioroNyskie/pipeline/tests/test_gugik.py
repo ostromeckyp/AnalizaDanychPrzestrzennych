@@ -57,7 +57,7 @@ def index(fake_get):
 
 def test_fetch_index_pages_until_empty(fake_get):
     gdf = gugik.fetch_index("http://x/wfs", BBOX, page_size=3, get=fake_get, delay=0)
-    assert len(gdf) == 5 and fake_get.startindices == [0, 3, 6]
+    assert len(gdf) == 5 and fake_get.startindices == [0, 3, 5]  # krok = długość strony
     assert gdf.crs.to_epsg() == 2180
     # oś N,E: BBOX idzie jako ymin,xmin,ymax,xmax; geometria czytana z posList (N,E) -> x=easting
     assert fake_get.bboxes[0].startswith("285500,372000,292500,381000,urn:ogc:def:crs:EPSG::2180")
@@ -190,3 +190,66 @@ def test_xyz_zip_to_geotiff(tmp_path):
     with rasterio.open(out) as r:
         assert r.bounds == (374000, 288000, 374002, 288002) and r.tags()["uklad_h"] == "PL-EVRF2007-NH"
         assert r.read(1).tolist() == [[10, 11], [12, 13]]
+
+
+def test_fetch_index_short_pages_collects_all(fake_get):
+    # serwer tnie COUNT (np. wfs_maxfeatures=3), a my prosimy o 100: nic nie może przepaść
+    gdf = gugik.fetch_index("http://x/wfs", BBOX, page_size=100, get=fake_get, delay=0)
+    assert len(gdf) == 5 and fake_get.startindices == [0, 3, 5]
+
+
+def test_fetch_index_ignored_startindex_terminates():
+    page = (FIX / "wfs_page1.xml").read_bytes()
+    calls = []
+
+    def get(url, params=None, **kw):
+        calls.append(params["STARTINDEX"])
+        return Resp(page)
+    gdf = gugik.fetch_index("http://x/wfs", BBOX, page_size=3, get=get, delay=0)
+    assert len(gdf) == 3 and len(calls) == 2
+
+
+def test_parse_gml_ogc_http_crs_is_northing_first():
+    xml = (FIX / "wfs_page1.xml").read_text().replace("urn:ogc:def:crs:EPSG::2180",
+                                                      "http://www.opengis.net/def/crs/EPSG/0/2180")
+    assert gugik.parse_gml(xml).iloc[0].geometry.bounds == (374000.0, 288500.0, 376000.0, 290000.0)
+
+
+def test_download_known_size_skips_head(tmp_path):
+    dest = tmp_path / "f.laz"
+    dest.write_bytes(b"12345")
+    head = lambda *a, **k: pytest.fail("HEAD niepotrzebny")
+    assert gugik.download("http://x/f.laz", dest, head=head, size=5)[2] == "skipped"
+
+
+def test_geotiff_write_is_atomic(tmp_path, monkeypatch):
+    src = tmp_path / "s.asc"
+    src.write_text(ASC)
+    dest = tmp_path / "s.tif"
+
+    real_open = rasterio.open
+
+    def crashing_open(path, mode="r", **k):
+        if mode == "w":  # zapis zaczęty, potem awaria w połowie
+            Path(path).write_bytes(b"II*\x00partial")
+            raise RuntimeError("crash")
+        return real_open(path, mode, **k)
+    monkeypatch.setattr(gugik.rasterio, "open", crashing_open)
+    with pytest.raises(RuntimeError):
+        gugik.nmt_to_geotiff(src, dest, "X")
+    assert not dest.exists()
+
+
+def test_ensure_geotiff_reconverts_when_forced_or_stale(tmp_path):
+    import os
+    src = tmp_path / "s.asc"
+    src.write_text(ASC)
+    dest = tmp_path / "s.tif"
+    assert gugik.ensure_geotiff(src, dest, "A") is True       # brak -> konwersja
+    assert gugik.ensure_geotiff(src, dest, "A") is False      # aktualny -> pomiń
+    assert gugik.ensure_geotiff(src, dest, "B", force=True) is True   # pobrano na nowo
+    with rasterio.open(dest) as r:
+        assert r.tags()["uklad_h"] == "B"
+    t = dest.stat().st_mtime
+    os.utime(src, (t + 10, t + 10))                            # surowy nowszy niż tif
+    assert gugik.ensure_geotiff(src, dest, "C") is True

@@ -63,7 +63,9 @@ def _ring(pos_list: str, swap: bool) -> list[tuple[float, float]]:
 
 
 def _polygon(el: ET.Element) -> Polygon:
-    swap = "urn:ogc:def" in (el.get("srsName") or URN_2180)
+    srs = el.get("srsName") or URN_2180
+    # URN i http://www.opengis.net/def/crs/... = oś northing, easting; "EPSG:2180" = x, y
+    swap = "urn:ogc:def" in srs or "opengis.net/def/crs" in srs
     ext = el.find("gml:exterior/gml:LinearRing/gml:posList", NS)
     holes = [_ring(h.text, swap) for h in el.findall("gml:interior/gml:LinearRing/gml:posList", NS)]
     return Polygon(_ring(ext.text, swap), holes)
@@ -108,7 +110,7 @@ def fetch_index(url: str, bbox_2180: tuple, page_size: int, get=requests.get,
               "BBOX": f"{ymin},{xmin},{ymax},{xmax},{URN_2180}"}  # oś: northing, easting
     if typenames:
         params["TYPENAMES"] = typenames
-    pages, start = [], 0
+    pages, start, seen = [], 0, set()
     while True:
         r = get(url, params={**params, "STARTINDEX": start}, timeout=120,
                 headers={"User-Agent": USER_AGENT})
@@ -117,8 +119,13 @@ def fetch_index(url: str, bbox_2180: tuple, page_size: int, get=requests.get,
         log.info("WFS %s startindex=%d -> %d obiektów", typenames or url, start, len(page))
         if page.empty:
             break
+        if set(page.gml_id) <= seen:  # serwer ignoruje STARTINDEX -> inaczej pętla w nieskończoność
+            log.warning("WFS %s: strona startindex=%d bez nowych obiektów, kończę stronicowanie",
+                        typenames or url, start)
+            break
+        seen.update(page.gml_id)
         pages.append(page)
-        start += page_size
+        start += len(page)  # serwer może ściąć COUNT (wfs_maxfeatures); krok = faktyczna długość strony
         if delay:
             time.sleep(delay)
     if not pages:
@@ -197,7 +204,7 @@ def remote_size(url: str, head=requests.head) -> int | None:
 
 
 def download(url: str, dest: Path, get=requests.get, head=requests.head,
-             chunk: int = 1 << 20) -> tuple[Path, int, str]:
+             chunk: int = 1 << 20, size: int | None = None) -> tuple[Path, int, str]:
     """Pobiera `url` do `dest` strumieniowo; zwraca (ścieżka, bajty, status).
 
     Status: "skipped" (plik istnieje i ma rozmiar z serwera), "resumed" (dokończono z `.part` przez
@@ -205,7 +212,8 @@ def download(url: str, dest: Path, get=requests.get, head=requests.head,
     """
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    size = remote_size(url, head)
+    if size is None:  # znany rozmiar (np. z planu) oszczędza ok. 40 s HEAD
+        size = remote_size(url, head)
     if dest.exists() and (size is None or dest.stat().st_size == size) and dest.stat().st_size > 0:
         return dest, dest.stat().st_size, "skipped"
     part = dest.with_name(dest.name + ".part")
@@ -262,7 +270,18 @@ def xyz_to_array(xyz: np.ndarray, nodata: float = -9999.0) -> tuple[np.ndarray, 
 
 
 def _write_tif(arr, transform, dest: Path, uklad_h: str, nodata: float, extra: dict | None = None):
+    """Zapis atomowy: do `<dest>.tmp`, potem replace (awaria nie zostawia połówkowego GeoTIFF-a)."""
     dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    try:
+        _write_tif_to(arr, transform, tmp, uklad_h, nodata, extra)
+        tmp.replace(dest)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return dest
+
+
+def _write_tif_to(arr, transform, dest: Path, uklad_h: str, nodata: float, extra: dict | None = None):
     with rasterio.open(dest, "w", driver="GTiff", height=arr.shape[0], width=arr.shape[1], count=1,
                        dtype="float32", crs=CRS, transform=transform, nodata=nodata,
                        compress="deflate", tiled=False) as dst:
@@ -302,3 +321,15 @@ def nmt_to_geotiff(src: Path, dest: Path, uklad_h: str) -> Path:
         if tmp_dir is not None:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def ensure_geotiff(src: Path, dest: Path, uklad_h: str, force: bool = False) -> bool:
+    """Konwertuje NMT, gdy GeoTIFF nie istnieje, `force` (surowy plik pobrany na nowo) albo jest starszy od surowego.
+
+    Zwraca True, jeśli konwersja się odbyła.
+    """
+    src, dest = Path(src), Path(dest)
+    if not force and dest.exists() and dest.stat().st_mtime >= src.stat().st_mtime:
+        return False
+    nmt_to_geotiff(src, dest, uklad_h)
+    return True
