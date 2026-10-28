@@ -31,11 +31,12 @@ KZSPOTS := $(PROC)/kz/kz_spot_ocr.gpkg
 KZCONT  := $(PROC)/kz/kz_contours.gpkg
 LEVELSD := $(PROC)/kz/levels_d.csv
 EVALD   := $(PROC)/eval/variant_d.json
+EVALCH  := $(PROC)/eval/model_choice.json
 ZWIR    := $(REF)/zwirownia.gpkg
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d test clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d evaluate test clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -145,6 +146,13 @@ $(ZWIR): $(KZMETA) $(LAKE) $(REF)/zwirownia_vertices.csv   # 09 gravel: obrys re
 variant-d: $(EVALD)
 $(EVALD): $(KZSPOTS) $(KZCONT) $(ZWIR) $(wildcard $(REF)/kz_spot_qc.csv)
 	$(UV) 10_kz_compare.py variant-d
+
+# evaluate: ocena dokladnosci (§7). Zaleznosci TYLKO od kodu oceny: pliki wejsciowe (scenes.json, model/*, epochs.csv) maja w tym
+# Makefile reguly, a ich lancuch ma nieaktualne daty (make wymusilby retrening RF/klasyfikacje), wiec nie sa prerekwizytami.
+# Po zmianie modelu/poziomow: rm $(EVALCH) && make evaluate (albo uv run python 08_evaluate.py). NIE dotyka eval/variant_d.json.
+evaluate: $(EVALCH)
+$(EVALCH): 08_evaluate.py mielizna/evaluate.py mielizna/blocks.py
+	$(UV) 08_evaluate.py
 
 test:
 	uv run pytest -q
