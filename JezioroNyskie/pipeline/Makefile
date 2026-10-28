@@ -110,15 +110,17 @@ bottom: $(BOTTOM)
 $(BOTTOM): $(SCENES)                       # 07: model dna (okresy all, pre_flood, post_flood)
 	$(UV) 07_bottom_model.py
 
+# Kod georef (kz.py) celowo NIE jest zależnością (rzadko się zmienia); wymuszenie: rm $(KZMETA) && make kz-georef
+# (`make -B kz-georef` odpytałoby też Overpass dla lake.gpkg).
 kz-georef: $(KZMETA)
-$(KZMETA): ../docs/JN_2023_05_23__KZ.pdf $(REF)/kz_gcp.csv mielizna/kz.py $(LAKE)      # 09 georef: mapa KŻ -> EPSG:2180, RMSE na punktach wstrzymanych, werdykt
+$(KZMETA): ../docs/JN_2023_05_23__KZ.pdf $(REF)/kz_gcp.csv $(LAKE)      # 09 georef: mapa KŻ -> EPSG:2180, RMSE na punktach wstrzymanych, werdykt
 	$(UV) 09_kz_digitize.py georef
 
 kz-spots: $(KZSPOTS)
 $(KZSPOTS): $(KZMETA) mielizna/kz.py       # 09 spots: OCR rzędnych (tesseract) -> kz_spot_ocr.gpkg (kafle, ok. minuty)
 	$(UV) 09_kz_digitize.py spots
 
-kz-qc-ui: $(KZSPOTS)                       # ręczna kontrola >= 200 punktów: http://localhost:8765/kz -> data/reference/kz_spot_qc.csv
+kz-qc-ui: $(KZSPOTS)                       # ręczna kontrola min(200, liczba punktów): http://localhost:8765/kz -> data/reference/kz_spot_qc.csv
 	$(UV) tools/label_server.py --kz
 
 test:

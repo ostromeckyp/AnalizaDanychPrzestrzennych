@@ -43,13 +43,82 @@ def test_spot_anchor_finds_dot_left_of_number():
     assert (ax, ay) == pytest.approx((21.5, 31.5), abs=0.6)
 
 
-def test_spot_anchor_none_without_dot_or_dot_on_right():
+def _number(img, x=32, y=20):
+    """Trzy „cyfry” 6 x 14 px; zwraca ramkę (left, top, width, height) jak z OCR."""
+    for k in range(3):
+        img[y:y + 14, x + 10 * k:x + 10 * k + 6] = (0, 0, 150)
+    return (x, y - 2, 26, 16)
+
+
+def _dot(img, x, y):
+    img[y:y + 4, x:x + 4] = (0, 0, 150)
+    return x + 1.5, y + 1.5
+
+
+def _canvas2(h=100):
+    return np.full((h, 120, 3), (200, 240, 250), np.uint8)
+
+
+def test_spot_anchor_none_without_any_dot():
     img = _canvas()
-    for x in (32, 42, 52):
-        img[20:34, x:x + 6] = (0, 0, 150)
-    assert kz.spot_anchor(img, (30, 18, 40, 18)) is None
-    img[30:34, 62:66] = (0, 0, 150)             # kropka z PRAWEJ strony
-    assert kz.spot_anchor(img, (30, 18, 40, 18)) is None
+    assert kz.spot_anchors(img, [_number(img)]) == [None]
+
+
+@pytest.mark.parametrize("dx,dy,side", [(42, 8, "above"), (66, 28, "right"), (42, 38, "below"), (22, 31, "left")])
+def test_spot_anchor_any_side(dx, dy, side):
+    img = _canvas2()
+    box = _number(img)
+    cx, cy = _dot(img, dx, dy)
+    (x, y, sd), = kz.spot_anchors(img, [box])
+    assert sd == side and (x, y) == pytest.approx((cx, cy), abs=0.6)
+
+
+def test_spot_anchor_dot_too_far_is_none():
+    img = _canvas2()
+    box = _number(img)
+    _dot(img, 20, 80)                       # 40+ px pod liczbą, promień = 1,5 x 16 = 24 px
+    assert kz.spot_anchors(img, [box]) == [None]
+
+
+def test_spot_anchor_ambiguous_two_dots_rejected():
+    img = _canvas2()
+    box = _number(img)
+    _dot(img, 22, 31)                       # po lewej (odległość ~8)
+    _dot(img, 66, 31)                       # po prawej (odległość ~8): stosunek < 1,3
+    assert kz.spot_anchors(img, [box]) == [None]
+
+
+def test_spot_anchor_clearly_nearer_dot_wins():
+    img = _canvas2()
+    box = _number(img)
+    _dot(img, 25, 31)                       # blisko po lewej
+    _dot(img, 80, 31)                       # daleko po prawej
+    (x, y, sd), = kz.spot_anchors(img, [box])
+    assert sd == "left" and x < 30
+
+
+def test_shared_dot_goes_to_nearer_number_only():
+    img = _canvas2(110)
+    a = _number(img, 32, 20)
+    b = _number(img, 32, 70)
+    _dot(img, 20, 42)                       # kropka bliżej pierwszej liczby (a)
+    ra, rb = kz.spot_anchors(img, [a, b])
+    assert ra is not None and rb is None
+
+
+def test_shared_dot_equidistant_rejects_both():
+    img = _canvas2(110)
+    a = _number(img, 32, 20)
+    b = _number(img, 32, 62)
+    _dot(img, 20, 44)                       # w połowie drogi między liczbami
+    assert kz.spot_anchors(img, [a, b]) == [None, None]
+
+
+def test_dot_inside_other_word_box_is_ignored():
+    img = _canvas2()
+    box = _number(img)
+    _dot(img, 66, 31)                       # to przecinek cudzego słowa
+    assert kz.spot_anchors(img, [box], others=[(60, 25, 20, 12)]) == [None]
 
 
 def test_text_color():

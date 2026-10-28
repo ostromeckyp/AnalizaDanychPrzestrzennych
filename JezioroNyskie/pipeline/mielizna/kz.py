@@ -212,36 +212,54 @@ def _tesseract_tsv(png: Path) -> list[dict]:
     return [r for r in rows if r.get("text") and r["text"].strip() and float(r["conf"]) >= 0]
 
 
-def ocr_tiles(img: np.ndarray, tile: int = 1200, overlap: int = 100) -> pd.DataFrame:
+def _iou(a, b) -> float:
+    ix = max(0.0, min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    return inter / (a[2] * a[3] + b[2] * b[3] - inter) if inter > 0 else 0.0
+
+
+def ocr_tiles(img: np.ndarray, tile: int = 1200, overlap: int = 100, scales: tuple = (1.0,)) -> pd.DataFrame:
     """OCR kaflami: `tesseract <png> - --psm 11 tsv`; zwraca słowa w pikselach CAŁEGO obrazu.
 
-    Kafle mają zakładkę `overlap` px, więc słowo przy szwie może wyjść dwa razy. Duplikaty (ten sam tekst,
-    środki bliżej niż 8 px) usuwamy, zostawiając wynik o większej pewności."""
+    Kafle mają zakładkę `overlap` px, więc słowo przy szwie może wyjść dwa razy. `scales` = przebiegi
+    (np. (1.0, 2.0): drugi na kaflach powiększonych 2x, ramki skalowane z powrotem). Duplikaty (ramki o IoU > 0,3
+    albo ten sam tekst ze środkami bliżej niż 8 px) usuwamy; zostaje słowo pasujące do wzorca rzędnej, a przy
+    remisie to o większej pewności."""
     from PIL import Image
 
     h, w = img.shape[:2]
-    step = tile - overlap
     rows = []
     with tempfile.TemporaryDirectory() as td:
         png = Path(td) / "tile.png"
-        for y0 in range(0, max(h - overlap, 1), step):
-            for x0 in range(0, max(w - overlap, 1), step):
-                Image.fromarray(np.ascontiguousarray(img[y0:y0 + tile, x0:x0 + tile])).save(png)
-                for r in _tesseract_tsv(png):
-                    rows.append((r["text"].strip(), float(r["conf"]), int(r["left"]) + x0, int(r["top"]) + y0,
-                                 int(r["width"]), int(r["height"])))
+        for sc in scales:
+            src = max(int(tile / sc), 2 * overlap)         # rozmiar kafla w pikselach źródła
+            step = src - overlap
+            for y0 in range(0, max(h - overlap, 1), step):
+                for x0 in range(0, max(w - overlap, 1), step):
+                    pil = Image.fromarray(np.ascontiguousarray(img[y0:y0 + src, x0:x0 + src]))
+                    if sc != 1.0:
+                        pil = pil.resize((int(pil.width * sc), int(pil.height * sc)), Image.LANCZOS)
+                    pil.save(png)
+                    for r in _tesseract_tsv(png):
+                        rows.append((r["text"].strip(), float(r["conf"]), int(round(int(r["left"]) / sc)) + x0,
+                                     int(round(int(r["top"]) / sc)) + y0, max(int(round(int(r["width"]) / sc)), 1),
+                                     max(int(round(int(r["height"]) / sc)), 1)))
     df = pd.DataFrame(rows, columns=OCR_COLUMNS)
     if df.empty:
         return df
-    df = df.sort_values("conf", ascending=False, kind="stable").reset_index(drop=True)
-    keep, seen = [], {}
+    df["_spot"] = df["text"].map(parse_spot).notna()
+    df = df.sort_values(["_spot", "conf"], ascending=False, kind="stable").reset_index(drop=True)
+    keep, boxes = [], []
     for i, r in df.iterrows():
+        box = (r.left, r.top, r.width, r.height)
         cx, cy = r.left + r.width / 2, r.top + r.height / 2
-        if any(abs(cx - ox) < 8 and abs(cy - oy) < 8 for ox, oy in seen.get(r.text, [])):
+        if any(_iou(box, b) > 0.3 or (t == r.text and abs(cx - bx) < 8 and abs(cy - by) < 8)
+               for b, t, bx, by in boxes):
             continue
-        seen.setdefault(r.text, []).append((cx, cy))
+        boxes.append((box, r.text, cx, cy))
         keep.append(i)
-    return df.loc[keep].sort_values(["top", "left"]).reset_index(drop=True)
+    return df.loc[keep].drop(columns="_spot").sort_values(["top", "left"]).reset_index(drop=True)
 
 
 def _dark_mask(rgb: np.ndarray) -> np.ndarray:
@@ -249,53 +267,93 @@ def _dark_mask(rgb: np.ndarray) -> np.ndarray:
     return lum < 130
 
 
-def spot_anchor(img: np.ndarray, box) -> tuple[float, float] | None:
-    """Środek kropki (ciemny blob 2-12 px) tuż na LEWO od pierwszej cyfry liczby; brak kropki -> None.
+ANCHOR_RADIUS_FACTOR = 1.5   # promień szukania kropki = 1,5 x wysokość ramki od jej krawędzi (dobrane na danych)
+ANCHOR_AMBIGUITY = 1.3       # dwie kropki o stosunku odległości < 1,3 = niejednoznaczne, liczba odrzucona
 
-    `box` = (left, top, width, height) słowa z OCR. Szukamy w oknie od `left - 20` px do prawej krawędzi.
-    Cyfry to składowe spójne o wysokości >= połowy wysokości ramki; kropka to mała, mniej więcej kwadratowa
-    wyizolowana składowa w dolnej części wiersza, położona w całości na lewo od pierwszej cyfry (nie dalej niż 20 px od niej).
-    Kropka po prawej, nad albo pod liczbą nie jest kotwicą: wartość odrzucamy (spec K2)."""
+
+def _dot_candidates(img: np.ndarray, box, others) -> list[tuple[float, float, str, float]]:
+    """Izolowane kropki (ciemne bloby 2-12 px) w promieniu 1,5 x wysokość od ramki: (x, y, strona, odległość).
+
+    Cyfry to składowe o wysokości 0,5-1,25 wysokości ramki wewnątrz ramki; kropka wewnątrz ramki liczy się tylko
+    na lewo od pierwszej cyfry (przecinek i cyfry dziesiętne są pomijane). Kropka musi mieć 2 px czystego tła
+    wokół (koniec izobaty nie jest kropką) i nie może leżeć w ramce innego słowa z cyfrą (przecinek sąsiada)."""
     from scipy.ndimage import find_objects, label
 
     left, top, width, height = (int(round(v)) for v in box)
-    x0, x1 = max(left - 20, 0), min(left + width + 2, img.shape[1])
-    y0, y1 = max(top - 2, 0), min(top + height + 6, img.shape[0])
+    r = int(np.ceil(ANCHOR_RADIUS_FACTOR * height))
+    x0, x1 = max(left - r, 0), min(left + width + r, img.shape[1])
+    y0, y1 = max(top - r, 0), min(top + height + r, img.shape[0])
     if x1 <= x0 or y1 <= y0:
-        return None
-    mask = _dark_mask(img[y0:y1, x0:x1])
-    lab, n = label(mask, structure=np.ones((3, 3)))
+        return []
+    lab, _ = label(_dark_mask(img[y0:y1, x0:x1]), structure=np.ones((3, 3)))
     comps = []
     for i, sl in enumerate(find_objects(lab), start=1):
-        if sl is None:
-            continue
-        ch, cw = sl[0].stop - sl[0].start, sl[1].stop - sl[1].start
-        comps.append((i, sl, ch, cw, int((lab[sl] == i).sum())))
-    # cyfry leżą w ramce OCR; linie siatki i izobaty (cienkie albo wyższe niż wiersz) nie są cyframi
+        if sl is not None:
+            comps.append((i, sl, sl[0].stop - sl[0].start, sl[1].stop - sl[1].start, int((lab[sl] == i).sum())))
     digits = [c for c in comps if 0.5 * height <= c[2] <= 1.25 * height and 3 <= c[3] <= 0.8 * height
-              and c[1][1].start >= left - x0 - 3]
+              and x0 + c[1][1].start >= left - 3 and x0 + c[1][1].stop <= left + width + 3]
     if not digits:
-        return None
-    first = min(digits, key=lambda c: c[1][1].start)
-    first_left = first[1][1].start
-    best = None
+        return []
+    first_left = x0 + min(c[1][1].start for c in digits)
+    out = []
     for i, sl, ch, cw, area in comps:
         if not (DOT_MIN_PX <= ch <= DOT_MAX_PX and DOT_MIN_PX <= cw <= DOT_MAX_PX) or area < 0.5 * ch * cw:
             continue
-        if sl[1].stop > first_left + 1 or first_left - sl[1].stop > 20:
-            continue
         ring = lab[max(sl[0].start - 2, 0):sl[0].stop + 2, max(sl[1].start - 2, 0):sl[1].stop + 2]
-        if np.any((ring != 0) & (ring != i)):   # kropka jest wyizolowana (2 px wolnego tła); koniec izobaty nie
+        if np.any((ring != 0) & (ring != i)):
             continue
-        cy_abs = y0 + (sl[0].start + sl[0].stop) / 2
-        if cy_abs < top + 0.4 * height:     # kropka leży w dolnej części wiersza
+        cx, cy = x0 + (sl[1].start + sl[1].stop) / 2, y0 + (sl[0].start + sl[0].stop) / 2
+        inside = left <= cx <= left + width and top <= cy <= top + height
+        if inside and x0 + sl[1].stop > first_left + 1:
+            continue                      # przecinek albo cyfra dziesiętna własnej liczby
+        if any(ox - 1 <= cx <= ox + ow + 1 and oy - 1 <= cy <= oy + oh + 1 for ox, oy, ow, oh in others):
+            continue                      # kropka (przecinek) innego słowa
+        dx = max(left - cx, 0, cx - (left + width))
+        dy = max(top - cy, 0, cy - (top + height))
+        dist = float(np.hypot(dx, dy))
+        if dist > r:
             continue
-        if best is None or sl[1].stop > best[1][1].stop:
-            best = (i, sl)
-    if best is None:
-        return None
-    ys, xs = np.nonzero(lab == best[0])
-    return float(x0 + xs.mean() + 0.5), float(y0 + ys.mean() + 0.5)
+        if inside or dx >= dy:
+            side = "left" if cx < left + width / 2 else "right"
+        else:
+            side = "above" if cy < top else "below"
+        out.append((float(cx), float(cy), side, dist))
+    return out
+
+
+def spot_anchors(img: np.ndarray, boxes, others=None) -> list[tuple[float, float, str] | None]:
+    """Kotwice (x, y, strona) dla wielu liczb naraz: najbliższa izolowana kropka z dowolnej strony, jeden do jednego.
+
+    Zasady (R14): (1) każda liczba proponuje najbliższą kropkę w promieniu 1,5 x wysokość ramki; (2) dwie kropki
+    o stosunku odległości < 1,3 = niejednoznaczne, liczba odrzucona; (3) kropka kotwiczy tylko jedną liczbę:
+    gdy chcą jej dwie, wygrywa bliższa (o ile stosunek odległości >= 1,3, inaczej odpadają obie), a przegrana
+    liczba jest odrzucona. `others` = ramki słów z cyframi (domyślnie same `boxes`); ramka własna jest pomijana."""
+    boxes = [tuple(b) for b in boxes]
+    pool = [tuple(int(round(v)) for v in o) for o in (others if others is not None else boxes)]
+    res: list = [None] * len(boxes)
+    proposals: dict[tuple[int, int], list[tuple[float, int, tuple]]] = {}
+    for n, box in enumerate(boxes):
+        own = tuple(int(round(v)) for v in box)
+        cands = sorted(_dot_candidates(img, box, [o for o in pool if o != own]), key=lambda c: c[3])
+        if not cands:
+            continue
+        if len(cands) > 1 and (cands[1][3] + 1) / (cands[0][3] + 1) < ANCHOR_AMBIGUITY:
+            continue
+        c = cands[0]
+        proposals.setdefault((int(round(c[0] * 2)), int(round(c[1] * 2))), []).append((c[3], n, c))
+    for props in proposals.values():
+        props.sort(key=lambda p: p[0])
+        if len(props) > 1 and (props[1][0] + 1) / (props[0][0] + 1) < ANCHOR_AMBIGUITY:
+            continue
+        _, n, c = props[0]
+        res[n] = (c[0], c[1], c[2])
+    return res
+
+
+def spot_anchor(img: np.ndarray, box, others=None) -> tuple[float, float] | None:
+    """Środek kropki-kotwicy dla jednej liczby (patrz `spot_anchors`); brak albo niejednoznaczna kropka -> None."""
+    r = spot_anchors(img, [box], others)[0]
+    return None if r is None else (r[0], r[1])
 
 
 def text_color(img: np.ndarray, box) -> Literal["blue", "black", "other"]:

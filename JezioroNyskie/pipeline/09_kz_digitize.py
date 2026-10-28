@@ -16,10 +16,10 @@ Jak to obronić: werdykt z progów briefu (5/10 m); porównanie dwóch rodzajów
   punktach wstrzymanych; nakładka oglądana wzrokowo; zapora jako kontrola niezależna od GCP.
 
 Co robi (`spots`): OCR rzędnych punktowych z pełnej mapy (kafle 1200 px, tesseract), parsowanie wzorca
-  `.?ddd,d` w zakresie 185-200 m, kotwica = kropka po lewej stronie liczby (brak kropki = odrzucenie), kolor
+  `.?ddd,d` w zakresie 185-200 m, kotwica = najbliższa izolowana kropka z dowolnej strony liczby, jeden do jednego (brak albo niejednoznaczna = odrzucenie), kolor
   tekstu i reguła niebieski <=> z < 195,0; georeferencja kotwicy transformacją odtworzoną z GCP i `kind` z
   kz_meta.json. Wejście → wyjście: data/raw/kz/kz_full.png → data/processed/kz/kz_spot_ocr.gpkg
-  (id, z, color, conf, color_ok, px, py + tekst i ramka OCR; EPSG:2180) oraz kz_spot_ocr_raw.csv (wszystkie słowa).
+  (id, z, color, conf, color_ok, px, py, anchor_side + tekst i ramka OCR; EPSG:2180) oraz kz_spot_ocr_raw.csv (wszystkie słowa).
   Jak to obronić: błędy OCR nie wchodzą do metryk bez kontroli (`ocr_error_rate` z próby ręcznej, `make kz-qc-ui`).
 
 Użycie: uv run python 09_kz_digitize.py georef | spots
@@ -55,6 +55,7 @@ DAM_SEARCH_M = 30.0
 DAM_PROFILE_M = 100.0
 DAM_LAKE_DIST_M = 50.0
 DAM_BAND_WIDTH_M = 46.0
+OCR_SCALES = (1.0, 2.0)   # przebieg 1x + przebieg na kaflach powiększonych 2x (R15)
 
 
 def load_gcp() -> pd.DataFrame:
@@ -179,21 +180,22 @@ def spots() -> int:
     t = kz.fit_transform(load_gcp(), meta["kind"])      # ta sama transformacja co w georef (kind z kz_meta.json)
     Image.MAX_IMAGE_PIXELS = None
     img = np.asarray(Image.open(data_path("raw", "kz") / "kz_full.png").convert("RGB"))
-    words = kz.ocr_tiles(img)
+    words = kz.ocr_tiles(img, scales=OCR_SCALES)
     words.to_csv(outdir / "kz_spot_ocr_raw.csv", index=False)
     words["z"] = words["text"].map(kz.parse_spot)
     cand = words[words["z"].notna()].reset_index(drop=True)
     log.info("słów OCR: %d, pasujących do wzorca i zakresu: %d", len(words), len(cand))
+    digit_boxes = [tuple(b) for b in words.loc[words.text.str.contains(r"\d"), ["left", "top", "width", "height"]].to_numpy()]
+    boxes = [(r.left, r.top, r.width, r.height) for r in cand.itertuples()]
+    anchors = kz.spot_anchors(img, boxes, others=digit_boxes)   # najbliższa kropka z dowolnej strony, jeden do jednego
     rows, no_dot = [], 0
-    for r in cand.itertuples():
-        box = (r.left, r.top, r.width, r.height)
-        anchor = kz.spot_anchor(img, box)
+    for r, box, anchor in zip(cand.itertuples(), boxes, anchors):
         if anchor is None:
             no_dot += 1
             continue
         color = kz.text_color(img, box)
         rows.append({"z": r.z, "color": color, "conf": r.conf, "color_ok": kz.color_consistent(r.z, color),
-                     "px": anchor[0], "py": anchor[1], "text": r.text,
+                     "px": anchor[0], "py": anchor[1], "anchor_side": anchor[2], "text": r.text,
                      "left": r.left, "top": r.top, "width": r.width, "height": r.height})
     df = pd.DataFrame(rows).sort_values(["py", "px"]).reset_index(drop=True)
     df.insert(0, "id", np.arange(len(df)))
@@ -204,6 +206,8 @@ def spots() -> int:
              "color_ok_share": round(float(df.color_ok.mean()), 3),
              "conf_quantiles": {q: round(float(df.conf.quantile(q)), 1) for q in (0.05, 0.25, 0.5, 0.75)},
              "conf_below_80": int((df.conf < kz.LOW_CONF).sum()), "colors": df.color.value_counts().to_dict(),
+             "suspect_share": round(float(kz.is_suspect(df).mean()), 3),
+             "anchor_sides": df.anchor_side.value_counts().to_dict(),
              "dot_decimal_words": int(words.text.str.fullmatch(r"\.?\d{3}\.\d").sum()),
              "source": "data/reference/KZ_ZRODLO_I_WARUNKI.md"}
     (outdir / "kz_spot_ocr_stats.json").write_text(json.dumps(stats, indent=2, ensure_ascii=False))

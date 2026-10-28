@@ -44,6 +44,7 @@ KZ_CROP_PX = 200
 KZ_ZOOM = 3
 KZ_QC_VALUES = {"ok", "corrected", "rejected", "skip"}
 KZ_Z_RANGE = (185.0, 200.0)
+KZ_QC_TARGET = 200   # cel próby; gdy punktów jest mniej, autor ocenia wszystkie: target = min(200, liczba punktów)
 CROP_PX = 64
 ZOOM = 4
 VALID_LABELS = {"water", "land", "skip"}
@@ -186,7 +187,7 @@ class _KzState:
         """Następny nieoceniony punkt; warstwy na przemian (najpierw ta z mniejszą liczbą ocen, remis = podejrzane)."""
         done = {h: sum(1 for i in self.rows if bool(self.suspect.get(int(i), False)) == h) for h in (True, False)}
         out = {"done": sum(1 for r in self.rows.values() if r["qc"] != "skip"), "total": len(self.ocr),
-               "n_suspect_done": done[True], "n_regular_done": done[False], "id": None}
+               "target": min(KZ_QC_TARGET, len(self.ocr)), "n_suspect_done": done[True], "n_regular_done": done[False], "id": None}
         for h in sorted((True, False), key=lambda h: (done[h], not h)):
             todo = [i for i in self.order[h] if i not in self.rows]
             if todo:

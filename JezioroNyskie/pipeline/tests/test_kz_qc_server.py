@@ -44,6 +44,8 @@ def test_kz_mode_end_to_end(tmp_path):
         assert "rzędnych KŻ" in urllib.request.urlopen(base + "/kz").read().decode()
         png = urllib.request.urlopen(base + "/api/kz/crop/5.png").read()
         assert png[:4] == b"\x89PNG" and Image.open(__import__("io").BytesIO(png)).size == (600, 600)
+        first = json.load(urllib.request.urlopen(base + "/api/kz/next"))
+        assert first["target"] == 12 and first["total"] == 12      # populacja < 200: cel = wszystkie punkty
         seen = []
         for k in range(6):
             p = json.load(urllib.request.urlopen(base + "/api/kz/next"))

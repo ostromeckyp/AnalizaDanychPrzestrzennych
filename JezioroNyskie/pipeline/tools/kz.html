@@ -55,7 +55,7 @@ async function loadNext() {
   busy = true;
   try {
     const p = await (await fetch("/api/kz/next")).json();
-    $("counter").textContent = `ocenione ${p.done} / ${p.total} · podejrzane ${p.n_suspect_done}, zwykłe ${p.n_regular_done} (cel ≥ 200)`;
+    $("counter").textContent = `ocenione ${p.done} / ${p.target}${p.target < 200 ? " (wszystkie punkty)" : ""} · podejrzane ${p.n_suspect_done}, zwykłe ${p.n_regular_done} · pozostało w puli ${p.total - p.done}`;
     typed = ""; show();
     if (p.id === null) {
       current = null; $("value").textContent = "–";
