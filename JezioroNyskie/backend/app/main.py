@@ -222,7 +222,7 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
                     stats=zone_stats(classes, h, p.z_lo, p.in_model),
                     params={"h": h, "draft": draft, "margin": margin},
                     warnings=zone_warnings(h, draft, margin, p), model_version=p.version,
-                ).model_dump_json().encode()
+                ).model_dump_json(exclude_none=True).encode()   # bez null w id/bbox (RFC 7946)
                 cache.set(key, body)
             return body
 

@@ -90,3 +90,21 @@ def test_ttlstore_roundtrip():
     assert s.get("a") is None
     s.set("a", 1)
     assert s.get("a") == 1
+
+
+def test_zone_features_have_no_null_id_or_bbox(client):
+    j = client.get("/api/zones", params={"h": 195.0, "draft": 1.2}).json()
+    assert j["features"]
+    for f in j["features"]:
+        assert "bbox" not in f or isinstance(f["bbox"], list)
+        assert "id" not in f or f["id"] is not None
+
+
+def test_zone_features_without_id_bbox_omit_keys(client, monkeypatch):
+    """Cecha bez id/bbox nie może dostać `null` w JSON-ie (RFC 7946)."""
+    import app.main as m
+    feat = {"type": "Feature", "geometry": {"type": "Point", "coordinates": [17.0, 50.0]},
+            "properties": {"zone": "safe"}}
+    monkeypatch.setattr(m, "zones_geojson", lambda *a, **k: {"type": "FeatureCollection", "features": [feat]})
+    f = client.get("/api/zones", params={"h": 195.0, "draft": 1.2, "margin": 0.31}).json()["features"][0]
+    assert "id" not in f and "bbox" not in f
