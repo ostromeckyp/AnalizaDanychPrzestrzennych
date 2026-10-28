@@ -18,6 +18,7 @@ LABELS  := $(REF)/labels.gpkg
 LAKE    := $(PROC)/lake.gpkg
 S2CSV   := $(PROC)/scenes_candidates.csv
 INVENT  := $(PROC)/lidar/inventory.csv
+EPOCHS  := $(PROC)/lidar/epochs.csv
 RFMODEL := $(PROC)/model/rf_model.joblib
 STATS   := $(PROC)/classify_stats.csv
 SHORES  := $(PROC)/shorelines.gpkg
@@ -27,7 +28,7 @@ BOTTOM  := $(PROC)/model/all/model_meta.json
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins levels bottom test clean-model
+        bulletins lidar-epochs levels bottom test clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -78,6 +79,10 @@ $(STATS): $(RFMODEL) $(S2CSV) $(LAKE)      # 04: maski RF/Otsu, P(woda), statyst
 shorelines: $(SHORES)
 $(SHORES): $(STATS)                        # 05: linie brzegowe + obrazki QC
 	$(UV) 05_shorelines.py
+
+lidar-epochs: $(EPOCHS)
+$(EPOCHS): $(INVENT) | $(LAKE)             # 06b: data nalotu, poziom wody i poprawka KRON86->EVRF2007 (wymaga siatek PROJ GUGiK)
+	$(UV) 06b_lidar_levels.py --epochs-only
 
 bulletins: $(BULLS)
 $(BULLS): $(S2CSV)                         # 06a: komunikaty RZGW/Wód Polskich (cache PDF)
