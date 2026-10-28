@@ -15,7 +15,14 @@ Wejście → wyjście: docs/JN_2023_05_23__KZ.pdf, data/reference/kz_gcp.csv, la
 Jak to obronić: werdykt z progów briefu (5/10 m); porównanie dwóch rodzajów transformacji na tych samych
   punktach wstrzymanych; nakładka oglądana wzrokowo; zapora jako kontrola niezależna od GCP.
 
-Użycie: uv run python 09_kz_digitize.py georef
+Co robi (`spots`): OCR rzędnych punktowych z pełnej mapy (kafle 1200 px, tesseract), parsowanie wzorca
+  `.?ddd,d` w zakresie 185-200 m, kotwica = kropka po lewej stronie liczby (brak kropki = odrzucenie), kolor
+  tekstu i reguła niebieski <=> z < 195,0; georeferencja kotwicy transformacją odtworzoną z GCP i `kind` z
+  kz_meta.json. Wejście → wyjście: data/raw/kz/kz_full.png → data/processed/kz/kz_spot_ocr.gpkg
+  (id, z, color, conf, color_ok, px, py + tekst i ramka OCR; EPSG:2180) oraz kz_spot_ocr_raw.csv (wszystkie słowa).
+  Jak to obronić: błędy OCR nie wchodzą do metryk bez kontroli (`ocr_error_rate` z próby ręcznej, `make kz-qc-ui`).
+
+Użycie: uv run python 09_kz_digitize.py georef | spots
 """
 import argparse
 import json
@@ -165,11 +172,52 @@ def georef() -> int:
     return 0
 
 
+def spots() -> int:
+    """OCR rzędnych: wszystkie słowa -> filtr wzorca/zakresu -> kotwica (kropka) -> kolor -> georeferencja."""
+    outdir = data_path("processed", "kz")
+    meta = json.loads((outdir / "kz_meta.json").read_text())
+    t = kz.fit_transform(load_gcp(), meta["kind"])      # ta sama transformacja co w georef (kind z kz_meta.json)
+    Image.MAX_IMAGE_PIXELS = None
+    img = np.asarray(Image.open(data_path("raw", "kz") / "kz_full.png").convert("RGB"))
+    words = kz.ocr_tiles(img)
+    words.to_csv(outdir / "kz_spot_ocr_raw.csv", index=False)
+    words["z"] = words["text"].map(kz.parse_spot)
+    cand = words[words["z"].notna()].reset_index(drop=True)
+    log.info("słów OCR: %d, pasujących do wzorca i zakresu: %d", len(words), len(cand))
+    rows, no_dot = [], 0
+    for r in cand.itertuples():
+        box = (r.left, r.top, r.width, r.height)
+        anchor = kz.spot_anchor(img, box)
+        if anchor is None:
+            no_dot += 1
+            continue
+        color = kz.text_color(img, box)
+        rows.append({"z": r.z, "color": color, "conf": r.conf, "color_ok": kz.color_consistent(r.z, color),
+                     "px": anchor[0], "py": anchor[1], "text": r.text,
+                     "left": r.left, "top": r.top, "width": r.width, "height": r.height})
+    df = pd.DataFrame(rows).sort_values(["py", "px"]).reset_index(drop=True)
+    df.insert(0, "id", np.arange(len(df)))
+    x, y = t.px_to_2180(df["px"].to_numpy(), df["py"].to_numpy())
+    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(x, y), crs="EPSG:2180")
+    gdf.to_file(outdir / "kz_spot_ocr.gpkg", driver="GPKG", layer="spots")
+    stats = {"words": len(words), "matched": len(cand), "no_dot_rejected": no_dot, "accepted": len(df),
+             "color_ok_share": round(float(df.color_ok.mean()), 3),
+             "conf_quantiles": {q: round(float(df.conf.quantile(q)), 1) for q in (0.05, 0.25, 0.5, 0.75)},
+             "conf_below_80": int((df.conf < kz.LOW_CONF).sum()), "colors": df.color.value_counts().to_dict(),
+             "dot_decimal_words": int(words.text.str.fullmatch(r"\.?\d{3}\.\d").sum()),
+             "source": "data/reference/KZ_ZRODLO_I_WARUNKI.md"}
+    (outdir / "kz_spot_ocr_stats.json").write_text(json.dumps(stats, indent=2, ensure_ascii=False))
+    log.info("spots: %s", stats)
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_subparsers(dest="cmd", required=True).add_parser("georef")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("georef")
+    sub.add_parser("spots")
     args = ap.parse_args(argv)
-    return georef() if args.cmd == "georef" else 2
+    return georef() if args.cmd == "georef" else spots()
 
 
 if __name__ == "__main__":

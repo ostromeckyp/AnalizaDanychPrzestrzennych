@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Kontrola rzędnych KŻ – Jezioro Nyskie</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #1b1e23; color: #e8e8e8; }
+  header { padding: 10px 16px; background: #2a2f37; }
+  header .warn { color: #ffcc66; font-size: 0.85em; margin-top: 4px; }
+  main { padding: 16px; display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  #crop { width: 600px; height: 600px; image-rendering: pixelated; display: block; background: #000; }
+  #value { font-size: 3.2em; font-weight: 700; letter-spacing: 1px; }
+  #typed { font-size: 2em; min-height: 1.3em; color: #9fd29f; }
+  .meta { color: #b8bec8; margin: 6px 0 14px; }
+  .keys { line-height: 2.1; font-size: 1.05em; }
+  kbd { background: #444; border-radius: 4px; padding: 2px 8px; margin: 0 6px 0 0; }
+  #status { padding: 0 16px 16px; color: #9fd29f; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; background: #5a3b1a; color: #ffcc66; font-size: 0.8em; }
+</style>
+</head>
+<body>
+<header>
+  <strong id="counter">ocenione – / –</strong>
+  <div class="warn">Mapa KŻ Nysa (W. Wróblewski, 2023): nieodpłatnie, tylko cele niekomercyjne; dane mogą zawierać błędy.
+    Warunki: data/reference/KZ_ZRODLO_I_WARUNKI.md.</div>
+</header>
+<main>
+  <div><img id="crop" alt="wycinek mapy KŻ 200×200 px, 3×"></div>
+  <div>
+    <div>odczytana rzędna (kropka-kotwica pod krzyżykiem):</div>
+    <div id="value">–</div>
+    <div class="meta"><span id="color"></span> · pewność OCR <span id="conf"></span> <span id="sus"></span></div>
+    <div>wpisano: <span id="typed"></span></div>
+    <div class="keys">
+      <kbd>Enter</kbd>poprawne (liczba na mapie = odczytana)<br>
+      <kbd>cyfry</kbd>+<kbd>Enter</kbd>korekta, np. <code>193,5</code><br>
+      <kbd>X</kbd>to nie jest rzędna<br>
+      <kbd>?</kbd>pomiń<br>
+      <kbd>Backspace</kbd>kasuje wpis; przy pustym polu cofa ostatnią ocenę
+    </div>
+  </div>
+</main>
+<div id="status"></div>
+<script>
+let current = null, busy = false, typed = "";
+const history = [];
+
+const $ = id => document.getElementById(id);
+async function post(url, payload) {
+  return fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
+}
+function show() { $("typed").textContent = typed; }
+
+async function loadNext() {
+  busy = true;
+  try {
+    const p = await (await fetch("/api/kz/next")).json();
+    $("counter").textContent = `ocenione ${p.done} / ${p.total} · podejrzane ${p.n_suspect_done}, zwykłe ${p.n_regular_done} (cel ≥ 200)`;
+    typed = ""; show();
+    if (p.id === null) {
+      current = null; $("value").textContent = "–";
+      $("status").textContent = "Wszystkie punkty ocenione.";
+      return;
+    }
+    current = p;
+    $("value").textContent = p.z.toFixed(1).replace(".", ",");
+    $("color").textContent = "kolor: " + p.color;
+    $("conf").textContent = Math.round(p.conf);
+    $("sus").innerHTML = p.suspect ? '<span class="tag">podejrzany</span>' : "";
+    await new Promise(res => { const i = $("crop"); i.onload = i.onerror = res; i.src = `/api/kz/crop/${p.id}.png`; });
+  } finally { busy = false; }
+}
+
+async function send(qc, z_qc) {
+  if (!current || busy) return;
+  busy = true;
+  const id = current.id;
+  const body = {id, qc}; if (z_qc !== undefined) body.z_qc = z_qc;
+  const r = await post("/api/kz/qc", body);
+  const err = r.ok ? "" : (await r.json()).error;
+  $("status").textContent = r.ok ? `zapisano: punkt ${id} = ${qc}${z_qc !== undefined ? " " + z_qc : ""}` : "BŁĄD: " + err;
+  if (r.ok) history.push(id);
+  await loadNext();
+}
+
+async function undo() {
+  if (busy || !history.length) return;
+  busy = true;
+  const id = history[history.length - 1];
+  const r = await post("/api/kz/undo", {id});
+  if (r.ok) history.pop();
+  $("status").textContent = r.ok ? `cofnięto: punkt ${id}` : "BŁĄD cofania!";
+  await loadNext();
+}
+
+document.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || busy) return;
+  if (/^[0-9]$/.test(e.key) || e.key === "," || e.key === ".") { typed += e.key === "." ? "," : e.key; show(); }
+  else if (e.key === "Enter") {
+    if (!typed) return send("ok");
+    const z = parseFloat(typed.replace(",", "."));
+    if (Number.isNaN(z)) { $("status").textContent = "nieczytelna liczba"; return; }
+    send("corrected", z);
+  }
+  else if (e.key.toLowerCase() === "x") send("rejected");
+  else if (e.key === "?" || e.key === "/") send("skip");
+  else if (e.key === "Backspace") { e.preventDefault(); if (typed) { typed = typed.slice(0, -1); show(); } else undo(); }
+  else if (e.key === "Escape") { typed = ""; show(); }
+});
+loadNext();
+</script>
+</body>
+</html>

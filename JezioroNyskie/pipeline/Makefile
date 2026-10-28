@@ -27,10 +27,11 @@ LEVELSA := $(PROC)/levels_a.csv
 SCENES  := $(PROC)/scenes.json
 BOTTOM  := $(PROC)/model/all/model_meta.json
 KZMETA  := $(PROC)/kz/kz_meta.json
+KZSPOTS := $(PROC)/kz/kz_spot_ocr.gpkg
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom kz-georef test clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui test clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -112,6 +113,13 @@ $(BOTTOM): $(SCENES)                       # 07: model dna (okresy all, pre_floo
 kz-georef: $(KZMETA)
 $(KZMETA): ../docs/JN_2023_05_23__KZ.pdf $(REF)/kz_gcp.csv mielizna/kz.py $(LAKE)      # 09 georef: mapa KŻ -> EPSG:2180, RMSE na punktach wstrzymanych, werdykt
 	$(UV) 09_kz_digitize.py georef
+
+kz-spots: $(KZSPOTS)
+$(KZSPOTS): $(KZMETA) mielizna/kz.py       # 09 spots: OCR rzędnych (tesseract) -> kz_spot_ocr.gpkg (kafle, ok. minuty)
+	$(UV) 09_kz_digitize.py spots
+
+kz-qc-ui: $(KZSPOTS)                       # ręczna kontrola >= 200 punktów: http://localhost:8765/kz -> data/reference/kz_spot_qc.csv
+	$(UV) tools/label_server.py --kz
 
 test:
 	uv run pytest -q
