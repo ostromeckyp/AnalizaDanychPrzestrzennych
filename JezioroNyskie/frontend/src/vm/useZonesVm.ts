@@ -1,5 +1,5 @@
 import { keepPreviousData, onlineManager, useQuery } from '@tanstack/react-query';
-import { useMemo, useRef, useSyncExternalStore } from 'react';
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { api, type ZoneParams, type Zones } from '../api/client';
 import { fmtLevel, fmtM, fmtPct, round05 } from '../format';
 import { queryKeys } from './queryClient';
@@ -14,6 +14,8 @@ export interface ZonesVm {
   lastOkAt?: Date;
   lastOkParams?: ZoneParams;
   warnings: string[];
+  /** Trwa ponowienie po błędzie (status zostaje `error` do sukcesu). */
+  isRetrying: boolean;
   retry(): void;
 }
 
@@ -27,11 +29,11 @@ const useOnline = () =>
 
 export function useZonesVm(input: ZoneParams): ZonesVm {
   // Zaokrąglenie przed debounce: drobne ruchy suwaka w obrębie tego samego kroku nic nie zmieniają.
-  const { h, draft, margin } = input;
-  const rounded = useMemo(
-    () => ({ h: round05(h), draft: round05(draft), margin: round05(margin) }),
-    [h, draft, margin],
-  );
+  // Memo po zaokrąglonych liczbach: ruch poniżej kroku nie tworzy nowego obiektu, więc nie ma fałszywego „przeliczam”.
+  const rh = round05(input.h);
+  const rd = round05(input.draft);
+  const rm = round05(input.margin);
+  const rounded = useMemo(() => ({ h: rh, draft: rd, margin: rm }), [rh, rd, rm]);
   const params = useDebounced(rounded, DEBOUNCE_MS);
   const valid = [params.h, params.draft, params.margin].every(Number.isFinite);
 
@@ -42,6 +44,8 @@ export function useZonesVm(input: ZoneParams): ZonesVm {
     placeholderData: keepPreviousData,
   });
   const online = useOnline();
+  // Przy nowym kluczu TanStack zrzuca stan błędu na czas refetchu, więc „ponawiam” trzymamy sami.
+  const [retrying, setRetrying] = useState(false);
 
   // Ostatnie poprawne strefy: po błędzie nowego klucza TanStack nie zwraca już danych poprzedniego.
   const lastOk = useRef<{ zones: Zones; at: Date } | undefined>(undefined);
@@ -53,7 +57,7 @@ export function useZonesVm(input: ZoneParams): ZonesVm {
   const pending = params !== rounded; // debounce jeszcze trwa
   let status: ZonesStatus;
   if (!online) status = 'offline';
-  else if (q.isError) status = 'error';
+  else if (q.isError || retrying) status = 'error';
   else if (!zones) status = 'first-load';
   else if (q.isPlaceholderData || pending) status = 'recalculating';
   else status = 'ready';
@@ -70,6 +74,10 @@ export function useZonesVm(input: ZoneParams): ZonesVm {
     lastOkAt: lastOk.current?.at,
     lastOkParams: lastOk.current?.zones.params,
     warnings: zones?.warnings ?? [],
-    retry: () => void q.refetch(),
+    isRetrying: retrying,
+    retry: () => {
+      setRetrying(true);
+      void q.refetch().finally(() => setRetrying(false));
+    },
   };
 }

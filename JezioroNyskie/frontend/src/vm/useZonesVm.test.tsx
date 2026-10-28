@@ -160,4 +160,31 @@ describe('useZonesVm', () => {
     expect(zonesMock).not.toHaveBeenCalled();
     expect(result.current.zones).toBeUndefined();
   });
+
+  it('sub-step jitter (same rounded params) does not flip to recalculating', async () => {
+    const { result, rerender } = setup({ h: 195, draft: 1.2, margin: 0.3 });
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    rerender({ h: 195.004, draft: 1.2, margin: 0.3 });
+    expect(result.current.status).toBe('ready');
+    await advance(10);
+    expect(result.current.status).toBe('ready');
+  });
+
+  it('isRetrying is true only while retry() refetches after an error', async () => {
+    const { result, rerender } = setup({ h: 195, draft: 1.2, margin: 0.3 });
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.isRetrying).toBe(false);
+    zonesMock.mockRejectedValueOnce(new Error('boom'));
+    rerender({ h: 195.5, draft: 1.2, margin: 0.3 });
+    await advance(250);
+    await waitFor(() => expect(result.current.status).toBe('error'));
+    expect(result.current.isRetrying).toBe(false);
+    const next = deferred();
+    zonesMock.mockReturnValueOnce(next.promise);
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.isRetrying).toBe(true));
+    await act(async () => next.resolve(zonesFixture(195.5, 1.2, 0.3)));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.isRetrying).toBe(false);
+  });
 });
