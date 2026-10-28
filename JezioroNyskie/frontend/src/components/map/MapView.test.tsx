@@ -133,7 +133,7 @@ describe('MapView', () => {
     expect(h.fns.setPaintProperty).toHaveBeenCalledWith('zones-danger', 'fill-color', '#d0508a');
     expect(h.fns.updateImage).toHaveBeenCalledWith('risk-hatch', expect.anything());
     expect(h.imageSource.updateImage).toHaveBeenCalledWith(
-      expect.objectContaining({ url: expect.stringContaining('theme=dark') }),
+      expect.objectContaining({ url: expect.stringMatching(/^(?:(?!theme=).)*theme=dark$/) }),
     );
     expect(h.imageSource.updateImage).toHaveBeenCalledWith(
       expect.objectContaining({ url: '/api/layers/unc.png?v=1&theme=dark' }),

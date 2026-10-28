@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { ApiError, api } from '../api/client';
 import { fmtM, round05 } from '../format';
 import { queryKeys } from './queryClient';
 import { useDebounced } from './useDebounced';
@@ -16,8 +17,14 @@ export interface CapacityVm {
 /** `capacity`: input = V (mln m³) → poziom; `level`: input = h (m n.p.m.) → pojemność. */
 export function useCapacityVm(mode: 'level' | 'capacity', input: number): CapacityVm {
   const rounded = round05(input);
-  const value = useDebounced(rounded, 250);
-  const valid = Number.isFinite(value);
+  // Debounce pary (tryb, wartość): stara wartość nie może trafić do zapytania nowego trybu.
+  const debounced = useDebounced(
+    useMemo(() => ({ mode, v: rounded }), [mode, rounded]),
+    250,
+  );
+  const value = debounced.v;
+  const settled = debounced.mode === mode;
+  const valid = Number.isFinite(value) && settled;
   const { slider } = useMetaVm();
 
   const cap = useQuery({
@@ -29,11 +36,15 @@ export function useCapacityVm(mode: 'level' | 'capacity', input: number): Capaci
     queryKey: queryKeys.levelCapacity(value),
     queryFn: ({ signal }) => api.levelToCapacity(value, signal),
     enabled: valid && mode === 'level',
+    // Bez migania przy kroku suwaka; placeholder dotyczy tylko tego samego trybu.
+    placeholderData: keepPreviousData,
   });
 
   if (!valid) return {};
   if (mode === 'capacity') {
-    return { hFromCapacity: cap.data?.h ?? undefined, inTable: cap.data?.in_table };
+    // Odrzucenie 4xx (wartość poza zakresem API) traktujemy jak „poza tabelą”.
+    const rejected = cap.error instanceof ApiError && cap.error.status >= 400 && cap.error.status < 500;
+    return { hFromCapacity: cap.data?.h ?? undefined, inTable: rejected ? false : cap.data?.in_table };
   }
   let aboveNpp: string | undefined;
   if (slider) {

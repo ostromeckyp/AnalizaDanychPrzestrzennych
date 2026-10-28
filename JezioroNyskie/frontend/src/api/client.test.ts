@@ -57,9 +57,4 @@ describe('api', () => {
     }));
     await expect(api.meta()).rejects.toMatchObject({ status: 503, detail: undefined });
   });
-
-  it('layerUrl dopisuje theme z ? lub &', () => {
-    expect(api.layerUrl('/api/layers/bottom.png', 'dark')).toBe('/api/layers/bottom.png?theme=dark');
-    expect(api.layerUrl('/api/layers/bottom.png?v=abc', 'light')).toBe('/api/layers/bottom.png?v=abc&theme=light');
-  });
 });

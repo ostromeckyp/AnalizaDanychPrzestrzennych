@@ -1,5 +1,4 @@
 // Klient API: czyste funkcje fetch. Tylko warstwa vm/ ma z niego korzystać (test architektury).
-import { withTheme } from '../urls';
 import type { components } from './schema';
 
 type S = components['schemas'];
@@ -59,5 +58,4 @@ export const api = {
   currentLevel: (signal?: AbortSignal) => get<CurrentLevel>('/api/current-level', undefined, signal),
   capacityToLevel: (v: number, signal?: AbortSignal) => get<CapacityToLevel>('/api/capacity-to-level', { v }, signal),
   levelToCapacity: (h: number, signal?: AbortSignal) => get<LevelToCapacity>('/api/level-to-capacity', { h }, signal),
-  layerUrl: withTheme,
 };

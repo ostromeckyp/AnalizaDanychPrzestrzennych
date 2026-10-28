@@ -20,7 +20,7 @@ export function useDecimalField({ value, digits, isValid, onCommit }: Options) {
   const [dirty, setDirty] = useState(false);
 
   // Synchronizacja w trakcie renderu (wzorzec „derived state”), bez efektu.
-  if (value !== prev) {
+  if (!Object.is(value, prev)) {
     setPrev(value);
     if (parsePlNumber(text) !== value) setText(fmtNum(value, digits));
     setInvalid(false);

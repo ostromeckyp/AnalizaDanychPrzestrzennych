@@ -205,11 +205,11 @@ describe('MapPage', () => {
     expect(await screen.findByText('Nie udało się pobrać danych punktu.')).toBeInTheDocument();
   });
 
-  it('passes themed layer urls and meta bbox/npp to the map', async () => {
+  it('passes raw layer urls (theme suffix belongs to MapView) and meta bbox/npp to the map', async () => {
     renderPage();
     await waitFor(() => expect(mapProps.last?.npp).toBe(meta.npp));
     expect(mapProps.last!.bbox).toEqual(meta.bbox_wgs84);
-    expect((mapProps.last!.bottomLayer as { url: string }).url).toBe('/api/layers/bottom.png?theme=light');
+    expect((mapProps.last!.bottomLayer as { url: string }).url).toBe('/api/layers/bottom.png');
     expect(mapProps.last!.basemap).toBe('osm');
   });
 

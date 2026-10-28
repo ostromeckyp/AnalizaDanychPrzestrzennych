@@ -35,7 +35,6 @@ export interface MapViewProps {
   /** Treść zakotwiczona nad pinezką (popup); mapa nie zna jej zawartości. */
   pinOverlay?: ReactNode;
   onMapClick: (lon: number, lat: number) => void;
-  onReady?: () => void;
 }
 
 const ATTRIBUTION = '© OpenStreetMap contributors · Copernicus Sentinel-2 · GUGiK';
@@ -100,7 +99,6 @@ export function MapView(props: MapViewProps) {
       for (const l of marinaLayers(t)) map.addLayer(l, undefined);
       map.addLayer(pinLayer(t), undefined);
       setReady(true);
-      propsRef.current.onReady?.();
     });
     return () => {
       map.remove();

@@ -93,8 +93,8 @@ describe('LevelControl', () => {
     expect(screen.getByText(/→ poziom/)).toHaveTextContent('→ poziom 195,20 m n.p.m.');
   });
 
-  it('capacity mode shows out-of-table', () => {
-    setup({ mode: 'capacity', capacity: { value: 999, inTable: false } });
+  it('capacity mode shows out-of-table (VM mapuje odrzucenie 4xx na inTable:false)', () => {
+    setup({ mode: 'capacity', capacity: { value: 250, inTable: false } });
     expect(screen.getByText('poza tabelą pojemności')).toBeInTheDocument();
   });
 

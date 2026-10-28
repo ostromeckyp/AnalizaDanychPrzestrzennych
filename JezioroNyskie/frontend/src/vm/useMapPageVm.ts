@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, type Marinas, type Meta, type Zones } from '../api/client';
+import { type Marinas, type Meta, type Zones } from '../api/client';
 import type { ParameterPanelProps } from '../components/panel/ParameterPanel';
 import type { LayerKey, LevelMode } from '../components/panel/types';
 import { round05 } from '../format';
@@ -105,7 +105,7 @@ export function useMapPageVm(): MapPageVm {
   const visible = { ...userVisible, uncertainty: userVisible.uncertainty || forceUnc };
 
   const layer = (l: { url: string; coordinates: [number, number][] } | undefined) =>
-    l ? { url: api.layerUrl(l.url, theme), coordinates: l.coordinates } : undefined;
+    l ? { url: l.url, coordinates: l.coordinates } : undefined;
 
   const panel: ParameterPanelProps | undefined =
     meta && slider && Number.isFinite(h)

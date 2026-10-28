@@ -23,9 +23,7 @@ export const UNC_DOT: Record<ThemeName, string> = {
   dark: '#e6eef3',
 };
 
-// Brzeg, zapora i znaczniki POI (tokeny --shore, --dam, --accent, --panel).
-export const SHORE_COLOR: Record<ThemeName, string> = { light: '#5f889c', dark: '#5f889c' };
-export const DAM_COLOR: Record<ThemeName, string> = { light: '#3a4a55', dark: '#3a4a55' };
+// Znaczniki POI (tokeny --accent, --panel).
 export const POI_COLORS: Record<ThemeName, { fg: string; bg: string }> = {
   light: { fg: '#1c5d8c', bg: '#ffffff' },
   dark: { fg: '#6fb3e0', bg: '#12191f' },

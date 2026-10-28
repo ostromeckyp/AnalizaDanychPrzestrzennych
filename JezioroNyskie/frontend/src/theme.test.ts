@@ -3,9 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   BOTTOM_RAMP,
-  DAM_COLOR,
   POI_COLORS,
-  SHORE_COLOR,
   UNC_DOT,
   ZONE_COLORS,
   levelColor,
@@ -52,10 +50,8 @@ describe('theme.ts a tokens.css', () => {
 
 describe('theme.ts: dodatki mapy', () => {
   for (const theme of ['light', 'dark'] as const) {
-    it(`brzeg, zapora i znaczniki zgodne z tokenami (${theme})`, () => {
+    it(`znaczniki POI zgodne z tokenami (${theme})`, () => {
       const t = tokens(theme);
-      expect(SHORE_COLOR[theme]).toBe(t['shore']);
-      expect(DAM_COLOR[theme]).toBe(t['dam']);
       expect(POI_COLORS[theme].fg).toBe(t['accent']);
       expect(POI_COLORS[theme].bg).toBe(t['panel']);
     });
