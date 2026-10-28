@@ -9,7 +9,7 @@ WORKDIR /app
 COPY pipeline/ /app/pipeline/
 COPY backend/pyproject.toml backend/uv.lock /app/backend/
 WORKDIR /app/backend
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --locked --no-dev --no-install-project
 COPY backend/app /app/backend/app
 ENV MIELIZNA_DATA_DIR=/data MIELIZNA_CURRENT_DIR=/cache/current
 # użytkownik bez uprawnień; /cache należy do niego (nowy wolumen dziedziczy właściciela z obrazu)

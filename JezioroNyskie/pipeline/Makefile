@@ -38,7 +38,7 @@ ZWIR    := $(REF)/zwirownia.gpkg
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate test clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate test check-locks clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -169,6 +169,12 @@ $(EVALCH): 08_evaluate.py mielizna/evaluate.py mielizna/blocks.py
 
 test:
 	uv run pytest -q
+
+# check-locks: czy uv.lock pipeline'u i backendu odpowiadają pyproject.toml (backend zależy od ../pipeline, więc nowa
+# zależność pipeline'u wymaga też `cd ../backend && uv lock`). Obraz Dockera buduje się z `uv sync --locked`.
+check-locks:
+	uv lock --check
+	cd ../backend && uv lock --check
 
 # usuwa tylko model RF (wymusi retrening i przeliczenie dalszych kroków przy następnym make)
 clean-model:

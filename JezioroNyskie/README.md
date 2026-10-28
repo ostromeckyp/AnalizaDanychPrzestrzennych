@@ -19,7 +19,8 @@ bash scripts/compose_smoke.sh    # test dymny: buduje, sprawdza /, /api/meta, /h
 ```
 
 Tryb na żywo (odświeżanie bieżącego poziomu z Sentinel-2, potrzebna sieć wychodząca) jest domyślnie włączony;
-`MIELIZNA_LIVE=0` w pliku `.env` obok `docker-compose.yml` go wyłącza (plik jest w `.gitignore`). Port frontu: 8080.
+`MIELIZNA_LIVE=0` w pliku `.env` obok `docker-compose.yml` go wyłącza (plik jest w `.gitignore`). Port frontu: 8080, wystawiony tylko na `127.0.0.1`
+(aplikacja nie jest dostępna z sieci lokalnej; żeby ją udostępnić, zmień mapowanie portu w `docker-compose.yml`).
 Cache bieżącego poziomu leży w wolumenie Dockera (`/cache/current`, `MIELIZNA_CURRENT_DIR`), bo dane są montowane tylko do odczytu.
 Po aktualizacji ze starszego układu compose (wcześniejszy wolumen cache) uruchom raz `docker compose down -v`.
 
@@ -63,6 +64,7 @@ Retrening to godziny (ok. 550 dopasowań), więc wymuszaj go świadomie.
 | `make evaluate` | `08_evaluate.py` | → `eval/{bottom_vs_nmt,levels,bottom_change,model_choice,mask}.json`, `docs/img/eval-*.png` |
 | `make all` | łańcuch planu 1 (`osm` … `bottom`) | staje przed `rf`, jeśli < 150 ręcznych etykiet klas; pełny przebieg od zera: raport §9 |
 | `make test` | `pytest -q` | wszystkie testy pipeline'u (w tym spójność liczb raportu) |
+| `make check-locks` | `uv lock --check` | czy `pipeline/uv.lock` i `backend/uv.lock` są aktualne względem `pyproject.toml` (po dodaniu zależności do pipeline'u: `cd backend && uv lock`; obraz Dockera używa `uv sync --locked`) |
 
 Dane surowe w `data/raw/`, logi w `data/processed/logs/`. Notatki do nauki (po polsku, z pytaniami obronnymi):
 [`docs/nauka/`](docs/nauka/) — `M1-dane.md`, `M2-klasyfikacja.md`, `M3-poziomy.md`, `M4-model-dna.md`, `M5-backend.md`, `M6-frontend.md`, `M7-lidar-kz.md`, `decyzje.md`.

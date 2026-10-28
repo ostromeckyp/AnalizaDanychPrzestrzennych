@@ -17,6 +17,7 @@ __pycache__/
 data/reference/*_backup.gpkg
 frontend/node_modules/
 frontend/dist/
+frontend/tsconfig.tsbuildinfo
 frontend/test-results/
 frontend/playwright-report/
 data/reference/*.tmp
