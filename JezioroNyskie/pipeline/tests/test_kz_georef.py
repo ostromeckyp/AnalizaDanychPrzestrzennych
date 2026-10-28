@@ -95,3 +95,16 @@ def test_band_centre_finds_band_despite_neighbouring_dark_feature():
 def test_band_centre_none_on_flat_profile():
     d = np.arange(-60, 61, 2.0)
     assert kz.band_centre(np.full(d.shape, 200.0), d, width_m=24.0, max_shift_m=30.0) is None
+
+
+def test_lake_facing_edges_keep_only_boundary_near_lake():
+    from shapely.geometry import LineString, Polygon
+    lake = Polygon([(0, 0), (1000, 0), (1000, 1000), (0, 1000)])
+    # pierścień zapory: lewy bok przylega do jeziora (x = 1020, 20 m od brzegu), prawy bok jest daleko (x = 1500)
+    ring = LineString([(1020, 100), (1020, 900), (1500, 900), (1500, 100), (1020, 100)])
+    parts = kz.lake_facing_edges([ring], lake, max_dist_m=50.0)
+    assert parts, "brak odcinków przy jeziorze"
+    for g in parts:
+        xs = [c[0] for c in g.coords]
+        assert max(xs) < 1100            # tylko bok od strony wody
+    assert sum(g.length for g in parts) > 700  # cały lewy bok (800 m) zostaje

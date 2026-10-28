@@ -151,3 +151,20 @@ def band_centre(profile: np.ndarray, d: np.ndarray, width_m: float, max_shift_m:
         if score > best:
             best, best_c = score, c
     return best_c if best >= min_contrast else None
+
+
+def lake_facing_edges(dam_geoms, lake_geom, max_dist_m: float = 50.0) -> list:
+    """Części brzegów pierścieni zapory leżące w `max_dist_m` od obrysu jeziora (strona wodna zapory).
+
+    Warstwa `dam` z OSM to zamknięte pierścienie (obrysy obszarów zapory), więc pełny pierścień zawiera też
+    skarpę od strony lądu; dla kontroli położenia bierzemy tylko krawędź od jeziora."""
+    from shapely.geometry import LineString, MultiLineString
+
+    zone = lake_geom.buffer(max_dist_m)
+    out = []
+    for g in dam_geoms:
+        inter = g.boundary if g.geom_type in ("Polygon", "MultiPolygon") else g
+        inter = inter.intersection(zone)
+        parts = [inter] if isinstance(inter, LineString) else list(inter.geoms) if isinstance(inter, MultiLineString) else []
+        out += [p for p in parts if isinstance(p, LineString) and p.length > 0]
+    return out

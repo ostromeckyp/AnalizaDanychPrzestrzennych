@@ -28,6 +28,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import rasterio
+import shapely
 from PIL import Image
 from rasterio.transform import from_origin
 from scipy.ndimage import map_coordinates
@@ -45,6 +46,7 @@ PDF = Path(__file__).resolve().parent.parent / "docs" / "JN_2023_05_23__KZ.pdf"
 RES_M = 2.0
 DAM_SEARCH_M = 30.0
 DAM_PROFILE_M = 100.0
+DAM_LAKE_DIST_M = 50.0
 DAM_BAND_WIDTH_M = 46.0
 
 
@@ -72,24 +74,27 @@ def warp_image(img: np.ndarray, t: kz.KzTransform, res: float = RES_M):
     return out, from_origin(x0, y1, res, res)
 
 
-def dam_offset(rgba: np.ndarray, transform, dam: gpd.GeoDataFrame) -> dict:
-    """Przesunięcie pasa zapory na mapie względem linii OSM `dam`.
+def dam_offset(rgba: np.ndarray, transform, dam: gpd.GeoDataFrame, lake_geom) -> dict:
+    """Przesunięcie pasa zapory na mapie względem linii OSM `dam` (strona wodna).
 
-    Odniesienie: wszystkie 5 odcinków warstwy `dam` (434, 3851, 1619, 3947, 208 m) to kolejne odcinki jednej
-    zapory (leżą w różnych miejscach wzdłuż niej, nie równolegle), więc to jedna linia korony, nie korona + stopa.
-    Wzdłuż normalnych (co 25 m, profil ±100 m) środek pasa estymuje `kz.band_centre` (szablon pasa o szerokości
-    DAM_BAND_WIDTH_M, zmierzonej na medianie profilów: ~46 m = zapora z drogą na koronie). Zwraca medianę
-    odsunięcia ze znakiem (dodatnie = na lewo od kierunku linii), rozrzut 1,4826·MAD i liczbę profili."""
+    Odniesienie: warstwa `dam` to 5 zamkniętych pierścieni (obrysy obszarów zapory, nie linie korony), więc
+    pełny pierścień zawiera też skarpę od lądu. Bierzemy tylko części brzegów pierścieni w 50 m od obrysu
+    jeziora (`kz.lake_facing_edges`): krawędź od strony wody. Wzdłuż normalnych (co 25 m, profil ±100 m)
+    środek pasa estymuje `kz.band_centre` (szablon o szerokości DAM_BAND_WIDTH_M = 46 m, wartość z mediany
+    profilów w pierwszej wersji kontroli). Znak: dodatnie = środek pasa na mapie leży dalej od jeziora niż
+    linia OSM. Zwraca medianę, rozrzut 1,4826·MAD i liczbę profili."""
     gray = rgba[:3].astype(np.float32).mean(0)
     res = transform.a
     d = np.arange(-DAM_PROFILE_M, DAM_PROFILE_M + 1, res)
     offs = []
-    for geom in dam.geometry:
+    for geom in kz.lake_facing_edges(list(dam.geometry), lake_geom, DAM_LAKE_DIST_M):
         for s in np.arange(30, geom.length - 30, 25.0):
             p, q = geom.interpolate(s), geom.interpolate(s + 5)
             tx, ty = q.x - p.x, q.y - p.y
             n = np.hypot(tx, ty)
             nx_, ny_ = -ty / n, tx / n
+            if lake_geom.distance(shapely.Point(p.x + nx_ * 5, p.y + ny_ * 5)) < lake_geom.distance(p):
+                nx_, ny_ = -nx_, -ny_   # normalna ma wskazywać od jeziora
             cols = ((p.x + nx_ * d - transform.c) / res).astype(int)
             rows = ((transform.f - (p.y + ny_ * d)) / res).astype(int)
             if (cols < 1).any() or (rows < 1).any() or (cols >= gray.shape[1] - 1).any() or (rows >= gray.shape[0] - 1).any():
@@ -148,7 +153,7 @@ def georef() -> int:
     lake_path = data_path("processed", "lake.gpkg")
     lake = gpd.read_file(lake_path, layer="lake")
     dam = gpd.read_file(lake_path, layer="dam")
-    d = dam_offset(rgba, transform, dam)
+    d = dam_offset(rgba, transform, dam, lake.geometry.union_all())
     meta = {"kind": kind, "rmse_fit": round(t.rmse_fit, 2), "rmse_check": round(t.rmse_check, 2),
             "n_fit": t.n_fit, "n_check": t.n_check, **d, "verdict": kz.verdict(t.rmse_check),
             "rmse_scope": "graticule-internal",
