@@ -131,3 +131,23 @@ def fit_transform(gcp: pd.DataFrame, kind: Literal["affine", "poly2"]) -> KzTran
             b = b + (-j21 * ex + j11 * ey) / det
         return a, b
     return KzTransform(kind, fwd, inv, rmse(fit), rmse(chk), len(fit), len(chk))
+
+
+def band_centre(profile: np.ndarray, d: np.ndarray, width_m: float, max_shift_m: float, min_contrast: float = 25.0):
+    """Środek ciemnego pasa o szerokości `width_m` w profilu jasności (d: odległość podpisana [m]).
+
+    Korelacja z szablonem pasa: dla każdego przesunięcia c w ±max_shift_m wynik = ciemność wewnątrz
+    [c - w/2, c + w/2] minus ciemność w pasach flankujących o tej samej szerokości; ciemność = tło (mediana
+    profilu) - jasność. Szablon odrzuca wąskie, ciemne sąsiedztwo (droga), bo wymaga całej szerokości pasa.
+    Zwraca None, gdy najlepszy kontrast < `min_contrast` (brak pasa)."""
+    dark = np.median(profile) - np.asarray(profile, float)
+    best, best_c = -np.inf, None
+    for c in np.arange(-max_shift_m, max_shift_m + 1e-9, float(np.median(np.diff(d)))):
+        inside = np.abs(d - c) <= width_m / 2
+        flank = (np.abs(d - c) > width_m / 2) & (np.abs(d - c) <= 1.5 * width_m)
+        if inside.sum() < 2 or flank.sum() < 2:
+            continue
+        score = dark[inside].mean() - dark[flank].mean()
+        if score > best:
+            best, best_c = score, c
+    return best_c if best >= min_contrast else None

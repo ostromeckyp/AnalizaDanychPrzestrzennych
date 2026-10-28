@@ -6,6 +6,9 @@ data/raw/nmt/*
 data/raw/lidar/*
 !data/raw/lidar/README.md
 !data/raw/check/
+!data/raw/kz/
+data/raw/kz/*
+!data/raw/kz/README.md
 data/processed/
 .venv/
 __pycache__/

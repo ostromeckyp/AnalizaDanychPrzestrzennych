@@ -34,7 +34,7 @@ MIN_HUMAN_LABELS := 150
 .DEFAULT_GOAL := help
 
 help:
-	@echo "Cele: osm nmt s2 label-candidates label-ui rf classify shorelines bulletins lidar-epochs levels-a levels bottom all test clean-model"
+	@echo "Cele: osm nmt s2 label-candidates label-ui rf classify shorelines bulletins lidar-epochs levels-a levels bottom kz-georef all test clean-model"
 	@echo "Kolejność: osm -> s2 -> label-candidates -> (ręczne etykiety: label-ui) -> rf -> classify"
 	@echo "           -> shorelines -> bulletins -> levels -> bottom"
 
@@ -110,7 +110,7 @@ $(BOTTOM): $(SCENES)                       # 07: model dna (okresy all, pre_floo
 	$(UV) 07_bottom_model.py
 
 kz-georef: $(KZMETA)
-$(KZMETA): $(REF)/kz_gcp.csv $(LAKE)       # 09 georef: mapa KŻ -> EPSG:2180, RMSE na punktach wstrzymanych, werdykt
+$(KZMETA): ../docs/JN_2023_05_23__KZ.pdf $(REF)/kz_gcp.csv mielizna/kz.py $(LAKE)      # 09 georef: mapa KŻ -> EPSG:2180, RMSE na punktach wstrzymanych, werdykt
 	$(UV) 09_kz_digitize.py georef
 
 test:

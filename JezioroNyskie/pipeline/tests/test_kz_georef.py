@@ -81,3 +81,17 @@ def test_extract_image_roundtrip(tmp_path):
     out = tmp_path / "k.png"
     assert kz.extract_image(pdf, out) == (120, 60)
     assert Image.open(out).size == (120, 60)
+
+
+def test_band_centre_finds_band_despite_neighbouring_dark_feature():
+    d = np.arange(-60, 61, 2.0)
+    prof = np.full(d.shape, 210.0)
+    prof[(d >= -3) & (d <= 21)] = 140.0          # pas zapory o środku +9 m, szerokość 24 m
+    prof[(d >= -52) & (d <= -44)] = 120.0        # ciemniejsza droga obok (nie zapora)
+    c = kz.band_centre(prof, d, width_m=24.0, max_shift_m=30.0)
+    assert abs(c - 9.0) <= 2.0
+
+
+def test_band_centre_none_on_flat_profile():
+    d = np.arange(-60, 61, 2.0)
+    assert kz.band_centre(np.full(d.shape, 200.0), d, width_m=24.0, max_shift_m=30.0) is None
