@@ -26,9 +26,8 @@ SHORE_STEP_M = 10.0
 REF_LEVEL = 194.0        # poziom odniesienia długości poziomicy (środek zakresu, gdzie powierzchnia jest dobrze określona)
 MIN_LENGTH_FRAC = 0.5    # poziomica "istnieje" gdy jej długość ≥ 50 % długości na REF_LEVEL
 MIN_POINTS = 50          # poniżej tylu punktów brzegu z powierzchnią scenę pomijamy (kilkaset m brzegu)
-MIN_SPOT_Z = 192.5       # mapa KŻ sama opisuje dno poniżej 192,5 m jako „orientacyjne” (blok UWAGA, KZ_ZRODLO_I_WARUNKI.md), więc
-#                          punkty rzędnych głębsze niż to nie wchodzą do TIN (poziomice 192,5 i 195,0 m wchodzą). Próg wybrany po
-#                          ablacji (M7 §6), uzasadniony zastrzeżeniem samej mapy.
+MIN_SPOT_Z = 192.5       # TYLKO analiza czułości (`kz_surface(min_spot_z=MIN_SPOT_Z)`): mapa KŻ opisuje dno poniżej 192,5 m jako
+#                          „orientacyjne”. Wynik główny D używa pełnego zbioru punktów po kontroli (domyślnie bez filtra); M7 §6.
 VERTEX_STEP_M = 20.0     # poziomice KŻ zagęszczamy do tego kroku, żeby TIN nie "ścinał" łuków
 
 
@@ -48,11 +47,12 @@ def _line_points(geom, step: float) -> np.ndarray:
     return np.asarray(pts, float).reshape(-1, 2)
 
 
-def kz_surface(spots, contours, grid: Grid, gravel=None, min_spot_z: float = MIN_SPOT_Z) -> np.ndarray:
+def kz_surface(spots, contours, grid: Grid, gravel=None, min_spot_z: float | None = None) -> np.ndarray:
     """Powierzchnia dna z punktów rzędnych i poziomic KŻ (TIN, liniowo); NaN poza otoczką i w żwirowni.
 
-    Punkty z rzędną < `min_spot_z` (domyślnie 192,5 m: dno „orientacyjne” wg samej mapy KŻ) są pomijane."""
-    spots = spots[spots["z"].to_numpy(float) >= min_spot_z]
+    `min_spot_z` (domyślnie None = wszystkie punkty): opcjonalny filtr do analizy czułości, pomija punkty o rzędnej poniżej progu."""
+    if min_spot_z is not None:
+        spots = spots[spots["z"].to_numpy(float) >= min_spot_z]
     px = np.c_[spots.geometry.x.to_numpy(), spots.geometry.y.to_numpy(), spots["z"].to_numpy(float)]
     parts = [px]
     for g, lv in zip(contours.geometry, contours["level"]):

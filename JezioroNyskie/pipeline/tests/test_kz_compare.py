@@ -142,10 +142,10 @@ def test_config_position_reject_entries_have_reasons():
     assert len(ent) == 2 and all(e["reason"] and {"px", "py", "ocr_z"} <= set(e) for e in ent)
 
 
-def test_variant_d_surface_ignores_spots_below_192_5():
+def test_variant_d_optional_filter_ignores_spots_below_192_5():
     from mielizna import variant_d
     sp = spots([(105, 105, 190.0), (905, 105, 194.0), (505, 905, 194.0)])
     cont = gpd.GeoDataFrame({"level": [195.0]}, geometry=[LineString([(0, 500), (990, 500)])], crs="EPSG:2180")
     with_deep = variant_d.kz_surface(sp, cont, GRID, min_spot_z=0)
-    surf = variant_d.kz_surface(sp, cont, GRID)
-    assert np.nanmin(with_deep) < 192.0 and np.nanmin(surf) >= 193.99
+    surf = variant_d.kz_surface(sp, cont, GRID, min_spot_z=variant_d.MIN_SPOT_Z)
+    assert np.nanmin(variant_d.kz_surface(sp, cont, GRID)) < 192.0 and np.nanmin(with_deep) < 192.0 and np.nanmin(surf) >= 193.99
