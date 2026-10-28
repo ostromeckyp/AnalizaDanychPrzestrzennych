@@ -118,9 +118,17 @@ def h_max_valid(surface: np.ndarray, grid: Grid, levels: np.ndarray = LEVELS, re
     return float("nan") if best is None else float(best)
 
 
-def is_valid(h: float, dist_m: float, hmax: float, levels: np.ndarray = LEVELS, dist_max: float = DIST_MAX_M) -> bool:
-    """Fit `d_valid`: h < h_max_valid − 0,05 m, nie na brzegu siatki poziomów, średnia odległość ≤ `dist_max`."""
+def is_valid(h: float, dist_m: float, hmax: float, levels: np.ndarray = LEVELS, dist_max: float = DIST_MAX_M,
+             h_ref: float | None = None) -> bool:
+    """Fit `d_valid`: h < h_max_valid − 0,05 m, nie na brzegu siatki poziomów, średnia odległość ≤ `dist_max`
+    oraz (gdy podano) poziom odniesienia sceny `h_ref` (= h_t) < h_max_valid.
+
+    Ostatni warunek to DZIEDZINA metody, nie strojenie: powierzchnia KŻ opisuje tylko poziomy poniżej `h_max_valid`,
+    więc D może sprawdzić tylko sceny, których poziom odniesienia tam leży. Dla scen powyżej fit ląduje w środku
+    zakresu i jest bez znaczenia, choć nie wygląda na nasycony."""
     if not (np.isfinite(h) and np.isfinite(dist_m) and np.isfinite(hmax)):
+        return False
+    if h_ref is not None and not (np.isfinite(h_ref) and h_ref < hmax):
         return False
     edge = h <= levels[0] + 1e-9 or h >= levels[-1] - 1e-9
     return bool(h < hmax - 0.05 + 1e-9 and not edge and dist_m <= dist_max)

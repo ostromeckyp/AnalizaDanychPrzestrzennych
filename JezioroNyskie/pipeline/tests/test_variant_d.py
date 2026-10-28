@@ -129,3 +129,10 @@ def test_fit_in_range_is_valid_and_edges_dist_rejected():
     assert not variant_d.is_valid(h, variant_d.DIST_MAX_M + 1, hmax, LEVELS)      # za daleko od poziomicy
     assert not variant_d.is_valid(LEVELS[0], 5.0, hmax, LEVELS)                   # brzeg siatki
     assert not variant_d.is_valid(float("nan"), float("nan"), hmax, LEVELS)
+
+
+def test_out_of_domain_reference_level_is_not_valid():
+    hmax = 194.95
+    assert variant_d.is_valid(194.4, 100.0, hmax, LEVELS, h_ref=194.5)
+    assert not variant_d.is_valid(194.4, 100.0, hmax, LEVELS, h_ref=196.0)      # scena poza zakresem powierzchni
+    assert not variant_d.is_valid(194.4, 100.0, hmax, LEVELS, h_ref=float("nan"))
