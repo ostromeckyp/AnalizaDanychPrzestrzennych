@@ -40,11 +40,12 @@ class Clock:
 
 @pytest.fixture
 def make(dataset, products, tmp_path):
-    def _make(fetch, live=True, csv=True, clock=None, cache=None):
+    def _make(fetch, live=True, csv=True, clock=None, cache=None, bg=False):
         if csv:
             (dataset / "processed" / "bulletins.csv").write_text(CSV, encoding="utf-8")
         s = Settings(data_dir=dataset, live=live, current_dir=cache or tmp_path / "cache")
-        return TestClient(create_app(s, products, bulletin_fn=fetch, clock=clock or Clock()))
+        return TestClient(create_app(s, products, bulletin_fn=fetch, clock=clock or Clock(),
+                                      bulletin_background=bg))
     return _make
 
 
@@ -137,30 +138,31 @@ def test_corrupt_cache_and_bad_value_never_500(make, tmp_path):
     assert make(Fetch(result=ROW | {"v_current": float("nan")}), cache=cache).get("/api/bulletin/latest").status_code == 200
 
 
-def test_slow_refresh_does_not_block_second_request(make):
+def test_request_never_blocks_on_hanging_fetch(make):
     started, release = threading.Event(), threading.Event()
 
-    def slow(cache_dir):
+    def hang(cache_dir):
         started.set()
         release.wait(10)
         return ROW
 
-    c = make(slow)
-    first = []
-    t = threading.Thread(target=lambda: first.append(c.get("/api/bulletin/latest").json()))
-    t.start()
+    c = make(hang, bg=True)
+    t0 = time.monotonic()
+    r = c.get("/api/bulletin/latest")                  # pierwsze żądanie też wraca natychmiast (CSV)
+    assert time.monotonic() - t0 < 0.5 and r.status_code == 200
+    assert r.json()["source"] == "pipeline" and r.json()["stale"] is True and r.json()["refreshing"] is True
     assert started.wait(5)
     t0 = time.monotonic()
-    r = c.get("/api/bulletin/latest")                  # odświeżanie trwa: odpowiedź natychmiast z CSV
-    assert time.monotonic() - t0 < 1 and r.status_code == 200
-    assert r.json()["source"] == "pipeline" and r.json()["stale"] is True
+    r2 = c.get("/api/bulletin/latest")
+    assert time.monotonic() - t0 < 0.5 and r2.json()["refreshing"] is True
     release.set()
-    t.join(5)
-    assert first[0]["source"] == "govpl" and first[0]["stale"] is False
-    assert c.get("/api/bulletin/latest").json()["bulletin_date"] == "2026-10-27"   # stan zaktualizowany
+    c.app.state.bulletin.join(5)
+    b = c.get("/api/bulletin/latest").json()           # stan zaktualizowany w tle
+    assert b["source"] == "govpl" and b["bulletin_date"] == "2026-10-27"
+    assert b["stale"] is False and b["refreshing"] is False
 
 
-def test_slow_refresh_without_csv_serves_last_good_then_404(make):
+def test_background_refresh_without_csv_serves_last_good_then_updates(make):
     started, release = threading.Event(), threading.Event()
     calls = []
 
@@ -169,19 +171,28 @@ def test_slow_refresh_without_csv_serves_last_good_then_404(make):
         if len(calls) == 2:
             started.set()
             release.wait(10)
+            return ROW | {"bulletin_date": date(2026, 10, 28)}
         return ROW
 
     clock = Clock()
-    c = make(fn, csv=False, clock=clock)
-    c.get("/api/bulletin/latest")
+    c = make(fn, csv=False, clock=clock, bg=True)
+    c.get("/api/bulletin/latest")                                # uruchamia odświeżanie w tle
+    c.app.state.bulletin.join(5)
+    assert c.get("/api/bulletin/latest").json()["bulletin_date"] == "2026-10-27"
     clock.t += 3601
-    t = threading.Thread(target=lambda: c.get("/api/bulletin/latest"))
-    t.start()
+    b = c.get("/api/bulletin/latest").json()           # w trakcie odświeżania: ostatni dobry, stale
     assert started.wait(5)
-    b = c.get("/api/bulletin/latest").json()           # w trakcie odświeżania: ostatni dobry, oznaczony stale
-    assert b["source"] == "govpl" and b["stale"] is True
+    assert b["source"] == "govpl" and b["stale"] is True and b["bulletin_date"] == "2026-10-27"
     release.set()
-    t.join(5)
+    c.app.state.bulletin.join(5)
+    assert c.get("/api/bulletin/latest").json()["bulletin_date"] == "2026-10-28"
+
+
+def test_background_exception_releases_lock(make):
+    c = make(Fetch(exc=RuntimeError("x")), bg=True)
+    c.get("/api/bulletin/latest")
+    c.app.state.bulletin.join(5)
+    assert c.app.state.bulletin.refreshing() is False
 
 
 def test_older_bulletin_marked_stale(make):

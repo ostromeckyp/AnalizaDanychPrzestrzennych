@@ -6,10 +6,13 @@ Co robi: `BulletinService.get()` zwraca najnowszy czytelny komunikat z listy gov
   (`bulletin_latest.json`, atomowo: tmp + replace), razem z czasem ostatniej próby.
 Dlaczego tak: serwer Wód Polskich nie może dostawać zapytań przy każdym kliknięciu, więc sieć jest
   pytana najwyżej raz na `ttl_s` (1 h) - także po porażce (inaczej awaria serwera zamieniłaby się w serię
-  zapytań). Odświeżenie wykonuje jedno żądanie (blokada `_refresh_lock` brana bez czekania, czas
-  ograniczony do `DEADLINE_S` = 40 s, poniżej 60 s limitu nginx); pozostałe żądania nigdy nie czekają,
-  tylko od razu dostają bieżący stan (ostatni dobry z `stale`, inaczej CSV, inaczej 404), żeby nie zająć
-  puli wątków współdzielonej z /api/zones. Dane z sieci są zdalnym wejściem: pobierania mają limity
+  zapytań). Odświeżenie nigdy nie działa na wątku żądania: żądanie, które wygra jednorazową blokadę
+  (`_refresh_lock`, bez czekania), uruchamia wątek-demon (single-flight) i od razu zwraca bieżący stan
+  (ostatni dobry z `stale`, inaczej CSV, inaczej 404) z `refreshing=true`; nikt nie zajmuje puli wątków
+  współdzielonej z /api/zones ani nie przekracza 60 s nginx. Wątek ma budżet `DEADLINE_S` = 40 s
+  (sprawdzany też w trakcie strumieniowania; parsowanie PDF-a jest ograniczone tylko limitem rozmiaru,
+  ale działa w tle). UX: pierwsze kliknięcie może pokazać wynik zapasowy z adnotacją „trwa pobieranie”,
+  kolejne kliknięcie (po kilku sekundach) dostaje świeży komunikat. Dane z sieci są zdalnym wejściem: pobierania mają limity
   rozmiaru (lista 2 MB, PDF 10 MB) i krótkie timeouty, URL musi być `https://`, a `pypdf` parsuje
   nieufny PDF (ryzyko zasobowe ograniczone limitem rozmiaru i odpornością na wyjątki).
   Gdy użyto starszego komunikatu niż najnowszy z listy (`fallback_older`), wynik ma `stale=true`.
@@ -70,9 +73,10 @@ def _num(x) -> float | None:
 
 class BulletinService:
     def __init__(self, cache_dir: Path, data_dir: Path, live: bool, fetch_fn=default_fetch,
-                 clock=time.time, ttl_s: float = TTL_S):
+                 clock=time.time, ttl_s: float = TTL_S, background: bool = True):
         self.cache_dir, self.data_dir, self.live = Path(cache_dir), Path(data_dir), live
-        self.fetch_fn, self.clock, self.ttl_s = fetch_fn, clock, ttl_s
+        self.fetch_fn, self.clock, self.ttl_s, self.background = fetch_fn, clock, ttl_s, background
+        self._thread: threading.Thread | None = None
         self._lock = threading.Lock()            # krótka: stan w pamięci
         self._refresh_lock = threading.Lock()    # długa: tylko jedno odświeżenie naraz, nigdy nie czekamy
         self._state = self._read_state()      # {"bulletin", "fetched_at", "attempt_at", "ok"} albo {}
@@ -152,19 +156,38 @@ class BulletinService:
                          or self._refresh_lock.locked(), "source": "govpl"}
         return self._from_csv()
 
+    def _run_refresh(self) -> None:
+        """Ciało odświeżenia (wątek tła albo inline w testach); zawsze zwalnia blokadę."""
+        try:
+            now = self.clock()
+            with self._lock:
+                still_due = now - self._state.get("attempt_at", -math.inf) >= self.ttl_s
+            if still_due:
+                self._attempt(now)
+        except Exception:  # noqa: BLE001
+            log.exception("bulletin refresh failed")
+        finally:
+            self._refresh_lock.release()
+
+    def join(self, timeout: float | None = None) -> None:
+        """Czeka na wątek odświeżenia (testy)."""
+        t = self._thread
+        if t is not None:
+            t.join(timeout)
+
+    def refreshing(self) -> bool:
+        return self._refresh_lock.locked()
+
     def get(self) -> dict | None:
         try:
             with self._lock:
                 due = self.live and self.clock() - self._state.get("attempt_at", -math.inf) >= self.ttl_s
             if due and self._refresh_lock.acquire(blocking=False):
-                try:
-                    now = self.clock()
-                    with self._lock:
-                        still_due = now - self._state.get("attempt_at", -math.inf) >= self.ttl_s
-                    if still_due:
-                        self._attempt(now)
-                finally:
-                    self._refresh_lock.release()
+                if self.background:
+                    self._thread = threading.Thread(target=self._run_refresh, name="bulletin-refresh", daemon=True)
+                    self._thread.start()
+                else:
+                    self._run_refresh()
             return self._current()
         except Exception:  # noqa: BLE001 - ostatnia zapora: nigdy 500
             log.exception("bulletin service failed")

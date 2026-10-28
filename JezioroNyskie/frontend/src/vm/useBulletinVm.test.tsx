@@ -23,6 +23,7 @@ const bulletin = {
   fetched_at: '2026-10-28T08:00:00Z',
   stale: false,
   source: 'govpl' as const,
+  refreshing: false,
 };
 
 function wrap() {
@@ -76,6 +77,14 @@ describe('useBulletinVm', () => {
     act(() => result.current.fetch());
     await waitFor(() => expect(result.current.status).toBe('ready'));
     expect(result.current.note).toBe('(ostatni dostępny komunikat, nie udało się pobrać nowszego)');
+  });
+
+  it('refreshing: adnotacja, że trwa pobieranie nowszego, i prośba o ponowne kliknięcie', async () => {
+    vi.mocked(api.bulletinLatest).mockResolvedValue({ ...bulletin, stale: true, source: 'pipeline', refreshing: true });
+    const { result } = renderHook(() => useBulletinVm(vi.fn()), { wrapper: wrap() });
+    act(() => result.current.fetch());
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.note).toBe('(trwa pobieranie nowszego komunikatu — kliknij ponownie za chwilę)');
   });
 
   it('in_table=false: komunikat o pojemności poza tabelą, bez poziomu', async () => {

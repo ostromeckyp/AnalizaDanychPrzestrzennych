@@ -855,6 +855,10 @@
        "pipeline"
       ],
       "title": "Source"
+     },
+     "refreshing": {
+      "type": "boolean",
+      "title": "Refreshing"
      }
     },
     "type": "object",
@@ -868,7 +872,8 @@
      "url",
      "fetched_at",
      "stale",
-     "source"
+     "source",
+     "refreshing"
     ],
     "title": "BulletinLatest"
    },

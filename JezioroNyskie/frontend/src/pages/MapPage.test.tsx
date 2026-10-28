@@ -251,7 +251,7 @@ describe('MapPage', () => {
   it('bulletin button: nothing fetched at start; click switches to capacity mode with the bulletin value', async () => {
     m.bulletinLatest.mockResolvedValue({
       bulletin_date: '2026-10-27', reading_utc: '06:00', v_current: 41.5, h: 195.4, in_table: true, v_npp: 65.7,
-      url: 'https://www.gov.pl/attachment/x', fetched_at: '2026-10-28T08:00:00Z', stale: false, source: 'govpl',
+      url: 'https://www.gov.pl/attachment/x', fetched_at: '2026-10-28T08:00:00Z', stale: false, source: 'govpl', refreshing: false,
     });
     m.capacityToLevel.mockImplementation(async (v) => ({ v, h: 195.4, in_table: true }));
     renderPage('/?h=194');

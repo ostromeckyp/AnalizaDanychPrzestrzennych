@@ -292,3 +292,45 @@ def test_latest_govpl_deadline_and_timeouts(tmp_path, pdf_text):
     assert all(t[0] == 5 and t[1] <= 15 for t in seen)
     with pytest.raises(TimeoutError):
         bulletins.latest_govpl(tmp_path / "x", fetch=make_fetch([]), deadline_s=0)
+
+
+def test_read_capped_enforces_deadline_while_streaming():
+    t = [0.0]
+
+    class Drip(FakeResp):
+        def iter_content(self, chunk_size=1):
+            for _ in range(100):
+                t[0] += 14.0                      # bajt co 14 s: poniżej timeoutu odczytu
+                yield b"x"
+
+    with pytest.raises(TimeoutError):
+        bulletins._read_capped(Drip(), 10_000_000, deadline_at=40.0, clock=lambda: t[0])
+    assert t[0] <= 56.0                           # przerwane tuż po przekroczeniu budżetu
+
+
+def test_latest_govpl_slow_drip_pdf_hits_deadline(tmp_path):
+    t = [0.0]
+
+    class Drip(FakeResp):
+        def iter_content(self, chunk_size=1):
+            yield b"%PDF"
+            while True:
+                t[0] += 14.0
+                yield b"x"
+
+    def f(url, **kw):
+        return FakeResp(text=read("govpl_list.html")) if url == bulletins.GOVPL_LIST_URL else Drip()
+    with pytest.raises(TimeoutError):
+        bulletins.latest_govpl(tmp_path, fetch=f, deadline_s=40, clock=lambda: t[0])
+
+
+def test_connect_timeout_shrinks_with_remaining_budget(tmp_path, pdf_text):
+    t, seen = [0.0], []
+
+    def f(url, **kw):
+        seen.append(kw["timeout"])
+        t[0] += 38.0
+        return make_fetch([])(url, **kw)
+    with pytest.raises(TimeoutError):               # po liście zostaje 2 s, po PDF-ie nic
+        bulletins.latest_govpl(tmp_path, fetch=f, deadline_s=40, clock=lambda: t[0])
+    assert seen[0] == (5, 15) and seen[1] == (2.0, 2.0)

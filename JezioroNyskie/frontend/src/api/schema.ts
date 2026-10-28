@@ -344,6 +344,8 @@ export interface components {
              * @enum {string}
              */
             source: "govpl" | "pipeline";
+            /** Refreshing */
+            refreshing: boolean;
         };
         /** CapacityToLevel */
         CapacityToLevel: {

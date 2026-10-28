@@ -242,6 +242,7 @@ class BulletinLatest(BaseModel):
     fetched_at: datetime
     stale: bool
     source: Literal["govpl", "pipeline"]
+    refreshing: bool             # trwa pobieranie w tle: kolejne zapytanie za kilka sekund da nowszy wynik
 
 
 class CurrentLevelResponse(BaseModel):

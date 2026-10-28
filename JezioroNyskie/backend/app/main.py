@@ -197,7 +197,8 @@ async def refresh_loop(service: current.CurrentLevelService, interval_s: float) 
 
 
 def create_app(settings: Settings | None = None, products: Products | None = None, *,
-               search_fn=None, load_fn=None, bulletin_fn=None, clock=time.time) -> FastAPI:
+               search_fn=None, load_fn=None, bulletin_fn=None, clock=time.time,
+               bulletin_background=True) -> FastAPI:
     settings = settings or get_settings()
 
     def build_service() -> current.CurrentLevelService:
@@ -227,7 +228,8 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
     app = FastAPI(title="Mielizna API", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.bulletin = bulletin.BulletinService(
-        settings.current_cache_dir, settings.data_dir, settings.live, bulletin_fn or bulletin.default_fetch, clock)
+        settings.current_cache_dir, settings.data_dir, settings.live, bulletin_fn or bulletin.default_fetch, clock,
+        background=bulletin_background)
     app.state.products = products
     app.state.cache = TTLStore()
     app.state.search_fn, app.state.load_fn = search_fn, load_fn
@@ -367,7 +369,8 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
         if b is None:
             raise HTTPException(404, "Brak komunikatu Wód Polskich: nie udało się go pobrać, a danych z pipeline'u nie ma.")
         h = finite_or_none(capacity_to_level(request.app.state.products, b["v_current"]))
-        body = BulletinLatest(**b, h=h, in_table=h is not None)
+        body = BulletinLatest(**b, h=h, in_table=h is not None,
+                              refreshing=request.app.state.bulletin.refreshing())
         return Response(content=body.model_dump_json(), media_type="application/json",
                         headers={"Cache-Control": "no-cache"})
 

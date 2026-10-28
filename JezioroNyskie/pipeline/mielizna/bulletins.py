@@ -268,13 +268,20 @@ class DownloadError(RuntimeError):
     """Trwała awaria sieci (nie 404): przerywamy przebieg, żeby nie zgubić scen po cichu."""
 
 
-def _read_capped(r, max_bytes: int | None) -> bytes | None:
-    """Treść odpowiedzi albo None, gdy przekracza `max_bytes` (czytanie strumieniowe, bez wczytywania całości)."""
+def _read_capped(r, max_bytes: int | None, deadline_at: float | None = None,
+                 clock=time.monotonic) -> bytes | None:
+    """Treść odpowiedzi albo None, gdy przekracza `max_bytes` (czytanie strumieniowe, bez wczytywania całości).
+
+    Przy `deadline_at` (czas `clock`) każdy kawałek sprawdza budżet i po jego przekroczeniu rzuca TimeoutError
+    (powolny serwer wysyłający bajt co kilkanaście sekund nie przedłuża pobierania w nieskończoność).
+    """
     if max_bytes is None or not hasattr(r, "iter_content"):
         body = r.content
         return body if max_bytes is None or len(body) <= max_bytes else None
     buf = bytearray()
     for chunk in r.iter_content(chunk_size=65536):
+        if deadline_at is not None and clock() > deadline_at:
+            raise TimeoutError("przekroczono budżet czasu podczas pobierania")
         buf += chunk
         if len(buf) > max_bytes:
             return None
@@ -282,7 +289,8 @@ def _read_capped(r, max_bytes: int | None) -> bytes | None:
 
 
 def _download(url: str, dest: Path, retries: int = 5, backoff_s: float = 30.0, fetch=None,
-              timeout=90, max_bytes: int | None = None) -> bool:
+              timeout=90, max_bytes: int | None = None, deadline_at: float | None = None,
+              clock=time.monotonic) -> bool:
     """Pobiera PDF do cache (1 zapytanie/s) z długim odstępem po błędach.
 
     Wayback odcina połączenia („connection refused”) po kilkunastu zapytaniach w serii, więc po
@@ -298,7 +306,7 @@ def _download(url: str, dest: Path, retries: int = 5, backoff_s: float = 30.0, f
         try:
             r = (fetch or requests.get)(url, headers={"User-Agent": USER_AGENT}, timeout=timeout,
                                         **({"stream": True} if max_bytes else {}))
-            body = _read_capped(r, max_bytes) if r.status_code == 200 else None
+            body = _read_capped(r, max_bytes, deadline_at, clock) if r.status_code == 200 else None
             if r.status_code == 200 and body is None:
                 log.warning("odpowiedź %s przekracza limit %d B", url, max_bytes)
                 return False
@@ -339,7 +347,7 @@ LATEST_MAX_TRIES = 3          # tyle ostatnich komunikatów próbujemy, gdy najn
 
 
 def latest_govpl(cache_dir: Path, *, max_age_s: int = 3600, fetch=requests.get,
-                 deadline_s: float | None = None) -> dict | None:
+                 deadline_s: float | None = None, clock=time.monotonic) -> dict | None:
     """Najnowszy czytelny komunikat z listy gov.pl (dla przycisku „Stan z Wód Polskich” w aplikacji).
 
     Co robi: odświeża `govpl_list.html`, gdy cache jest starszy niż `max_age_s` (albo go nie ma),
@@ -356,13 +364,14 @@ def latest_govpl(cache_dir: Path, *, max_age_s: int = 3600, fetch=requests.get,
       {bulletin_date, v_current, v_npp, v_maxpp, reading_utc, url, source="govpl", fallback_older} albo None.
     Jak to obronić: ten sam parser i ta sama walidacja daty co dla wariantu B, brak interpolacji.
     """
-    t0 = time.monotonic()
+    t0 = clock()
+    deadline_at = None if deadline_s is None else t0 + deadline_s
 
     def timeout():
-        left = None if deadline_s is None else deadline_s - (time.monotonic() - t0)
+        left = None if deadline_at is None else deadline_at - clock()
         if left is not None and left <= 0:
             raise TimeoutError(f"przekroczono budżet czasu {deadline_s} s")
-        return (5, 15 if left is None else max(1.0, min(15.0, left)))
+        return (5 if left is None else min(5.0, left), 15 if left is None else min(15.0, left))
 
     cache_dir = Path(cache_dir)
     cache = cache_dir / "govpl_list.html"
@@ -371,7 +380,8 @@ def latest_govpl(cache_dir: Path, *, max_age_s: int = 3600, fetch=requests.get,
         _throttle()
         r = fetch(GOVPL_LIST_URL, headers={"User-Agent": USER_AGENT}, timeout=timeout(), stream=True)
         r.raise_for_status()
-        body = _read_capped(r, LIST_MAX_BYTES)
+        body = _read_capped(r, LIST_MAX_BYTES, deadline_at, clock)
+        timeout()
         if body is None:
             raise ValueError("lista gov.pl przekracza limit rozmiaru")
         tmp = cache.with_suffix(".part")
@@ -381,7 +391,8 @@ def latest_govpl(cache_dir: Path, *, max_age_s: int = 3600, fetch=requests.get,
     for i, (d, url) in enumerate(newest_first[:LATEST_MAX_TRIES]):
         entry = {"source": "govpl", "url": url, "file": f"govpl/{url.rsplit('/', 1)[-1]}.pdf"}
         row = _load(d, entry, cache_dir, fetch=fetch, retries=1, backoff_s=0.0, timeout=timeout(),
-                    max_bytes=PDF_MAX_BYTES)
+                    max_bytes=PDF_MAX_BYTES, deadline_at=deadline_at, clock=clock)
+        timeout()          # budżet po pobraniu i parsowaniu: kolejna próba tylko, gdy zostało czasu
         if row is not None:
             return {"bulletin_date": d, "v_current": row["v_current"], "v_npp": row["v_npp"],
                     "v_maxpp": row["v_maxpp"], "reading_utc": row["reading_utc"], "url": url,
