@@ -7,7 +7,10 @@ zdjęcia: piksel widziany jako woda przy poziomie `h` ma dno poniżej `h`, a wid
 brzegu (NMT LiDAR, bloki walidacyjne) model z całego okresu jest średnio o +1,16<!-- eval:bottom_vs_nmt.json:all.bias --> m
 **wyżej** niż teren (RMSE 1,51<!-- eval:bottom_vs_nmt.json:all.rmse --> m, n = 8 477<!-- eval:bottom_vs_nmt.json:all.n -->),
 a jego przedziały [`z_min`, `z_max`] obejmują rzędną NMT tylko w 6,4 %<!-- eval:bottom_vs_nmt.json:all.share_in_bounds -->
-pikseli; tej rozbieżności nie umiemy jeszcze w pełni wyjaśnić (otwarte ustalenie, §5.2). Pod wodą, w porównaniu z amatorską mapą
+pikseli. Rozbieżność skupia się w pierścieniu brzegu powyżej 196 m, który ma tylko model `all` (bias
++1,43<!-- eval:bottom_vs_nmt.json:all_z_ge_196.bias --> m, n = 6 902<!-- eval:bottom_vs_nmt.json:all_z_ge_196.n -->); poniżej 196 m bias wynosi
+−0,02<!-- eval:bottom_vs_nmt.json:all_z_lt_196.bias --> m (RMSE 0,94<!-- eval:bottom_vs_nmt.json:all_z_lt_196.rmse --> m), a na pikselach wspólnych z modelem `pre_flood` oba modele
+są praktycznie takie same. Przyczyny błędu w pierścieniu nie ustaliliśmy (otwarte ustalenie, §5.2). Pod wodą, w porównaniu z amatorską mapą
 KŻ Nysa, model sprzed powodzi jest średnio o +0,31<!-- eval:kz_points.json:pooled.bias --> m płytszy (RMSE
 0,84<!-- eval:kz_points.json:pooled.rmse --> m), ale na małej próbie (n = 32<!-- eval:kz_points.json:pooled.n -->) i tylko
 w paśmie 192,5–195 m; to porównanie dotyczy wyłącznie modelu `pre_flood`, a model serwowany w aplikacji (`all`) ma jako
@@ -298,9 +301,30 @@ NMT 2024 pochodzi z 06.09.2024, sprzed powodzi z połowy września, więc model 
 `post_flood` vs 2024 to tylko informacja (dno po powodzi vs teren przed nią). Część różnic w epoce 2011 to realne zmiany przed
 serią Sentinel-2.
 
-**Otwarte ustalenie: model `all` leży ok. 1,2 m wyżej niż teren.** Bias +1,16 m powtarza się w 2011, 2017 i 2024 (w 2022 jest
-−0,21 m przy n = 65, więc nie jest to „stała”), a rozkład błędów na histogramie jest dwumodalny (szczyty ok. +0,6 m i ok. +2,2 m).
-Przedziały są przeufne: NMT mieści się w nich w 5–7 % pikseli zamiast w większości. Hipotezy, niesprawdzone:
+**Skąd różnica `all` vs `pre_flood`: głównie populacja pikseli, nie wartości.** Na odsłoniętym brzegu `all` ma średnio
++1,16 m, a `pre_flood` +0,20 m, ale oba wyniki liczą się na różnych pikselach. Rozbicie (`bottom_vs_nmt.json`):
+
+| co | n | MAE [m] | RMSE [m] | bias [m] | NMT w [z_min, z_max] |
+|---|---|---|---|---|---|
+| `all` na pikselach, gdzie `pre_flood` ma `z` (epoki jak dla `pre_flood`) | 1 770<!-- eval:bottom_vs_nmt.json:all_on_pre_pixels.n --> | 0,86<!-- eval:bottom_vs_nmt.json:all_on_pre_pixels.mae --> | 1,03<!-- eval:bottom_vs_nmt.json:all_on_pre_pixels.rmse --> | +0,15<!-- eval:bottom_vs_nmt.json:all_on_pre_pixels.bias --> | 8,3 %<!-- eval:bottom_vs_nmt.json:all_on_pre_pixels.share_in_bounds --> |
+| `pre_flood` (dla porównania) | 1 781<!-- eval:bottom_vs_nmt.json:pre_flood.n --> | 0,82<!-- eval:bottom_vs_nmt.json:pre_flood.mae --> | 0,96<!-- eval:bottom_vs_nmt.json:pre_flood.rmse --> | +0,20<!-- eval:bottom_vs_nmt.json:pre_flood.bias --> | 12,3 %<!-- eval:bottom_vs_nmt.json:pre_flood.share_in_bounds --> |
+| `all`, piksele z `z` modelu < 196 m | 1 575<!-- eval:bottom_vs_nmt.json:all_z_lt_196.n --> | 0,78<!-- eval:bottom_vs_nmt.json:all_z_lt_196.mae --> | 0,94<!-- eval:bottom_vs_nmt.json:all_z_lt_196.rmse --> | −0,02<!-- eval:bottom_vs_nmt.json:all_z_lt_196.bias --> | 9,3 %<!-- eval:bottom_vs_nmt.json:all_z_lt_196.share_in_bounds --> |
+| `all`, piksele z `z` modelu ≥ 196 m | 6 902<!-- eval:bottom_vs_nmt.json:all_z_ge_196.n --> | 1,43<!-- eval:bottom_vs_nmt.json:all_z_ge_196.mae --> | 1,61<!-- eval:bottom_vs_nmt.json:all_z_ge_196.rmse --> | +1,43<!-- eval:bottom_vs_nmt.json:all_z_ge_196.bias --> | 5,8 %<!-- eval:bottom_vs_nmt.json:all_z_ge_196.share_in_bounds --> |
+
+Same rastry modeli mówią to samo: na 31 693<!-- eval:bottom_vs_nmt.json:all_vs_pre_flood_models.n_common --> pikselach, które mają oba modele, różnica
+`all` − `pre_flood` ma medianę 0,00<!-- eval:bottom_vs_nmt.json:all_vs_pre_flood_models.diff_a_minus_b.median --> m, średnią
+−0,03<!-- eval:bottom_vs_nmt.json:all_vs_pre_flood_models.diff_a_minus_b.mean --> m i P10/P90 −0,15<!-- eval:bottom_vs_nmt.json:all_vs_pre_flood_models.diff_a_minus_b.p10 -->/0,00<!-- eval:bottom_vs_nmt.json:all_vs_pre_flood_models.diff_a_minus_b.p90 --> m.
+Model `all` dodaje natomiast 10 437<!-- eval:bottom_vs_nmt.json:all_vs_pre_flood_models.n_a_only --> pikseli, których `pre_flood` nie ma, i prawie wszystkie leżą
+w pierścieniu 196–198 m (`z` P5/mediana/P95: 196,1<!-- eval:bottom_vs_nmt.json:all_vs_pre_flood_models.z_a_only.p5 -->/197,0<!-- eval:bottom_vs_nmt.json:all_vs_pre_flood_models.z_a_only.p50 -->/197,7<!-- eval:bottom_vs_nmt.json:all_vs_pre_flood_models.z_a_only.p95 --> m;
+to pas, który dostaje górną granicę `z_max`, a więc i `z`, dopiero dzięki scenom po wrześniu 2024: powódź do 197,06 m i piętrzenie
+2025 do 197,92 m, podczas gdy najwyższy poziom w okresie `pre_flood` to 196,79 m; `scenes.json`). Ten pierścień to większość
+ocenianych pikseli `all` (6 902 z 8 477) i to on daje bias +1,16 m. Czyli: serwowany model `all` ≈ `pre_flood` poniżej ok. 196 m
+plus dodatkowy górny pierścień z dużym dodatnim obciążeniem.
+
+**Otwarte ustalenie: górny pierścień (≥ 196 m) leży ok. 1,4 m wyżej niż teren.** Bias `all` +1,16 m powtarza się w 2011, 2017 i 2024
+(w 2022 jest −0,21 m przy n = 65, więc nie jest to „stała”), a rozkład błędów na histogramie jest dwumodalny (szczyty ok. +0,6 m
+i ok. +2,2 m; drugi szczyt to najpewniej pierścień, czego osobno nie sprawdzaliśmy). Przedziały są przeufne: NMT mieści się w nich
+w 5–9 % pikseli zamiast w większości (również poniżej 196 m). Hipotezy dla pierścienia, niesprawdzone:
 
 1. maska lądu w zarośniętych i zalewanych marginesach brzegu (piksele 10 m mieszane woda/ląd/roślinność; RF ∧ Otsu celowo
    wybiera ląd przy wątpliwości, a to podnosi `z_min` i `z`);
@@ -309,8 +333,9 @@ Przedziały są przeufne: NMT mieści się w nich w 5–7 % pikseli zamiast w wi
 3. układ wysokości RZGW ↔ EVRF2007: jeśli poziomy B są w KRON86 (§3.4), model byłby raczej o ok. 0,2 m za **nisko**, czyli to
    przesunięcie ma przeciwny znak i nie wyjaśnia +1,16 m; jego udziału nie znamy.
 
-`pre_flood` jest wyraźnie lepszy (bias +0,20 m, RMSE 0,96 m), bo ma mniej scen o wysokim poziomie i nie zawiera powodzi;
-dlaczego model `all` jest gorszy aż o tyle, nie zostało zbadane. Bias jest dodatni, czyli na odsłoniętym brzegu model
+`pre_flood` wypada lepiej (bias +0,20 m, RMSE 0,96 m) nie dlatego, że ma lepsze wartości, tylko dlatego, że nie ma pierścienia:
+bez powodzi i piętrzenia 2025 piksele powyżej ok. 196 m nie mają w nim górnej granicy, więc nie mają `z` i nie są oceniane. Na tych samych pikselach `all` daje bias
++0,15 m i RMSE 1,03 m. Bias jest dodatni, czyli na odsłoniętym brzegu model
 **zaniża** głębokość (kierunek ostrożny), ale przy RMSE większym niż bias pojedyncze piksele mogą być po stronie niebezpiecznej.
 
 ### 5.3 Poziomy wody (szczegóły)
@@ -446,8 +471,11 @@ dodanych w planie 4.*
 **Nadaje się do:** pokazania, **gdzie** w jeziorze są mielizny względem siebie i jak strefy zmieniają się z poziomem wody;
 porównania okresów i historii linii brzegowych; nauki metody (każdy krok da się sprawdzić w QGIS i w notatkach M1–M7); rzędu
 wielkości rzędnych dna w paśmie 192,5–195 m **w modelu `pre_flood`** (bias względem KŻ +0,31 m, RMSE 0,84 m, n = 32).
-Uwaga: aplikacja serwuje model `all`, którego z KŻ nie porównywano; jego jedyna niezależna kontrola to +1,16 m (RMSE 1,51 m)
-względem NMT na odsłoniętym brzegu, więc rzędne dna pokazywane w aplikacji należy traktować jako orientacyjne co do metra.
+Aplikacja serwuje model `all`, którego z KŻ nie porównywano, ale poniżej ok. 196 m pokrywa się on z `pre_flood` (mediana różnicy
+0,00 m na 31 693 pikselach wspólnych; względem NMT poniżej 196 m bias −0,02<!-- eval:bottom_vs_nmt.json:all_z_lt_196.bias --> m, RMSE
+0,94<!-- eval:bottom_vs_nmt.json:all_z_lt_196.rmse --> m), więc wynik KŻ przenosi się na tę część z zastrzeżeniem. Powyżej 196 m (pierścień brzegu, który ma `z` dopiero
+dzięki powodzi 2024 i piętrzeniu 2025) `all` jest o +1,43<!-- eval:bottom_vs_nmt.json:all_z_ge_196.bias --> m za wysoko względem NMT; tam rzędne
+w aplikacji są orientacyjne co do metra i 1,5 m.
 
 **Nie nadaje się do:** nawigacji ani decyzji o bezpieczeństwie żeglugi (aplikacja: „Projekt naukowy. Nie służy do nawigacji.”);
 podawania głębokości z dokładnością lepszą niż ok. 1 m; traktowania przedziału [`z_min`, `z_max`] jako przedziału ufności (zawiera
@@ -456,7 +484,8 @@ referencję w 6–31 % przypadków); dna poniżej ok. 192,9 m (nigdy nie obserwo
 
 Lista ograniczeń (z notatek M1–M7 i ledgerów planów 1–4):
 
-1. **Dno vs LiDAR: model `all` +1,16 m, przedziały przeufne (6,4 % w granicach)** — przyczyna nieustalona (§5.2).
+1. **Dno vs LiDAR: model `all` +1,16 m, przedziały przeufne (6,4 % w granicach)** — błąd skupia się w pierścieniu ≥ 196 m
+   (+1,43 m), poniżej 196 m bias ok. 0; przyczyna obciążenia pierścienia nieustalona (§5.2).
 2. **Klasyfikacja:** M2 (OA ≥ 95 %) niespełnione; RF myli jasne błoto z wodą; plamistość zatoki zachodniej (sprzeczności w ok.
    połowie pikseli); wyniki CV mogą być lekko optymistyczne (zależność przestrzenna między sąsiednimi blokami i scenami tego samego
    dnia).
@@ -477,12 +506,13 @@ Lista ograniczeń (z notatek M1–M7 i ledgerów planów 1–4):
 10. **Odtwarzalność:** łańcuch `make` ma reguły z nieaktualnymi datami plików, więc `make levels` może uruchomić retrening RF
     (godziny); dlatego kroki oceny nie zależą w Makefile od tego łańcucha i są uruchamiane jawnie (§9).
 11. **Aplikacja:** poziom „na żywo” pochodzi z krzywej C (σ ok. 0,5 m) na najnowszej scenie; strefy nie są przycinane do obrysu OSM;
-    zrzuty ekranu w raporcie sprzed planu 4; podpis kafla KŻ na stronie „O metodzie” mówi o „komórkach 50 m”, a porównanie liczy
-    się w pikselu 10 m (§6.4) — do poprawienia w tekście UI.
+    zrzuty ekranu w raporcie sprzed planu 4.
 12. **Pytanie otwarte do autora (nie decyzja):** reguła wyboru modelu jest mechaniczna (≥ 5 % akwenu ze zmianą dna → `post_flood`,
-    inaczej `all`) i wybrała `all`, choć `pre_flood` wypada lepiej zarówno względem LiDAR (bias +0,20 m wobec +1,16 m, RMSE 0,96 wobec
-    1,51 m), jak i jest jedynym modelem sprawdzonym z KŻ. Warto rozważyć, czy aplikacja nie powinna serwować `pre_flood` (kosztem
-    braku scen po powodzi) albo czy reguła nie powinna uwzględniać wyników oceny.
+    inaczej `all`) i wybrała `all`. Lepszy wynik `pre_flood` względem LiDAR (+0,20 m wobec +1,16 m) to głównie efekt populacji
+    pikseli: na tych samych pikselach `all` ma bias +0,15<!-- eval:bottom_vs_nmt.json:all_on_pre_pixels.bias --> m i RMSE 1,03<!-- eval:bottom_vs_nmt.json:all_on_pre_pixels.rmse --> m (§5.2).
+    Serwowany `all` = `pre_flood` poniżej ok. 196 m plus górny pierścień 196–198 m z obciążeniem ok. +1,4 m. Pytanie nie brzmi więc
+    „`all` czy `pre_flood`”, tylko: czy pokazywać pierścień (informacja „tu przy wysokiej wodzie bywa woda”, ale z dnem za wysoko),
+    czy go maskować / oznaczać w aplikacji jako mniej pewny. Na razie aplikacja serwuje `all` bez zmian (P4-R34).
 
 ---
 

@@ -114,3 +114,24 @@ def test_pooled_bottom_share_in_bounds_over_epochs():
     assert r["n"] == 4 and r["share_in_bounds"] == pytest.approx(2 / 4)
     assert r["rmse"] == pytest.approx(evaluate.metrics(np.concatenate([a["z"], b["z"]]), np.concatenate([a["ref"], b["ref"]]))["rmse"])
     assert evaluate.pooled_bottom([])["n"] == 0
+
+
+def test_split_pairs_by_z_partitions_pixels():
+    roles = np.full((2, 2), "valid")
+    a = evaluate.bottom_pairs(_model(), DEM, 190.0, roles)    # z = 193, 194, 195
+    b = evaluate.bottom_pairs(_model(), DEM, 194.0, roles)    # z = 195
+    lt, ge = evaluate.split_pairs_by_z([a, b], 194.5)
+    assert evaluate.pooled_bottom(lt)["n"] == 2 and evaluate.pooled_bottom(ge)["n"] == 2
+    assert all((p["z"] < 194.5).all() for p in lt) and all((p["z"] >= 194.5).all() for p in ge)
+    assert set(lt[0]) == {"z", "z_min", "z_max", "ref"}
+
+
+def test_compare_models_common_and_extra_ring():
+    a = {"z": np.array([[1.0, 2.0], [3.0, 7.0]])}
+    b = {"z": np.array([[1.0, 2.5], [NAN, NAN]])}
+    r = evaluate.compare_models(a, b)
+    assert r["n_common"] == 2 and r["n_a_only"] == 2 and r["n_b_only"] == 0
+    assert r["diff_a_minus_b"]["median"] == pytest.approx(-0.25)
+    assert r["diff_a_minus_b"]["mean"] == pytest.approx(-0.25)
+    assert r["z_a_only"]["p50"] == pytest.approx(5.0)
+    assert set(r["z_a_only"]) >= {"p5", "p50", "p95", "n"}

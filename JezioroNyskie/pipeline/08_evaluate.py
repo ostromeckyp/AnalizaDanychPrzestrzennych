@@ -38,6 +38,7 @@ R_WINDOW = ("2025-04-28", "2025-05-12")
 POINT_0912 = ("2024-09-12", 194.70)
 EVRF = "PL-EVRF2007-NH"
 MIN_STD = 0.03            # [m] piksel 10 m, którego komórki 1 m mają mniejsze odchylenie, uznajemy za płaski (woda) i pomijamy
+Z_SPLIT = 196.0           # [m] granica pasm rzędnych: poniżej model all ~ pre_flood, powyżej pierścień dodany przez all
 IN_PRE = {"2011", "2017", "2022", "2024"}   # NMT 2024 z 06.09.2024 = PRZED powodzią (połowa września): pre_flood jest modelem właściwym
 
 
@@ -74,7 +75,8 @@ def eval_bottom(proc: Path, grid, models: dict, gravel: np.ndarray):
            "water_filter": "per arkusz: dominanta NMT = płaska woda; komórki <= woda + 0,1 m pomijane; piksele 10 m z std < 0,03 m pomijane; żwirownia wyłączona",
            "datum_note": "NMT w EVRF2007; model głównie w układzie RZGW (nieznany) - bias zawiera ewentualne przesunięcie RZGW<->EVRF2007",
            "by_epoch": {}}
-    pooled = {"all": [], "pre_flood": []}      # piksele wszystkich epok (dla modelu all) i epok sprzed powodzi (dla pre_flood)
+    pooled = {"all": [], "pre_flood": [], "all_on_pre": []}   # piksele wszystkich epok (all), epok sprzed powodzi (pre_flood)
+    pre_cover = gravel | ~np.isfinite(models["pre_flood"]["z"])   # wyklucza piksele bez z w pre_flood (do all_on_pre_pixels)
     errs_for_plot = {}
     dems = {}
     for e in epochs.itertuples():
@@ -88,6 +90,7 @@ def eval_bottom(proc: Path, grid, models: dict, gravel: np.ndarray):
         if str(e.epoch) in IN_PRE:
             row["pre_flood"] = evaluate.bottom_vs_dem(models["pre_flood"], dem, e.h_water_evrf, roles, gravel)
             pooled["pre_flood"].append(evaluate.bottom_pairs(models["pre_flood"], dem, e.h_water_evrf, roles, gravel))
+            pooled["all_on_pre"].append(evaluate.bottom_pairs(models["all"], dem, e.h_water_evrf, roles, pre_cover))
         if e.epoch == 2024:      # informacyjnie: NMT sprzed powodzi vs model po powodzi
             row["post_flood_informational"] = evaluate.bottom_vs_dem(models["post_flood"], dem, e.h_water_evrf, roles, gravel)
         out["by_epoch"][str(e.epoch)] = row
@@ -97,6 +100,16 @@ def eval_bottom(proc: Path, grid, models: dict, gravel: np.ndarray):
     out["all"] = {**evaluate.pooled_bottom(pooled["all"]), "note": "model all, piksele ze wszystkich epok razem"}
     out["pre_flood"] = {**evaluate.pooled_bottom(pooled["pre_flood"]),
                         "note": "model pre_flood, piksele z epok NMT sprzed powodzi (2011, 2017, 2022, 2024) razem"}
+    # Rozbicie różnicy all vs pre_flood: (1) model all na tych samych pikselach co pre_flood (efekt wartości),
+    # (2) model all w pasmach rzędnych modelu (pierścień >= 196 m pokrywa tylko all - efekt populacji pikseli)
+    out["all_on_pre_pixels"] = {**evaluate.pooled_bottom(pooled["all_on_pre"]),
+                                "note": "model all tylko na pikselach, gdzie pre_flood ma z; epoki NMT sprzed powodzi (jak pre_flood)"}
+    lt, ge = evaluate.split_pairs_by_z(pooled["all"], Z_SPLIT)
+    out["all_z_lt_196"] = {**evaluate.pooled_bottom(lt), "note": f"model all, piksele z z modelu < {Z_SPLIT} m, wszystkie epoki"}
+    out["all_z_ge_196"] = {**evaluate.pooled_bottom(ge), "note": f"model all, piksele z z modelu >= {Z_SPLIT} m, wszystkie epoki"}
+    out["all_vs_pre_flood_models"] = {**evaluate.compare_models(models["all"], models["pre_flood"]),
+                                      "note": "rastry modeli (cały akwen, bez filtra bloków/NMT): diff = z_all - z_pre_flood na pikselach "
+                                              "wspólnych; z_a_only = rzędne pikseli, które ma tylko model all"}
     return out, errs_for_plot, roles, dems
 
 

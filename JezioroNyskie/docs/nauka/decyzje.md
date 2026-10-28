@@ -114,13 +114,14 @@ Liczby i skutki: `docs/raport.md`, `docs/nauka/M7-lidar-kz.md`. Gdy dwie decyzje
 - **P4-R24** Ocena dna vs NMT pomija wodę w NMT: komórki ≤ powierzchnia wody arkusza (dominanta histogramu) + 0,1 m, piksele płaskie (odchylenie < 0,03 m) i żwirownię. Powód: arkusze niosą płaską wodę na różnych rzędnych (do ok. 1 m różnicy), a jeden poziom na epokę liczył wodę jako ląd (37–86 % pikseli). Koszt: mniejsze n; stałe niewalidowane.
 - **P4-R25** Udział istotnej zmiany dna liczony względem **akwenu wspólnego** (ograniczenie globalne planu wiąże bardziej niż brief): 1,5 % < 5 %, więc aplikacja serwuje `all`. Stary mianownik (piksele z `z` w obu modelach, 44,4 %) zostaje jako `share_significant_overlap`. Koszt pomyłki: aplikacja nie przechodzi na model po powodzi, gdyby zmiana jednak była istotna.
 - **P4-R26** NMT 2024 (06.09.2024) jest sprzed powodzi, więc porównujemy go z `pre_flood` i `all`; `post_flood` vs 2024 tylko informacyjnie. Koszt: brak.
+- **P4-R34** Aplikacja nadal serwuje `all` (bez zmiany reguły wyboru). Powód: przewaga `pre_flood` względem NMT (+0,20 vs +1,16 m) to efekt populacji pikseli — na pikselach wspólnych `all` daje bias +0,15 m, RMSE 1,03 m, a rastry różnią się medianą 0,00 m; cała różnica to pierścień 196–198 m, który ma tylko `all` (bias +1,43 m względem NMT). Zmiana na `pre_flood` nie poprawiłaby dna poniżej 196 m, a usunęłaby informację z powodzi 2024 i piętrzenia 2025. Koszt: pierścień ≥ 196 m pokazywany z obciążeniem ok. +1,4 m (płycej niż w rzeczywistości, kierunek ostrożny); maskowanie/oznaczanie go — pytanie otwarte do autora (raport §8 pkt 12).
 - **P4-R28** Brakujący zbiorczy `share_in_bounds` w `bottom_vs_nmt.json` uzupełniony w rundzie zadania 10 (API go potrzebowało). Koszt: małe przekroczenie zakresu zadania.
 
 **Uruchomienie (Docker)**
 - **P4-R29** Cache poziomu na żywo w osobnym wolumenie poza `data/processed` (`MIELIZNA_CURRENT_DIR`): wolumen zagnieżdżony w montowaniu tylko do odczytu nie działał, gdy `data/processed/current` nie istniało. Koszt: po aktualizacji ze starszego układu jednorazowo `docker compose down -v`.
 
 **Odłożone ustalenia planu 4** (bez poprawki; opis w raporcie §8):
-- model `all` ok. +1,2 m powyżej NMT na lądzie (2022: −0,21 m przy n = 65, więc nie „stała”), przedziały przeufne; hipotezy: maska lądu w zarośniętych marginesach, osiągalność wody vs wysokość, nieznany udział przesunięcia RZGW ↔ EVRF2007;
+- model `all` ok. +1,2 m powyżej NMT na lądzie (2022: −0,21 m przy n = 65, więc nie „stała”), skupione w pierścieniu ≥ 196 m (+1,43 m; poniżej 196 m ok. 0, P4-R34), przedziały przeufne; hipotezy: maska lądu w zarośniętych marginesach, osiągalność wody vs wysokość, nieznany udział przesunięcia RZGW ↔ EVRF2007;
 - epoki LiDAR mieszają naloty (wody arkuszy 2011: 194,43–194,69 m, 2024: 194,89 vs 195,95 m); wariant A 0,48 m za nisko w dniu własnego nalotu 2024;
 - łańcuch `make levels` ma nieaktualne daty (`config.yaml`, `labels.gpkg`) i może wymusić retrening RF; kroki oceny zależą tylko od kodu;
 - stałe oceny (dominanta 2 %, płaskość 0,03 m, zapas 0,1 m) niewalidowane;

@@ -77,6 +77,34 @@ def pooled_bottom(parts: list[dict]) -> dict:
     return out
 
 
+def split_pairs_by_z(parts: list[dict], z_split: float) -> tuple[list[dict], list[dict]]:
+    """Dzieli piksele (wynik `bottom_pairs`) wg z modelu: (z < z_split, z >= z_split). Do rozbicia błędu na pasma rzędnych."""
+    def take(p, m):
+        return {k: p[k][m] for k in ("z", "z_min", "z_max", "ref")}
+    return ([take(p, p["z"] < z_split) for p in parts], [take(p, p["z"] >= z_split) for p in parts])
+
+
+def _pct(v: np.ndarray, qs=(5, 50, 95)) -> dict:
+    v = v[np.isfinite(v)]
+    if v.size == 0:
+        return {"n": 0}
+    return {"n": int(v.size), **{f"p{q}": float(x) for q, x in zip(qs, np.percentile(v, qs))}}
+
+
+def compare_models(a: dict, b: dict) -> dict:
+    """Dwa modele dna na tej samej siatce: różnica z_a - z_b na pikselach wspólnych i rzędne pikseli tylko w `a`.
+
+    Pozwala rozdzielić różnicę metryk dwóch modeli na efekt wartości (te same piksele) i efekt populacji pikseli
+    (piksele, które ma tylko jeden model)."""
+    za, zb = np.asarray(a["z"], float), np.asarray(b["z"], float)
+    fa, fb = np.isfinite(za), np.isfinite(zb)
+    common = fa & fb
+    d = (za - zb)[common]
+    diff = {**describe(d), "mean": float(d.mean()) if d.size else float("nan")}
+    return {"n_common": int(common.sum()), "n_a_only": int((fa & ~fb).sum()), "n_b_only": int((fb & ~fa).sum()),
+            "diff_a_minus_b": diff, "z_a_only": _pct(za[fa & ~fb]), "z_common_a": _pct(za[common])}
+
+
 def bottom_errors(model: dict, dem: np.ndarray, h_water: float, roles: np.ndarray, exclude=None) -> np.ndarray:
     """Błędy (model - NMT) na tych samych pikselach co `bottom_vs_dem` (do histogramu)."""
     sel = _select(model, dem, h_water, roles, exclude)
