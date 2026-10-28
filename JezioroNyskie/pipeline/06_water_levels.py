@@ -100,10 +100,13 @@ def main(argv=None) -> int:
     # wariant D (10_kz_compare.py variant-d): kontrola h_t z powierzchni KŻ, opcjonalna jak levels_a.csv
     d_csv = proc / "kz" / "levels_d.csv"
     if d_csv.exists():
-        d = pd.read_csv(d_csv, dtype={"date": str}).set_index("date").h_t_d
+        dd = pd.read_csv(d_csv, dtype={"date": str})
+        if "d_valid" in dd:
+            dd = dd[dd.d_valid.astype(bool)]            # D poza zakresem powierzchni KŻ (nasycone) nie jest kontrolą
+        d = dd.set_index("date").h_t_d
         df["h_t_d"] = [float(d.get(x.isoformat(), np.nan)) for x in df.date]
         df["h_diff_d"] = df.h_t_d - df.h_t
-        log.info("wariant D (kontrola): %d scen z levels_d.csv", int(df.h_t_d.notna().sum()))
+        log.info("wariant D (kontrola): %d scen ważnych z levels_d.csv", int(df.h_t_d.notna().sum()))
     else:
         log.info("brak levels_d.csv - bez kontroli D")
 

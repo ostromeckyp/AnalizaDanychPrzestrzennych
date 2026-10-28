@@ -23,6 +23,10 @@ from mielizna.grid import Grid
 
 LEVELS = np.arange(192.5, 198.0 + 1e-9, 0.05)
 SHORE_STEP_M = 10.0
+DIST_MAX_M = 150.0       # fit z średnią odległością brzeg-poziomica > 150 m odrzucamy (typowo 107-150 m: georeferencja
+                         # mapy ±5-15 m, linia brzegowa ±10 m, poziomice KŻ to próbka; dalej poziomica nie opisuje brzegu)
+REF_LEVEL = 194.0        # poziom odniesienia długości poziomicy (środek zakresu, gdzie powierzchnia jest dobrze określona)
+MIN_LENGTH_FRAC = 0.5    # poziomica "istnieje" gdy jej długość ≥ 50 % długości na REF_LEVEL
 MIN_POINTS = 50          # poniżej tylu punktów brzegu z powierzchnią scenę pomijamy (kilkaset m brzegu)
 VERTEX_STEP_M = 20.0     # poziomice KŻ zagęszczamy do tego kroku, żeby TIN nie "ścinał" łuków
 
@@ -80,6 +84,46 @@ def level_trees(surface: np.ndarray, grid: Grid, levels: np.ndarray = LEVELS) ->
         y = t.f + (v[:, 0] + 0.5) * t.e
         trees[float(h)] = cKDTree(np.c_[x, y])
     return trees
+
+
+def level_lengths(surface: np.ndarray, grid: Grid, levels: np.ndarray = LEVELS) -> dict[float, float]:
+    """Długość [m] poziomicy powierzchni na każdej rzędnej (suma długości odcinków find_contours)."""
+    res = abs(grid.transform.a)
+    out = {}
+    for h in levels:
+        segs = find_contours(surface, float(h))
+        out[float(h)] = float(sum(np.hypot(*np.diff(sg, axis=0).T).sum() for sg in segs) * res)
+    return out
+
+
+def h_max_valid(surface: np.ndarray, grid: Grid, levels: np.ndarray = LEVELS, ref: float = REF_LEVEL,
+                frac: float = MIN_LENGTH_FRAC) -> float:
+    """Najwyższa rzędna, do której powierzchnia KŻ ma poziomicę o sensownej długości.
+
+    Reguła: idziemy w górę od `ref` (194,0 m) i zatrzymujemy się na pierwszej rzędnej, na której długość poziomicy
+    spada poniżej `frac` (50 %) długości na `ref`; `h_max_valid` to ostatnia rzędna przed spadkiem. Powyżej niej
+    poziomica jest urywkiem (np. 195,0 m ma tylko wybrane odcinki, ląd 7 punktów), więc brzeg sceny z wysoką wodą nie
+    ma do czego się dopasować, a fit „przykleja się” do najwyższej poziomicy, która jeszcze istnieje.
+    Wybrano regułę z danych (a nie sztywne 195,0), żeby ewentualna lepsza powierzchnia sama podniosła limit."""
+    L = level_lengths(surface, grid, levels)
+    lv = sorted(L)
+    base = L[min(lv, key=lambda h: abs(h - ref))]
+    best = None
+    for h in lv:
+        if h < ref - 1e-9:
+            continue
+        if L[h] < frac * base:
+            break
+        best = h
+    return float("nan") if best is None else float(best)
+
+
+def is_valid(h: float, dist_m: float, hmax: float, levels: np.ndarray = LEVELS, dist_max: float = DIST_MAX_M) -> bool:
+    """Fit `d_valid`: h < h_max_valid − 0,05 m, nie na brzegu siatki poziomów, średnia odległość ≤ `dist_max`."""
+    if not (np.isfinite(h) and np.isfinite(dist_m) and np.isfinite(hmax)):
+        return False
+    edge = h <= levels[0] + 1e-9 or h >= levels[-1] - 1e-9
+    return bool(h < hmax - 0.05 + 1e-9 and not edge and dist_m <= dist_max)
 
 
 def fit_level(shore, surface: np.ndarray, grid: Grid, levels: np.ndarray = LEVELS,

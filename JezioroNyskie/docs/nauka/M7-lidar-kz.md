@@ -82,17 +82,18 @@ Po ludzku: z rzędnych punktowych i poziomic mapy KŻ budujemy powierzchnię dna
 
 - Wejście: punkty KŻ — **107 z 149** (wszystkie `ocr_ok`: kolor zgodny z rzędną i pewność OCR ≥ 80; kontroli ręcznej `kz_spot_qc.csv` jeszcze nie było, `kz.load_qc_spots` po jej pojawieniu użyje ocen `ok`/`corrected`), poziomice 192,5 (19 linii, 2,40 km) i 195,0 m (49 linii, 7,01 km; próbka precyzyjna, nie komplet brzegu), siatka poziomów 192,5–198,0 co 0,05 m, punkty brzegu co 10 m, minimum 50 punktów z powierzchnią na scenę. Powierzchnia jest NaN poza otoczką wypukłą danych i w żwirowni; brzeg w żwirowni jest pomijany.
 - **Pokrycie powierzchni: 79,2 % obszaru jeziora** ma wartość.
-- Dopasowano 218 scen (pominięto 3 odrzucone przez QC; żadna nie padła na minimum punktów). Mediana średniej odległości brzeg–poziomica: 122 m (min. 108 m), czyli dopasowanie jest luźne.
-- **Zgodność z `h_t` (wszystkie sceny): udział |D − h_t| ≤ 0,2 m = 22,9 %, mediana |D − h_t| = 0,68 m, mediana D − h_t = −0,55 m.** D nie zgadza się z `h_t` dla większości scen.
+- Dopasowano 218 scen (pominięto 3 odrzucone przez QC; żadna nie padła na minimum punktów). Mediana średniej odległości brzeg–poziomica: 122 m (10./90. percentyl 115/147 m), czyli dopasowanie jest luźne.
+- **Zakres ważności (poprawka rundy 1):** `h_max_valid` = najwyższa rzędna, do której długość poziomicy powierzchni ≥ 50 % jej długości na 194,0 m (`variant_d.h_max_valid`). Wynik: **194,95 m** (poziomica 195,0 ma 6 km wobec 20,6 km na 194,0; 195,25 już 0,7 km). Fit jest ważny (`d_valid`, kolumna w `levels_d.csv`) tylko gdy h < `h_max_valid` − 0,05 m, nie leży na brzegu siatki poziomów i średnia odległość ≤ 150 m. W `scenes.json` `h_t_d`/`h_diff_d` trafiają wyłącznie dla fitów ważnych (inaczej null). Ważnych: **198 z 218**.
+- **Zgodność z `h_t` (tylko fity ważne): n = 198, udział |D − h_t| ≤ 0,2 m = 23,7 %, mediana |D − h_t| = 0,70 m, mediana D − h_t = −0,56 m.** Przed poprawką (wszystkie 218): 22,9 % i 0,68 m. D nie zgadza się z `h_t` dla większości scen.
 
 | metoda `h_t` | n | udział ≤ 0,2 m | mediana abs. [m] | mediana D − h_t [m] |
 |---|---|---|---|---|
-| A | 37 | 89,2 % | 0,06 | +0,05 |
-| B | 153 | 10,5 % | 0,77 | −0,76 |
+| A | 35 | 91,4 % | 0,05 | +0,05 |
+| B | 136 | 10,3 % | 0,79 | −0,77 |
 | R | 2 | 0 % | 3,12 | −3,12 |
-| C | 26 | 3,8 % | 1,13 | −1,04 |
+| C | 25 | 4,0 % | 1,13 | −1,06 |
 
-- **Dlaczego tak źle (diagnoza, nie poprawka):** `h_t_d` prawie się nie zmienia (od 192,65 do 194,80 m, 136 z 218 scen w 194,40–194,45 m), a `h_t` sięga 192,9–197,9 m. Powierzchnia ponad ok. 195 m prawie nie jest opisana: ląd ma tylko 7 czarnych punktów, a poziomica 195,0 to wybrane fragmenty, więc dla scen z wysoką wodą (B, C: wiosna i powódź 2024) nie ma poziomicy, do której brzeg mógłby się dopasować, i D „zatrzymuje się” blisko 194,4–194,8. Zgodność z A jest wysoka, bo sceny A mają wodę ok. 194,2–194,6 m, czyli dokładnie w zakresie, gdzie powierzchnia jest dobra.
-- Warstwa dopisana **po** obejrzeniu wyniku (nie jest wynikiem głównym, nie zastępuje go): sceny z `h_t` < 195,0 m (n = 109): udział ≤ 0,2 m = 45,9 %, mediana abs. = 0,26 m, mediana D − h_t = +0,04 m. Czyli bez obciążenia, ale rozrzut nadal ponad 0,2 m.
-- Przed powodzią (sceny do 31.08.2024, n = 155): 25,8 % w ±0,2 m, mediana abs. 0,76 m.
-- **Wniosek:** wariant D w obecnej postaci (149 punktów, w tym 107 bez kontroli ręcznej, i połowa poziomicy 195,0) potwierdza niskie poziomy (A) i nie nadaje się do kontroli wysokich (B/C). Nie jest podstawą żadnej korekty `h_t`. Poprawa zależy od kontroli ręcznej punktów i od uzupełnienia rzędnych lądu/poziomicy 195,0; po zmianie wejść: `uv run python 10_kz_compare.py variant-d` i `06_water_levels.py`.
+- **Co filtr ważności robi, a czego nie:** odcina tylko 20 fitów przy samej górnej granicy zakresu. Nie wykrywa głównego problemu: dla scen z wysoką wodą (`h_t` > 195 m) fit nie „przykleja się” do górnej poziomicy, tylko ląduje w środku zakresu (192,65–194,80 m; 136 z 218 scen w 194,40–194,45 m), bo brzeg leży poza powierzchnią, a najbliższe poziomice są gdzie indziej. Takiego fitu nie da się odróżnić od poprawnego po samym `h` ani po odległości (typowo 115–147 m), więc **wiersze D dla scen B/C z `h_t` > 195 m są nadal oznaczone jako ważne, choć nic nie kontrolują**. Rozsądną domeną jest `h_t` < 195 m (poniżej); to warstwa dobrana na podstawie `h_t`, więc jest opisem domeny, nie niezależnym testem.
+- Warstwa `h_t` < 195,0 m (fity ważne, n = 96): udział ≤ 0,2 m = 49,0 %, mediana abs. = 0,22 m, mediana D − h_t = +0,04 m. Bez obciążenia, rozrzut rzędu 0,2 m.
+- Przed powodzią (do 31.08.2024, fity ważne, n = 139): 27,3 % w ±0,2 m, mediana abs. 0,77 m.
+- **Wniosek:** D w obecnej postaci (107 punktów bez kontroli ręcznej, połowa poziomicy 195,0) potwierdza niskie poziomy (A) z dokładnością rzędu 0,2 m i nie nadaje się do kontroli wysokiej wody. Nie jest podstawą żadnej korekty `h_t`. Po kontroli ręcznej punktów: `uv run python 10_kz_compare.py variant-d` i `06_water_levels.py`.

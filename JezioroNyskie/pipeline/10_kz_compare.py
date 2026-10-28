@@ -10,7 +10,7 @@ Dlaczego tak: to niezależna kontrola `h_t` z innego źródła niż komunikaty R
   brzegu z powierzchnią są pomijane z powodem w variant_d.json.
 Wejście → wyjście: data/processed/kz/{kz_spot_ocr.gpkg, kz_contours.gpkg}, data/reference/{zwirownia.gpkg,
   kz_spot_qc.csv (opcjonalnie, tylko odczyt)}, data/processed/{shorelines.gpkg, scenes.json, lake.gpkg} →
-  data/processed/kz/{levels_d.csv (date, h_t_d, dist_m), kz_surface.tif} i data/processed/eval/variant_d.json
+  data/processed/kz/{levels_d.csv (date, h_t_d, dist_m, d_valid), kz_surface.tif} i data/processed/eval/variant_d.json
   (n_scenes, share_within_0_2, median_abs_diff, by_method, pokrycie powierzchni, pominięte sceny).
 Jak to obronić: patrz mielizna/variant_d.py; liczby i ich interpretacja w docs/nauka/M7-lidar-kz.md (sekcja wariant D).
   Użycie: uv run python 10_kz_compare.py variant-d
@@ -58,6 +58,9 @@ def run_variant_d() -> int:
                        compress="deflate") as dst:
         dst.write(surf.astype("float32"), 1)
 
+    hmax = variant_d.h_max_valid(surf, grid, variant_d.LEVELS)
+    log.info("h_max_valid = %.2f m (poziomica >= %.0f %% długości na %.1f m)", hmax, 100 * variant_d.MIN_LENGTH_FRAC,
+             variant_d.REF_LEVEL)
     trees = variant_d.level_trees(surf, grid, variant_d.LEVELS)
     shores = gpd.read_file(proc / "shorelines.gpkg")
     rows, skipped = [], []
@@ -73,20 +76,24 @@ def run_variant_d() -> int:
         if not np.isfinite(h):
             skipped.append({"date": r.date, "reason": f"mniej niż {variant_d.MIN_POINTS} punktów brzegu z powierzchnią"})
             continue
-        rows.append({"date": r.date, "h_t_d": round(h, 2), "dist_m": round(d, 1)})
-    fit = pd.DataFrame(rows, columns=["date", "h_t_d", "dist_m"])
+        rows.append({"date": r.date, "h_t_d": round(h, 2), "dist_m": round(d, 1),
+                     "d_valid": variant_d.is_valid(h, d, hmax, variant_d.LEVELS)})
+    fit = pd.DataFrame(rows, columns=["date", "h_t_d", "dist_m", "d_valid"])
     out_kz = proc / "kz"
     fit.to_csv(out_kz / "levels_d.csv", index=False)
 
     sc = pd.DataFrame(json.loads((proc / "scenes.json").read_text(encoding="utf-8")))
-    summ = variant_d.summarize(fit, sc)
-    pre = fit[fit.date <= PRE_FLOOD_END]
+    # metryki główne tylko na fitach ważnych (d_valid): poza zakresem powierzchni D jest "nasycone" i nic nie mówi
+    valid = fit[fit.d_valid]
+    summ = variant_d.summarize(valid, sc)
+    pre = valid[valid.date <= PRE_FLOOD_END]
     summ["pre_flood"] = {k: v for k, v in variant_d.summarize(pre, sc).items() if k != "by_method"}
+    summ["all_fits_unfiltered"] = variant_d.summarize(fit, sc)      # dla porównania z wersją sprzed poprawki
     # warstwa dopisana PO obejrzeniu wyniku (powierzchnia nie sięga ponad ok. 195 m, bo ląd ma 7 czarnych punktów):
     # sceny z h_t < 195,0 m, gdzie powierzchnia w ogóle opisuje brzeg; nie zastępuje liczb głównych
     low = sc[sc.h_t < 195.0]
-    summ["h_t_below_195"] = {k: v for k, v in variant_d.summarize(fit, low).items() if k != "by_method"}
-    summ.update({"n_fitted": int(len(fit)), "n_skipped": len(skipped), "skipped": skipped,
+    summ["h_t_below_195"] = {k: v for k, v in variant_d.summarize(valid, low).items() if k != "by_method"}
+    summ.update({"n_fitted": int(len(fit)), "n_valid": int(len(valid)), "h_max_valid": hmax, "dist_max_m": variant_d.DIST_MAX_M, "n_skipped": len(skipped), "skipped": skipped,
                  "surface_coverage_lake": cover, "n_spots": int(len(spots)), "spots_source": spots.z_source.value_counts().to_dict(),
                  "median_dist_m": float(fit.dist_m.median()) if len(fit) else None,
                  "levels": [float(variant_d.LEVELS[0]), float(variant_d.LEVELS[-1]), 0.05],

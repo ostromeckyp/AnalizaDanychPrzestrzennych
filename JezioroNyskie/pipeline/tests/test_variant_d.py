@@ -110,3 +110,22 @@ def test_summarize_shares_and_by_method():
     assert s["n_scenes"] == 3 and s["share_within_0_2"] == pytest.approx(2 / 3)
     assert s["median_abs_diff"] == pytest.approx(0.1)
     assert s["by_method"]["B"]["n"] == 2 and s["by_method"]["C"]["n"] == 0 and s["by_method"]["R"]["n"] == 0
+
+
+def test_saturated_fit_is_not_valid():
+    surf = np.minimum(cone(), 194.0)               # powierzchnia "obcięta" na 194,0: wyżej nic nie wiadomo
+    h, d = variant_d.fit_level(circle(2250.0), surf, GRID, LEVELS)   # brzeg na 194,5 m
+    hmax = variant_d.h_max_valid(surf, GRID, LEVELS, ref=193.0)
+    assert hmax == pytest.approx(194.0, abs=0.06)
+    assert not variant_d.is_valid(h, d, hmax, LEVELS)
+
+
+def test_fit_in_range_is_valid_and_edges_dist_rejected():
+    surf = cone()
+    hmax = variant_d.h_max_valid(surf, GRID, LEVELS, ref=193.0)
+    assert hmax >= 196.0                            # stożek ma poziomice na całym zakresie
+    h, d = variant_d.fit_level(circle(2000.0), surf, GRID, LEVELS)   # 194,0
+    assert variant_d.is_valid(h, d, hmax, LEVELS)
+    assert not variant_d.is_valid(h, variant_d.DIST_MAX_M + 1, hmax, LEVELS)      # za daleko od poziomicy
+    assert not variant_d.is_valid(LEVELS[0], 5.0, hmax, LEVELS)                   # brzeg siatki
+    assert not variant_d.is_valid(float("nan"), float("nan"), hmax, LEVELS)
