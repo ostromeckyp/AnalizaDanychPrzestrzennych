@@ -23,8 +23,6 @@ from mielizna.grid import Grid
 
 LEVELS = np.arange(192.5, 198.0 + 1e-9, 0.05)
 SHORE_STEP_M = 10.0
-DIST_MAX_M = 150.0       # fit z średnią odległością brzeg-poziomica > 150 m odrzucamy (typowo 107-150 m: georeferencja
-                         # mapy ±5-15 m, linia brzegowa ±10 m, poziomice KŻ to próbka; dalej poziomica nie opisuje brzegu)
 REF_LEVEL = 194.0        # poziom odniesienia długości poziomicy (środek zakresu, gdzie powierzchnia jest dobrze określona)
 MIN_LENGTH_FRAC = 0.5    # poziomica "istnieje" gdy jej długość ≥ 50 % długości na REF_LEVEL
 MIN_POINTS = 50          # poniżej tylu punktów brzegu z powierzchnią scenę pomijamy (kilkaset m brzegu)
@@ -118,20 +116,20 @@ def h_max_valid(surface: np.ndarray, grid: Grid, levels: np.ndarray = LEVELS, re
     return float("nan") if best is None else float(best)
 
 
-def is_valid(h: float, dist_m: float, hmax: float, levels: np.ndarray = LEVELS, dist_max: float = DIST_MAX_M,
+def is_valid(h: float, dist_m: float, hmax: float, levels: np.ndarray = LEVELS,
              h_ref: float | None = None) -> bool:
-    """Fit `d_valid`: h < h_max_valid − 0,05 m, nie na brzegu siatki poziomów, średnia odległość ≤ `dist_max`
-    oraz (gdy podano) poziom odniesienia sceny `h_ref` (= h_t) < h_max_valid.
+    """Fit `d_valid`: h < h_max_valid − 0,05 m, nie na brzegu siatki poziomów i (gdy podano) h_ref (= h_t) < h_max_valid.
 
-    Ostatni warunek to DZIEDZINA metody, nie strojenie: powierzchnia KŻ opisuje tylko poziomy poniżej `h_max_valid`,
-    więc D może sprawdzić tylko sceny, których poziom odniesienia tam leży. Dla scen powyżej fit ląduje w środku
-    zakresu i jest bez znaczenia, choć nie wygląda na nasycony."""
-    if not (np.isfinite(h) and np.isfinite(dist_m) and np.isfinite(hmax)):
+    Warunek na `h_ref` to DZIEDZINA metody, nie strojenie: powierzchnia KŻ opisuje tylko poziomy poniżej `h_max_valid`,
+    więc D może sprawdzić tylko sceny, których poziom odniesienia tam leży (dla wyższych fit ląduje w środku zakresu).
+    Średnia odległość `dist_m` NIE jest kryterium: profil jest płaski (np. 2017-04-01: 120,3 / 118,2 / 121,3 m dla
+    194,25 / 194,50 / 194,75 m), więc nie odróżnia dobrych fitów od złych; zostaje kolumną informacyjną."""
+    if not (np.isfinite(h) and np.isfinite(hmax)):
         return False
     if h_ref is not None and not (np.isfinite(h_ref) and h_ref < hmax):
         return False
     edge = h <= levels[0] + 1e-9 or h >= levels[-1] - 1e-9
-    return bool(h < hmax - 0.05 + 1e-9 and not edge and dist_m <= dist_max)
+    return bool(h < hmax - 0.05 + 1e-9 and not edge)
 
 
 def fit_level(shore, surface: np.ndarray, grid: Grid, levels: np.ndarray = LEVELS,

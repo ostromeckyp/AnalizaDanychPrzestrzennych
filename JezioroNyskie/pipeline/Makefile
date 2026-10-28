@@ -102,7 +102,7 @@ $(LEVELSA): $(STATS) $(BULLS) $(EPOCHS) | $(LAKE)   # 06b --scenes-only: levels_
 	$(UV) 06b_lidar_levels.py --scenes-only
 
 # levels: A jest opcjonalny - zależność tylko gdy LiDAR został pobrany (inventory.csv istnieje przy czytaniu Makefile)
-LEVELS_DEPS := $(SHORES) $(BULLS)
+LEVELS_DEPS := $(SHORES) $(BULLS) $(wildcard $(LEVELSD))
 ifneq ($(wildcard $(INVENT)),)
 LEVELS_DEPS += $(LEVELSA)
 endif
@@ -140,9 +140,10 @@ $(ZWIR): $(KZMETA) $(LAKE) $(REF)/zwirownia_vertices.csv   # 09 gravel: obrys re
 
 # variant-d: kontrola h_t z powierzchni KŻ. Zależy tylko od punktów, poziomic i żwirowni (shorelines.gpkg i scenes.json
 # są odczytywane, ale nie są zależnościami: łańcuch make ma nieaktualne daty i wymusiłby retrening RF); NIE dotyka kz_spot_ocr.gpkg
-# (kz.py/variant_d.py nie są zależnością). Wynik wchodzi do scenes.json dopiero przy `make levels`/06_water_levels.py.
+# (kz.py/variant_d.py nie są zależnością). Wynik wchodzi do scenes.json dopiero po 06_water_levels.py;
+# `make levels` przy nieaktualnych datach uruchomi też łańcuch RF, więc bez retreningu: `uv run python 10_kz_compare.py variant-d && uv run python 06_water_levels.py`.
 variant-d: $(EVALD)
-$(EVALD): $(KZSPOTS) $(KZCONT) $(ZWIR)
+$(EVALD): $(KZSPOTS) $(KZCONT) $(ZWIR) $(wildcard $(REF)/kz_spot_qc.csv)
 	$(UV) 10_kz_compare.py variant-d
 
 test:

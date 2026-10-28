@@ -805,11 +805,17 @@ def load_qc_spots(ocr: "gpd.GeoDataFrame", qc: pd.DataFrame | None) -> "gpd.GeoD
         v = out["id"].map(verdict)
         out.loc[v == "ok", "z_source"] = "qc_ok"
         fixed = v == "corrected"
-        out.loc[fixed, "z"] = out.loc[fixed, "id"].map(zq).to_numpy(float)
-        out.loc[fixed, "z_source"] = "qc_corrected"
+        newz = out.loc[fixed, "id"].map(zq).to_numpy(float)
+        bad = ~((newz >= 185.0) & (newz <= 200.0))                   # pusty, nienumeryczny albo poza zakresem 185-200 m
+        if bad.any():
+            logging.getLogger(__name__).warning("load_qc_spots: %d wierszy `corrected` bez poprawnego z_qc (puste/nienumeryczne/poza 185-200 m) "
+                        "- zostaje rzędna OCR", int(bad.sum()))
+        newz = np.where(bad, out.loc[fixed, "z"].to_numpy(float), newz)
+        out.loc[fixed, "z"] = newz
+        out.loc[fixed, "z_source"] = np.where(bad, "qc_corrected_fallback", "qc_corrected")
         out.loc[v == "rejected", "z_source"] = "qc_rejected"
     unchecked = out["z_source"] == "unchecked"
     keep_unchecked = unchecked & ~is_suspect(out)
     out.loc[keep_unchecked, "z_source"] = "ocr_ok"
-    keep = out["z_source"].isin(["ocr_ok", "qc_ok", "qc_corrected"])
+    keep = out["z_source"].isin(["ocr_ok", "qc_ok", "qc_corrected", "qc_corrected_fallback"])
     return out[keep].reset_index(drop=True)

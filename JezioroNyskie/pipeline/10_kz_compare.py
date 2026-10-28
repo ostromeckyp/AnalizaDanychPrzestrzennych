@@ -12,6 +12,8 @@ Wejście → wyjście: data/processed/kz/{kz_spot_ocr.gpkg, kz_contours.gpkg}, d
   kz_spot_qc.csv (opcjonalnie, tylko odczyt)}, data/processed/{shorelines.gpkg, scenes.json, lake.gpkg} →
   data/processed/kz/{levels_d.csv (date, h_t_d, dist_m, d_valid), kz_surface.tif} i data/processed/eval/variant_d.json
   (n_scenes, share_within_0_2, median_abs_diff, by_method, pokrycie powierzchni, pominięte sceny).
+Dziedzina: `in_domain` i `d_valid` używają `h_t` ze scenes.json z chwili uruchomienia (czyli poziomu odniesienia, który
+  D kontroluje; zmiana h_t przez ponowne 06 zmienia dziedzinę, więc po 06 uruchom wariant D jeszcze raz).
 Jak to obronić: patrz mielizna/variant_d.py; liczby i ich interpretacja w docs/nauka/M7-lidar-kz.md (sekcja wariant D).
   Użycie: uv run python 10_kz_compare.py variant-d
 """
@@ -89,10 +91,11 @@ def run_variant_d() -> int:
     # metryki główne tylko na fitach ważnych (d_valid): poza zakresem powierzchni D jest "nasycone" i nic nie mówi
     valid = fit[fit.d_valid]
     summ = variant_d.summarize(valid, sc)
+    summ["population"] = "h_t < h_max_valid and d_valid"            # metryki główne dotyczą tylko tej populacji
     pre = valid[valid.date <= PRE_FLOOD_END]
     summ["pre_flood"] = {k: v for k, v in variant_d.summarize(pre, sc).items() if k != "by_method"}
     summ["all_fits_unfiltered"] = variant_d.summarize(fit, sc)      # dla porównania z wersją sprzed poprawki
-    summ.update({"n_fitted": int(len(fit)), "n_valid": int(len(valid)), "n_out_of_domain": int((~fit.in_domain).sum()), "h_max_valid": hmax, "dist_max_m": variant_d.DIST_MAX_M, "n_skipped": len(skipped), "skipped": skipped,
+    summ.update({"n_fitted": int(len(fit)), "n_valid": int(len(valid)), "n_out_of_domain": int((~fit.in_domain).sum()), "h_max_valid": hmax, "n_skipped": len(skipped), "skipped": skipped,
                  "surface_coverage_lake": cover, "n_spots": int(len(spots)), "spots_source": spots.z_source.value_counts().to_dict(),
                  "median_dist_m": float(fit.dist_m.median()) if len(fit) else None,
                  "levels": [float(variant_d.LEVELS[0]), float(variant_d.LEVELS[-1]), 0.05],

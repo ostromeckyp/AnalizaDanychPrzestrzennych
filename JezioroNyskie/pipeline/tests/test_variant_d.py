@@ -126,9 +126,19 @@ def test_fit_in_range_is_valid_and_edges_dist_rejected():
     assert hmax >= 196.0                            # stożek ma poziomice na całym zakresie
     h, d = variant_d.fit_level(circle(2000.0), surf, GRID, LEVELS)   # 194,0
     assert variant_d.is_valid(h, d, hmax, LEVELS)
-    assert not variant_d.is_valid(h, variant_d.DIST_MAX_M + 1, hmax, LEVELS)      # za daleko od poziomicy
+    assert variant_d.is_valid(h, 400.0, hmax, LEVELS)       # odległość nie jest kryterium
     assert not variant_d.is_valid(LEVELS[0], 5.0, hmax, LEVELS)                   # brzeg siatki
     assert not variant_d.is_valid(float("nan"), float("nan"), hmax, LEVELS)
+
+
+def test_corrected_with_bad_z_qc_falls_back_to_ocr(caplog):
+    qc = pd.DataFrame({"id": [9, 9, 9], "ocr_z": [190.0, 191.0, 192.0], "qc": ["corrected"] * 3,
+                       "z_qc": [np.nan, "abc", 250.0], "px": [10.0, 20, 30], "py": [10.0, 20, 30]})
+    with caplog.at_level("WARNING"):
+        out = kz.load_qc_spots(_spots_qc(), qc).set_index("id")
+    assert out.loc[0, "z"] == 190.0 and out.loc[1, "z"] == 191.0 and out.loc[2, "z"] == 192.0
+    assert (out.loc[[0, 1, 2], "z_source"] == "qc_corrected_fallback").all()
+    assert len([r for r in caplog.records if r.levelname == "WARNING"]) >= 1
 
 
 def test_out_of_domain_reference_level_is_not_valid():
