@@ -5,7 +5,7 @@ Co robi: zbiera konfigurację (katalog danych, okres modelu, tryb „na żywo", 
 Dlaczego tak: jedno miejsce czytania `os.environ` ułatwia testy (podmiana env) i obronę - widać
   wszystkie pokrętła systemu na jednym ekranie.
 Wejście → wyjście: zmienne MIELIZNA_DATA_DIR, MIELIZNA_PERIOD, MIELIZNA_LIVE ("0" wyłącza),
-  MIELIZNA_REFRESH_H, MIELIZNA_FRESH_DAYS → `Settings`; `get_settings()` czyta env przy każdym wywołaniu.
+  MIELIZNA_REFRESH_H, MIELIZNA_FRESH_DAYS, MIELIZNA_CURRENT_DIR (cache poziomu na żywo, gdy dane są tylko do odczytu) → `Settings`; `get_settings()` czyta env przy każdym wywołaniu.
 Jak to obronić: domyślny katalog danych to ten sam, którego używa pipeline (`mielizna.config.data_dir()`),
   więc backend i pipeline nie mogą wskazywać różnych danych.
 """
@@ -24,6 +24,11 @@ class Settings:
     live: bool = True
     refresh_hours: float = 6
     fresh_days: int = 10
+    current_dir: Path | None = None   # cache poziomu na żywo; None -> <data_dir>/processed/current
+
+    @property
+    def current_cache_dir(self) -> Path:
+        return self.current_dir or self.data_dir / "processed" / "current"
 
 
 PERIODS = ("all", "pre_flood", "post_flood")
@@ -48,4 +53,5 @@ def get_settings() -> Settings:
         live=env.get("MIELIZNA_LIVE", "1") != "0",
         refresh_hours=float(env.get("MIELIZNA_REFRESH_H", 6)),
         fresh_days=int(env.get("MIELIZNA_FRESH_DAYS", 10)),
+        current_dir=Path(env["MIELIZNA_CURRENT_DIR"]) if env.get("MIELIZNA_CURRENT_DIR") else None,
     )

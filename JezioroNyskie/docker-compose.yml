@@ -1,4 +1,5 @@
 # Mielizna: `docker compose up --build` -> http://localhost:8080
+# Zmienne (np. MIELIZNA_LIVE=0) można podać w pliku `.env` obok tego pliku.
 services:
   backend:
     build:
@@ -6,12 +7,12 @@ services:
       dockerfile: backend/Dockerfile
     environment:
       MIELIZNA_DATA_DIR: /data
-      MIELIZNA_LIVE: ${MIELIZNA_LIVE:-1}   # z pliku środowiskowego compose; 0 wyłącza odświeżanie poziomu z sieci
+      MIELIZNA_CURRENT_DIR: /cache/current   # poza /data (tylko do odczytu); wolumen niżej
+      MIELIZNA_LIVE: ${MIELIZNA_LIVE:-1}     # 0 wyłącza odświeżanie poziomu z sieci
     volumes:
       - ./data/processed:/data/processed:ro
       - ./data/reference:/data/reference:ro
-      # cache bieżącego poziomu (backend go zapisuje), więc osobny wolumen zamiast montowania tylko do odczytu
-      - current-cache:/data/processed/current
+      - current-cache:/cache
     restart: unless-stopped
   frontend:
     build: ./frontend

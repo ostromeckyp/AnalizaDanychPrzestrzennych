@@ -5,3 +5,5 @@ test-results
 __pycache__
 data
 e2e
+.DS_Store
+.env

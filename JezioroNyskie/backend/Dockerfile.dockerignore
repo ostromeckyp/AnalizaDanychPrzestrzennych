@@ -1,4 +1,5 @@
-# Używane przez backend/Dockerfile (kontekst = katalog główny, bo backend zależy od ../pipeline).
+# Używany przez backend/Dockerfile (BuildKit woli <Dockerfile>.dockerignore od korzeniowego).
+# Kontekst = katalog główny (zależność ../pipeline); dane są montowane, nie kopiowane.
 .git
 data
 docs
@@ -8,5 +9,7 @@ docs
 **/.venv
 **/__pycache__
 **/.pytest_cache
+**/.DS_Store
 frontend
 pipeline/tests
+backend/tests

@@ -92,3 +92,11 @@ def test_period_reason_default_vs_override(client_no_eval, dataset):
     import json
     (dataset / "processed" / "eval" / "model_choice.json").write_text(json.dumps({"period": "post_flood", "reason": "r"}), encoding="utf-8")
     assert _client(dataset).get("/api/meta").json()["model_period_reason"].startswith("Okres modelu ustawiony ręcznie")
+
+
+def test_current_cache_dir_setting(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIELIZNA_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("MIELIZNA_CURRENT_DIR", raising=False)
+    assert get_settings().current_cache_dir == tmp_path / "processed" / "current"   # domyślnie jak dotąd
+    monkeypatch.setenv("MIELIZNA_CURRENT_DIR", str(tmp_path / "cache"))
+    assert get_settings().current_cache_dir == tmp_path / "cache"

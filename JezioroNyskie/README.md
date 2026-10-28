@@ -14,7 +14,8 @@ bash scripts/compose_smoke.sh    # test dymny: buduje, sprawdza /, /api/meta, /h
 ```
 
 Tryb na żywo (odświeżanie bieżącego poziomu z Sentinel-2, potrzebna sieć wychodząca) jest domyślnie włączony;
-`MIELIZNA_LIVE=0` w pliku środowiskowym compose (obok `docker-compose.yml`) go wyłącza. Port frontu: 8080.
+`MIELIZNA_LIVE=0` w pliku `.env` obok `docker-compose.yml` go wyłącza (plik jest w `.gitignore`). Port frontu: 8080.
+Cache bieżącego poziomu leży w wolumenie Dockera (`/cache/current`, `MIELIZNA_CURRENT_DIR`), bo dane są montowane tylko do odczytu.
 
 ## Szybki start pipeline'u
 

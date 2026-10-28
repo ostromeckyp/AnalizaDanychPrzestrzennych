@@ -11,7 +11,10 @@ COPY backend/pyproject.toml backend/uv.lock /app/backend/
 WORKDIR /app/backend
 RUN uv sync --frozen --no-dev --no-install-project
 COPY backend/app /app/backend/app
-ENV MIELIZNA_DATA_DIR=/data
+ENV MIELIZNA_DATA_DIR=/data MIELIZNA_CURRENT_DIR=/cache/current
+# użytkownik bez uprawnień; /cache należy do niego (nowy wolumen dziedziczy właściciela z obrazu)
+RUN useradd --system --uid 10001 mielizna && mkdir -p /cache/current && chown -R mielizna /cache
+USER mielizna
 EXPOSE 8000
 HEALTHCHECK --interval=5s --timeout=5s --start-period=10s --retries=30 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/meta', timeout=4).status == 200 else 1)"

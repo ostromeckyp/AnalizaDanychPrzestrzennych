@@ -201,7 +201,7 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
     def build_service() -> current.CurrentLevelService:
         p = app.state.products
         return current.CurrentLevelService(
-            p, settings.data_dir / "processed" / "current",
+            p, settings.current_cache_dir,
             search_fn or functools.partial(current.stac_search, load_config()),
             load_fn or current.load_scene,
             lambda: current.SceneContext.build(p, settings.data_dir),
