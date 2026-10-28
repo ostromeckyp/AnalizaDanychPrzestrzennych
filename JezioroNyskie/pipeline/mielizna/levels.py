@@ -1,7 +1,8 @@
 """Rzędna zwierciadła wody `h_t` dla każdej sceny: warianty R, B i C oraz zapis scenes.json.
 
 Co robi: przypisuje scenie rzędną z najlepszego dostępnego źródła, w kolejności A > R > B > C:
-  A - pomiar z modelu terenu (plan 4, na razie brak), R - znany pomiar wodowskazowy z
+  A - rzędna z NMT wzdłuż brzegu (`variant_a`, plan 4; gdy wygrywa nad B, obok zostaje `h_t_b` i
+  `h_diff_ab = h_t - h_t_b`, bez uzgadniania), R - znany pomiar wodowskazowy z
   `known_levels.csv`, B - pojemność z komunikatu RZGW zamieniona tabelą KŻ na rzędną,
   C - rzędna odczytana z krzywej powierzchnia -> rzędna dopasowanej do scen B/R.
 Dlaczego tak: komunikaty istnieją tylko od 2019-11, a pojemność z tabeli jest bezpośrednim
@@ -34,6 +35,7 @@ BIN_WIDTH_KM2 = 0.5  # szerokość przedziału powierzchni, w którym bierzemy m
 MIN_OBS = 3  # minimum scen do dopasowania krzywej (LOO wymaga >= 2 punktów po usunięciu jednej)
 H_DATUM = "unknown (RZGW, prawdopodobnie KRON86)"
 PRECEDENCE = {"A": 0, "R": 1, "B": 2, "C": 3}
+A_DATUM = "PL-EVRF2007-NH"  # wariant A: NMT sprowadzony do EVRF2007 (variant_a, epochs.csv)
 AREA_SOURCE = "area_otsu_km2 (Otsu, classify_stats.csv)"
 log = logging.getLogger(__name__)
 
@@ -203,7 +205,7 @@ def load_area_level_curve(path: Path) -> AreaLevelCurve:
 
 
 def load_overrides(path: Path) -> pd.DataFrame:
-    """Wczytuje znane rzędne (start,end,h,sigma,method,source); plan 4 dopisze wiersze A."""
+    """Wczytuje znane rzędne (start,end,h,sigma,method,source); wiersze A pochodzą z levels_a.csv (06b), łączone w 06."""
     df = pd.read_csv(path, dtype={"method": str})
     df["start"] = pd.to_datetime(df["start"]).dt.date
     df["end"] = pd.to_datetime(df["end"]).dt.date
@@ -282,11 +284,14 @@ def assign_levels(scene_dates: list[date], bulletins: pd.DataFrame, overrides: p
     rows = []
     for d in sorted(scene_dates):
         row = {"date": d, "h_t": np.nan, "h_method": None, "h_source": "", "h_sigma": np.nan,
-               "capacity_curve_note": "", "extrapolated": False, "area_biased": False}
+               "capacity_curve_note": "", "extrapolated": False, "area_biased": False,
+               "h_t_b": np.nan, "h_diff_ab": np.nan}
         hit = overrides[(overrides.start <= d) & (overrides.end >= d)]
         if len(hit):
             o = hit.assign(rank=hit.method.map(PRECEDENCE)).sort_values("rank").iloc[0]
             row.update(h_t=float(o.h), h_method=o.method, h_source=str(o.source), h_sigma=float(o.sigma))
+            if o.method == "A" and d in b.index:  # A wygrywa, ale B zostaje obok (różnica = możliwy przesunięty układ RZGW)
+                row.update(h_t_b=float(b.loc[d].h_t), h_diff_ab=float(o.h) - float(b.loc[d].h_t))
         elif d in b.index:
             r = b.loc[d]
             row.update(h_t=float(r.h_t), h_method="B", h_source=r.h_source, h_sigma=float(r.h_sigma),
@@ -309,7 +314,7 @@ def assign_levels(scene_dates: list[date], bulletins: pd.DataFrame, overrides: p
                 df.loc[todo, col] = c[col].to_numpy()
     excl = df.h_method.isna() & ~ok if areas is not None else pd.Series(False, index=df.index)
     df.loc[excl, "h_method"] = "qc_excluded"
-    df["h_datum"] = np.where(df.h_t.notna(), H_DATUM, None)
+    df["h_datum"] = np.where(df.h_t.notna(), np.where(df.h_method == "A", A_DATUM, H_DATUM), None)
     return df
 
 
@@ -332,7 +337,9 @@ def write_scenes_json(df: pd.DataFrame, path: Path) -> None:
         cap = num(level_to_capacity(r.h_t), 2) if h is not None else None
         out.append({"date": str(r.date), "tiles": r.tiles, "h_t": h, "h_method": r.h_method,
                     "h_source": r.h_source, "h_sigma": num(r.h_sigma, 2),
-                    "h_datum": None if h is None else r.h_datum, "area_km2": num(r.area_km2, 3),
+                    "h_datum": None if h is None else r.h_datum,
+                    "h_t_b": num(getattr(r, "h_t_b", None), 2), "h_diff_ab": num(getattr(r, "h_diff_ab", None), 2),
+                    "area_km2": num(r.area_km2, 3),
                     "area_otsu_km2": num(r.area_otsu_km2, 3),
                     "lake_nodata_pct": num(r.lake_nodata_pct, 3), "otsu_threshold": num(r.otsu_threshold, 3),
                     "local_cloud_pct": num(r.local_cloud_pct, 3), "capacity_mln_m3": cap,

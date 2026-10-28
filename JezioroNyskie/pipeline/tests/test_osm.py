@@ -98,3 +98,14 @@ def test_masks_explicit_path_ignores_data_path(tmp_path, monkeypatch, sample_jso
                 width=int((x1 - x0) // 10), height=int((y1 - y0) // 10))
     lake, aoi = osm.lake_mask(grid, path=gpkg), osm.aoi_mask(grid, path=gpkg)
     assert lake.sum() > 0 and aoi.sum() > lake.sum()
+
+
+def test_dam_gdf_picks_dam_ways_only():
+    js = {"elements": [
+        {"type": "way", "id": 5, "tags": {"man_made": "dam", "name": "Zapora"},
+         "geometry": [{"lat": LAT, "lon": LON}, {"lat": LAT + 0.001, "lon": LON}]},
+        {"type": "way", "id": 6, "tags": {"waterway": "dam"}, "geometry": [{"lat": LAT, "lon": LON}, {"lat": LAT, "lon": LON + 0.001}]},
+        {"type": "way", "id": 7, "tags": {"man_made": "pier"}, "geometry": [{"lat": LAT, "lon": LON}, {"lat": LAT, "lon": LON + 0.001}]},
+    ]}
+    d = osm.dam_gdf(js)
+    assert list(d.osm_id) == [5, 6] and str(d.crs) == "EPSG:2180" and d.geometry.iloc[0].length > 50

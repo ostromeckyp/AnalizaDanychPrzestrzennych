@@ -40,7 +40,7 @@ def fetch_overpass(query: str, retries: int = 4) -> dict:
     for attempt in range(retries):
         r = requests.post(OVERPASS_URL, data={"data": query}, timeout=180,
                           headers={"User-Agent": "mielizna-pipeline/0.1"})
-        if r.status_code in (429, 504) and attempt < retries - 1:
+        if r.status_code in (429, 502, 503, 504) and attempt < retries - 1:
             time.sleep(delay)
             delay *= 2
             continue
@@ -94,6 +94,18 @@ def points_gdf(overpass_json: dict) -> gpd.GeoDataFrame:
                      "geometry": _to_2180(geom)})
     return gpd.GeoDataFrame(rows, columns=["osm_id", "kind", "name", "geometry"],
                             geometry="geometry", crs=TARGET_CRS)
+
+
+def dam_gdf(overpass_json: dict) -> gpd.GeoDataFrame:
+    """Zapora (way z man_made=dam lub waterway=dam) jako linie w EPSG:2180; wariant A omija bufor wokół niej."""
+    rows = []
+    for e in overpass_json["elements"]:
+        tags = e.get("tags") or {}
+        if e["type"] != "way" or not e.get("geometry") or "dam" not in (tags.get("man_made"), tags.get("waterway")):
+            continue
+        rows.append({"osm_id": e["id"], "name": tags.get("name"),
+                     "geometry": _to_2180(LineString([(p["lon"], p["lat"]) for p in e["geometry"]]))})
+    return gpd.GeoDataFrame(rows, columns=["osm_id", "name", "geometry"], geometry="geometry", crs=TARGET_CRS)
 
 
 def _mask(grid: Grid, layer: str, path: Path | None = None) -> np.ndarray:

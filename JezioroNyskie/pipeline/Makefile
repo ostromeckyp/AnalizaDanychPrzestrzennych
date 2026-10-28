@@ -23,16 +23,17 @@ RFMODEL := $(PROC)/model/rf_model.joblib
 STATS   := $(PROC)/classify_stats.csv
 SHORES  := $(PROC)/shorelines.gpkg
 BULLS   := $(PROC)/bulletins.csv
+LEVELSA := $(PROC)/levels_a.csv
 SCENES  := $(PROC)/scenes.json
 BOTTOM  := $(PROC)/model/all/model_meta.json
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels bottom test clean-model
+        bulletins lidar-epochs levels-a levels bottom test clean-model
 .DEFAULT_GOAL := help
 
 help:
-	@echo "Cele: osm nmt s2 label-candidates label-ui rf classify shorelines bulletins levels bottom all test clean-model"
+	@echo "Cele: osm nmt s2 label-candidates label-ui rf classify shorelines bulletins lidar-epochs levels-a levels bottom all test clean-model"
 	@echo "Kolejność: osm -> s2 -> label-candidates -> (ręczne etykiety: label-ui) -> rf -> classify"
 	@echo "           -> shorelines -> bulletins -> levels -> bottom"
 
@@ -88,8 +89,19 @@ bulletins: $(BULLS)
 $(BULLS): $(S2CSV)                         # 06a: komunikaty RZGW/Wód Polskich (cache PDF)
 	$(UV) 06a_fetch_bulletins.py
 
+# levels-a: wariant A (poziom wody z NMT wzdłuż brzegu sceny). Zależy od STATS, nie od SHORES: 06 nadpisuje
+# shorelines.gpkg (h_t), więc zależność od SHORES wymuszałaby przeliczanie w kółko.
+levels-a: $(LEVELSA)
+$(LEVELSA): $(STATS) $(BULLS) $(EPOCHS) | $(LAKE)   # 06b --scenes-only: levels_a.csv + levels_a_detail.csv
+	$(UV) 06b_lidar_levels.py --scenes-only
+
+# levels: A jest opcjonalny - zależność tylko gdy LiDAR został pobrany (inventory.csv istnieje przy czytaniu Makefile)
+LEVELS_DEPS := $(SHORES) $(BULLS)
+ifneq ($(wildcard $(INVENT)),)
+LEVELS_DEPS += $(LEVELSA)
+endif
 levels: $(SCENES)
-$(SCENES): $(SHORES) $(BULLS)              # 06: poziom wody h_t każdej sceny, krzywa powierzchnia-rzędna
+$(SCENES): $(LEVELS_DEPS)                  # 06: poziom wody h_t każdej sceny (A/R/B/C), krzywa powierzchnia-rzędna
 	$(UV) 06_water_levels.py
 
 bottom: $(BOTTOM)

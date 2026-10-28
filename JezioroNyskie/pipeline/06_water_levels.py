@@ -6,7 +6,7 @@ Co robi: łączy powierzchnie scen z shorelines.gpkg z komunikatami RZGW (bullet
 Dlaczego tak: poziom wody jest osią całej analizy (mielizny = f(poziom)); sceny bez komunikatu
   (2017-2019 i luki) dostają poziom z krzywej, a sceny odrzucone przez QC tylko z komunikatu.
 Wejście → wyjście: data/processed/{shorelines.gpkg, bulletins.csv, scenes_candidates.csv},
-  data/reference/known_levels.csv → {out-dir}/scenes.json, {out-dir}/model/area_level_curve.json,
+  data/reference/known_levels.csv, (opcjonalnie) data/processed/levels_a.csv z 06b → {out-dir}/scenes.json, {out-dir}/model/area_level_curve.json,
   {out-dir}/qc/area_vs_level.png, shorelines.gpkg (kolumny h_t, h_method; reszta bez zmian).
   Opcje: --shorelines (domyślnie processed/shorelines.gpkg, ZAPISYWANY w miejscu) i --out-dir
   (domyślnie processed) pozwalają na próbny przebieg na kopii. Skrypt jest idempotentny.
@@ -78,6 +78,13 @@ def main(argv=None) -> int:
     dates = [date.fromisoformat(d) for d in gdf["date"]]
     bulls = pd.read_csv(proc / "bulletins.csv", dtype={"scene_date": str})
     overrides = levels.load_overrides(data_path("reference", "known_levels.csv"))
+    a_csv = proc / "levels_a.csv"  # wariant A (06b) jest opcjonalny: bez LiDAR-u skrypt liczy B/R/C jak dotąd
+    if a_csv.exists():
+        a = levels.load_overrides(a_csv)
+        overrides = pd.concat([overrides, a], ignore_index=True)
+        log.info("wariant A: %d scen z levels_a.csv", len(a))
+    else:
+        log.info("brak levels_a.csv - bez wariantu A")
     cand = pd.read_csv(proc / "scenes_candidates.csv", dtype={"date": str})
     key = dict(zip(dates, gdf.index))
     cs = pd.read_csv(proc / "classify_stats.csv", dtype={"date": str})

@@ -24,6 +24,14 @@ QUERY = f"""[out:json][timeout:120];
   nwr["man_made"="pier"]({BBOX});
 );
 out geom;"""
+# osobne zapytanie (inny hash cache), by nie unieważniać zbuforowanej odpowiedzi z obrysem;
+# zapora jest potrzebna wariantowi A (bufor 150 m wokół korony zapory, plan 4 Task 3)
+DAM_QUERY = f"""[out:json][timeout:120];
+(
+  way["man_made"="dam"]({BBOX});
+  way["waterway"="dam"]({BBOX});
+);
+out geom;"""
 
 
 def main():
@@ -36,6 +44,10 @@ def main():
     gpd.GeoDataFrame(geometry=[lake], crs=osm.TARGET_CRS).to_file(out, layer="lake", driver="GPKG")
     gpd.GeoDataFrame(geometry=[lake.buffer(500)], crs=osm.TARGET_CRS).to_file(
         out, layer="aoi", driver="GPKG")
+
+    dam = osm.dam_gdf(osm.fetch_overpass(DAM_QUERY))
+    dam.to_file(out, layer="dam", driver="GPKG")
+    print("Zapora (linie):", len(dam))
 
     pts = osm.points_gdf(data)
     m = data_path("processed", "marinas.gpkg")
