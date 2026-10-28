@@ -77,7 +77,7 @@ def test_meta(client):
     assert lon0 < lon1 and lat0 < lat1 and 14 < lon0 < 25 and 49 < lat0 < 55
     assert [p["date"] for p in m["area_level"]["points"]] == ["2026-09-30", "2026-10-20"]
     assert m["area_level"]["nodes_h"] == [192.9, 194.0, 197.0]
-    assert r.headers["etag"] == 'W/"all-testver00001"'
+    assert r.headers["etag"].startswith('W/"all-testver00001-')
     assert client.get("/api/meta", headers={"If-None-Match": r.headers["etag"]}).status_code == 304
 
 

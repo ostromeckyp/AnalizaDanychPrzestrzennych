@@ -104,3 +104,13 @@ def test_dem_to_grid_mean_and_coverage():
     assert np.isnan(out[0, 0])
     assert out[0, 1] == pytest.approx(5.5) and out[1, 0] == pytest.approx(5.5)   # +offset dokładnie raz
     assert out[1, 1] == pytest.approx(8.5)
+
+
+def test_pooled_bottom_share_in_bounds_over_epochs():
+    roles = np.full((2, 2), "valid")
+    a = evaluate.bottom_pairs(_model(), DEM, 190.0, roles)    # 3 piksele, 2 w granicach
+    b = evaluate.bottom_pairs(_model(), DEM, 194.0, roles)    # 1 piksel, poza granicami
+    r = evaluate.pooled_bottom([a, b])
+    assert r["n"] == 4 and r["share_in_bounds"] == pytest.approx(2 / 4)
+    assert r["rmse"] == pytest.approx(evaluate.metrics(np.concatenate([a["z"], b["z"]]), np.concatenate([a["ref"], b["ref"]]))["rmse"])
+    assert evaluate.pooled_bottom([])["n"] == 0

@@ -70,6 +70,9 @@ const PERIOD_LABELS: Record<string, string> = {
   post_flood: 'po powodzi',
 };
 
+// Obciążenie ze znakiem (+ dla dodatniego), polski przecinek i jednostka z fmtM.
+const signedM = (x: number) => `${x > 0 ? '+' : ''}${fmtM(x)}`;
+
 const num = (x: number | null | undefined) => (typeof x === 'number' ? x : NaN);
 
 export function useMethodVm(): MethodVm {
@@ -154,7 +157,15 @@ export function useMethodVm(): MethodVm {
       sub: 'm n.p.m.; poza nim model ekstrapoluje',
     },
     Number.isFinite(num(acc.bottom_rmse_nmt))
-      ? { label: 'RMSE dna', value: fmtM(num(acc.bottom_rmse_nmt)), sub: 'vs NMT LiDAR, bloki walidacyjne' }
+      ? {
+          label: 'RMSE dna',
+          value: fmtM(num(acc.bottom_rmse_nmt)),
+          sub:
+            'vs NMT LiDAR, bloki walidacyjne' +
+            (Number.isFinite(num(acc.bottom_bias_nmt))
+              ? `; obciążenie ${signedM(num(acc.bottom_bias_nmt))} (w tym możliwe przesunięcie układu wysokości)`
+              : ''),
+        }
       : {
           label: 'RMSE dna',
           value: 'w przygotowaniu (porównanie z NMT LiDAR)',
@@ -164,7 +175,7 @@ export function useMethodVm(): MethodVm {
       ? {
           label: 'Zgodność z mapą KŻ',
           value: `RMSE ${fmtM(num(acc.kz_rmse))}`,
-          sub: `obciążenie ${fmtM(num(acc.kz_bias))} · mapa KŻ to nie pomiar: model sprzed powodzi, rzędne od 192,5 m, bez żwirowni, komórki 50 m`,
+          sub: `obciążenie ${signedM(num(acc.kz_bias))} · mapa KŻ to nie pomiar: model sprzed powodzi, rzędne od 192,5 m, bez żwirowni, komórki 50 m`,
         }
       : {
           label: 'Zgodność z mapą KŻ',

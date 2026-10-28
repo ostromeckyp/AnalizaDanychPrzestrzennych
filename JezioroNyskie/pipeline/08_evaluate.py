@@ -74,7 +74,7 @@ def eval_bottom(proc: Path, grid, models: dict, gravel: np.ndarray):
            "water_filter": "per arkusz: dominanta NMT = płaska woda; komórki <= woda + 0,1 m pomijane; piksele 10 m z std < 0,03 m pomijane; żwirownia wyłączona",
            "datum_note": "NMT w EVRF2007; model głównie w układzie RZGW (nieznany) - bias zawiera ewentualne przesunięcie RZGW<->EVRF2007",
            "by_epoch": {}}
-    pooled = {"err": [], "zmin": [], "zmax": [], "dem": []}
+    pooled = {"all": [], "pre_flood": []}      # piksele wszystkich epok (dla modelu all) i epok sprzed powodzi (dla pre_flood)
     errs_for_plot = {}
     dems = {}
     for e in epochs.itertuples():
@@ -84,16 +84,19 @@ def eval_bottom(proc: Path, grid, models: dict, gravel: np.ndarray):
         row = {"h_water_evrf": float(e.h_water_evrf), "date": e.date, "uklad_h": e.uklad_h,
                "datum_offset_applied": offset, "sheet_water_native": waters, "dem_px": int(np.isfinite(dem).sum())}
         row["all"] = evaluate.bottom_vs_dem(models["all"], dem, e.h_water_evrf, roles, gravel)
+        pooled["all"].append(evaluate.bottom_pairs(models["all"], dem, e.h_water_evrf, roles, gravel))
         if str(e.epoch) in IN_PRE:
             row["pre_flood"] = evaluate.bottom_vs_dem(models["pre_flood"], dem, e.h_water_evrf, roles, gravel)
+            pooled["pre_flood"].append(evaluate.bottom_pairs(models["pre_flood"], dem, e.h_water_evrf, roles, gravel))
         if e.epoch == 2024:      # informacyjnie: NMT sprzed powodzi vs model po powodzi
             row["post_flood_informational"] = evaluate.bottom_vs_dem(models["post_flood"], dem, e.h_water_evrf, roles, gravel)
         out["by_epoch"][str(e.epoch)] = row
         errs_for_plot[str(e.epoch)] = evaluate.bottom_errors(models["all"], dem, e.h_water_evrf, roles, gravel)
         log.info("epoka %s all: %s", e.epoch, {k: round(v, 3) for k, v in row["all"].items()})
-    # puli wszystkich epok dla modelu all (piksele z różnych epok liczone osobno)
-    allerr = np.concatenate(list(errs_for_plot.values()))
-    out["all"] = {**evaluate.metrics(allerr, np.zeros_like(allerr)), "note": "model all, błędy ze wszystkich epok razem"}
+    # pule epok: piksele z różnych epok liczone osobno
+    out["all"] = {**evaluate.pooled_bottom(pooled["all"]), "note": "model all, piksele ze wszystkich epok razem"}
+    out["pre_flood"] = {**evaluate.pooled_bottom(pooled["pre_flood"]),
+                        "note": "model pre_flood, piksele z epok NMT sprzed powodzi (2011, 2017, 2022, 2024) razem"}
     return out, errs_for_plot, roles, dems
 
 

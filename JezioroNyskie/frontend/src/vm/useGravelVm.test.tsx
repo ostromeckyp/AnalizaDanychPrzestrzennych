@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
 import { gravel } from '../test/fixtures';
 import { createQueryClient } from './queryClient';
-import { useGravelVm } from './useGravelVm';
+import { gravelRetry, useGravelVm } from './useGravelVm';
 
 vi.mock('../api/client', async (orig) => {
   const mod = await orig<typeof import('../api/client')>();
@@ -41,5 +41,13 @@ describe('useGravelVm', () => {
     await waitFor(() => expect(gravelMock).toHaveBeenCalled());
     expect(result.current.gravel).toBeUndefined();
     expect(result.current.attribution).toBeUndefined();
+    expect(gravelMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retry policy: never on 404, at most twice otherwise', () => {
+    expect(gravelRetry(0, new ApiError(404, 'x'))).toBe(false);
+    expect(gravelRetry(0, new ApiError(500, 'x'))).toBe(true);
+    expect(gravelRetry(1, new Error('net'))).toBe(true);
+    expect(gravelRetry(2, new Error('net'))).toBe(false);
   });
 });

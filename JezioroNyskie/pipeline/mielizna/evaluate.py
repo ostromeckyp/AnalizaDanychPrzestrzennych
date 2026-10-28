@@ -63,6 +63,20 @@ def _select(model, dem, h_water, roles, exclude=None):
     return sel & ~exclude if exclude is not None else sel
 
 
+def bottom_pairs(model: dict, dem: np.ndarray, h_water: float, roles: np.ndarray, exclude=None) -> dict:
+    """Piksele użyte w `bottom_vs_dem` jako tablice (z, z_min, z_max, ref) - do zbiorczej oceny po epokach."""
+    sel = _select(model, dem, h_water, roles, exclude)
+    return {"z": model["z"][sel], "z_min": model["z_min"][sel], "z_max": model["z_max"][sel], "ref": dem[sel]}
+
+
+def pooled_bottom(parts: list[dict]) -> dict:
+    """Metryki dna (n, mae, rmse, bias, share_in_bounds) z połączonych pikseli wielu epok (piksele liczone osobno dla epoki)."""
+    cat = {k: np.concatenate([p[k] for p in parts]) if parts else np.array([]) for k in ("z", "z_min", "z_max", "ref")}
+    out = metrics(cat["z"], cat["ref"])
+    out["share_in_bounds"] = share_in_bounds(cat["ref"], cat["z_min"], cat["z_max"])
+    return out
+
+
 def bottom_errors(model: dict, dem: np.ndarray, h_water: float, roles: np.ndarray, exclude=None) -> np.ndarray:
     """Błędy (model - NMT) na tych samych pikselach co `bottom_vs_dem` (do histogramu)."""
     sel = _select(model, dem, h_water, roles, exclude)

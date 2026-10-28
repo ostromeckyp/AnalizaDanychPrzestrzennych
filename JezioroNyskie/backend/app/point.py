@@ -12,6 +12,7 @@ Jak to obronić: D_lo = h − z_hi (najpłycej), D_hi = h − z_lo (najgłębiej
   zanurzenie. Piksel wybiera `rasterio.transform.rowcol` na współrzędnych siatki (EPSG:2180).
 """
 import math
+import threading
 
 import numpy as np
 import rasterio.transform
@@ -19,6 +20,17 @@ from pyproj import Transformer
 
 from app.data import Products
 from app.zones import ZONE_NAMES, zone_classes
+
+
+_local = threading.local()
+
+
+def _to_grid(crs: str) -> Transformer:
+    """Transformer EPSG:4326 → układ siatki, tworzony raz na wątek (budowa jest droga, a `Transformer` nie jest wątkowo-bezpieczny)."""
+    cache = _local.__dict__.setdefault("t", {})
+    if crs not in cache:
+        cache[crs] = Transformer.from_crs(4326, crs, always_xy=True)
+    return cache[crs]
 
 
 def _r(x) -> float | None:
@@ -31,8 +43,7 @@ def _r(x) -> float | None:
 
 def _pixel(products: Products, lon: float, lat: float) -> tuple[int, int] | None:
     """Wiersz i kolumna piksela dla lon/lat albo None, gdy punkt leży poza siatką."""
-    tr = Transformer.from_crs(4326, products.crs, always_xy=True)
-    x, y = tr.transform(lon, lat)
+    x, y = _to_grid(products.crs).transform(lon, lat)
     if not (math.isfinite(x) and math.isfinite(y)):
         return None
     row, col = rasterio.transform.rowcol(products.transform, x, y)
@@ -45,7 +56,7 @@ def in_gravel(products: Products, lon: float, lat: float) -> bool:
     if products.gravel_geom is None:
         return False
     from shapely.geometry import Point
-    x, y = Transformer.from_crs(4326, products.crs, always_xy=True).transform(lon, lat)
+    x, y = _to_grid(products.crs).transform(lon, lat)
     return bool(math.isfinite(x) and math.isfinite(y) and products.gravel_geom.contains(Point(x, y)))
 
 

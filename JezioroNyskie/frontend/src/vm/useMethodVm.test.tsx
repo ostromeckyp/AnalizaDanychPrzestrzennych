@@ -40,12 +40,12 @@ describe('useMethodVm', () => {
   });
 
   it('RMSE tile shows the NMT value when present, pending otherwise', async () => {
-    metaMock.mockResolvedValue({ ...meta, accuracy: { ...meta.accuracy, bottom_rmse_nmt: 1.508 } });
+    metaMock.mockResolvedValue({ ...meta, accuracy: { ...meta.accuracy, bottom_rmse_nmt: 1.508, bottom_bias_nmt: 1.157 } });
     const { result } = setup();
     await waitFor(() => expect(result.current.status).toBe('ready'));
     const t = result.current.tiles.find((x) => x.label === 'RMSE dna')!;
     expect(t.value).toBe('1,51\u00a0m');
-    expect(t.sub).toBe('vs NMT LiDAR, bloki walidacyjne');
+    expect(t.sub).toBe('vs NMT LiDAR, bloki walidacyjne; obciążenie +1,16\u00a0m (w tym możliwe przesunięcie układu wysokości)');
   });
 
   it('KŻ agreement tile: bias and RMSE when present, pending otherwise', async () => {

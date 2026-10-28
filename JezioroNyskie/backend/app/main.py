@@ -33,7 +33,7 @@ from pyproj import Transformer
 
 from app import current
 from app.cache import TTLStore
-from app.data import Products, capacity_to_level, level_to_capacity, load_products
+from app.data import Products, capacity_to_level, level_to_capacity, load_products, short_hash
 from app.layers import RENDER_VERSION, UNC_MIN, layer_coordinates, bottom_breaks, render_bottom_png, render_uncertainty_png
 from app.point import point_info
 from app.schemas import (CapacityToLevel, CurrentLevelResponse, GravelResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
@@ -127,7 +127,7 @@ def _num(d, *keys) -> float | None:
 def eval_accuracy(products: Products) -> dict:
     """Pola oceny dla `Accuracy`; każde null, gdy odpowiedni plik albo klucz nie istnieje."""
     ev, period = products.eval, products.meta["period"]
-    pooled = ev.get("bottom_vs_nmt", {}).get(period)   # blok zbiorczy modelu serwowanego okresu
+    pooled = ev.get("bottom_vs_nmt", {}).get(period)   # load_eval gwarantuje obiekt; _num toleruje dowolny blok   # blok zbiorczy modelu serwowanego okresu
     return {"bottom_rmse_nmt": _num(pooled, "rmse"), "bottom_bias_nmt": _num(pooled, "bias"),
             "bottom_in_bounds_nmt": _num(pooled, "share_in_bounds"),
             "kz_rmse": _num(ev.get("kz_compare"), "points", "rmse"),
@@ -138,8 +138,10 @@ def eval_accuracy(products: Products) -> dict:
 
 def model_period_reason(products: Products) -> str:
     """Uzasadnienie wyboru okresu z `model_choice.json`, gdy serwowany okres jest tym wybranym; inaczej opis wymuszenia."""
-    choice = products.eval.get("model_choice") or {}
+    choice = products.eval.get("model_choice")
     period = products.meta["period"]
+    if choice is None:
+        return "Domyślny okres modelu (brak decyzji oceny zmian dna)."
     if choice.get("period") == period and isinstance(choice.get("reason"), str):
         return choice["reason"]
     return f"Okres modelu ustawiony ręcznie ({period})."
@@ -230,7 +232,9 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
     @app.get("/api/meta", response_model=MetaResponse)
     def meta(request: Request):
         p: Products = request.app.state.products
-        return cached_json_response(request, f'W/"{p.version}"',
+        # ETag obejmuje pliki oceny, inaczej po ponownej ocenie przeglądarka dostawałaby 304 ze starą dokładnością
+        meta_tag = short_hash(f"{p.eval_hash}|{p.meta['period']}|{model_period_reason(p)}".encode())
+        return cached_json_response(request, f'W/"{p.version}-{meta_tag}"',
                                     lambda: build_meta(p).model_dump_json().encode())
 
     @app.get("/api/zones", response_model=ZonesResponse)
@@ -319,11 +323,12 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
 
         def build() -> bytes:
             g = p.gravel.to_crs(4326)
+            geom = g.geometry.union_all()           # jeden obiekt: obrys żwirowni (brief)
+            sources = [str(s) for s in dict.fromkeys(g["source"]) if isinstance(s, str) and s] if "source" in g else []
             feats = [{"type": "Feature", "geometry": geom.__geo_interface__,
-                      "properties": {"source": str(src), "attribution": GRAVEL_ATTRIBUTION}}
-                     for geom, src in zip(g.geometry, g.get("source", [""] * len(g)))]
+                      "properties": {"source": "; ".join(sources), "attribution": GRAVEL_ATTRIBUTION}}]
             return json.dumps({"type": "FeatureCollection", "features": feats}, ensure_ascii=False).encode()
-        return static_json(request, "-gravel", build)
+        return static_json(request, f"-gravel-{p.gravel_hash}", build)
 
     @app.get("/api/capacity-to-level", response_model=CapacityToLevel)
     def capacity_to_level_ep(request: Request, v: float = Query(..., gt=0, le=CAPACITY_MAX_MLN_M3,

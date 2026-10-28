@@ -11,6 +11,7 @@ Wejście → wyjście: katalog danych + okres → `Products`. Do sceny wchodzą 
 Jak to obronić: „poza modelem" = obs_count 0 lub 65535 lub flags 255; bit 8 flag jest opisowy i
   nie wpływa na nic. Pojemności 65,69 i 121,70 mln m³ to stałe z briefu §4 (tabela KŻ Nysa).
 """
+import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -52,6 +53,8 @@ class Products:
     capacity_table: pd.DataFrame   # tabela KŻ pojemność↔rzędna, wczytana raz (bez zmiany środowiska procesu)
     eval: dict = field(default_factory=dict)          # pliki oceny `processed/eval/*.json` (klucz = nazwa pliku bez .json); brak plików → {}
     gravel: gpd.GeoDataFrame | None = None            # obrys żwirowni (EPSG:2180) albo None, gdy brak pliku
+    eval_hash: str = ""                               # odcisk treści plików oceny (część ETagu /api/meta)
+    gravel_hash: str = ""                             # odcisk bajtów pliku obrysu (część ETagu /api/gravel)
     gravel_geom: object | None = None                 # suma obrysów jako przygotowana geometria do testu „punkt w obrysie"
 
 
@@ -73,10 +76,16 @@ def load_eval(data_dir: Path) -> dict:
     out = {}
     for name in EVAL_FILES:
         try:
-            out[name] = json.loads((Path(data_dir) / "processed" / "eval" / f"{name}.json").read_text(encoding="utf-8"))
+            body = json.loads((Path(data_dir) / "processed" / "eval" / f"{name}.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
+        if isinstance(body, dict):          # poprawny JSON, ale nie obiekt (null, lista, napis): pomijamy jak brak pliku
+            out[name] = body
     return out
+
+
+def short_hash(data: bytes) -> str:
+    return hashlib.sha1(data).hexdigest()[:10]
 
 
 def load_gravel(data_dir: Path) -> gpd.GeoDataFrame | None:
@@ -121,6 +130,9 @@ def load_products(data_dir: Path, period: str = "all") -> Products:
     max_pp = float(capacity.capacity_to_level(MAX_PP_MLN_M3, table=capacity_table))
 
     gravel = load_gravel(data_dir)
+    ev = load_eval(data_dir)
+    gf = data_dir / "reference" / "zwirownia.gpkg"
+    gravel_hash = short_hash(gf.read_bytes()) if gf.exists() else ""
     gravel_geom = None
     if gravel is not None and len(gravel):
         from shapely.prepared import prep
@@ -131,5 +143,6 @@ def load_products(data_dir: Path, period: str = "all") -> Products:
         unc=arrays["unc"], obs_count=obs, in_model=in_model, meta=meta,
         version=f"{period}-{meta['version']}", scenes=scenes, shorelines=shorelines, marinas=marinas,
         curve=curve, rf_metrics=rf_metrics, z_max_floor=float(finite_max.min()), npp=npp, max_pp=max_pp,
-        capacity_table=capacity_table, eval=load_eval(data_dir), gravel=gravel, gravel_geom=gravel_geom,
+        capacity_table=capacity_table, eval=ev, eval_hash=short_hash(json.dumps(ev, sort_keys=True).encode()),
+        gravel_hash=gravel_hash, gravel=gravel, gravel_geom=gravel_geom,
     )
