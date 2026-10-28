@@ -6,3 +6,5 @@ __pycache__/
 .DS_Store
 .pytest_cache/
 data/reference/*_backup.gpkg
+frontend/node_modules/
+frontend/dist/

@@ -1,0 +1,68 @@
+/* Tokeny z briefu §16.3. Jasny motyw domyślnie, ciemny wg prefers-color-scheme.
+   Kolory mapy (strefy, dno, niepewność) są zduplikowane w src/theme.ts dla MapLibre;
+   src/theme.test.ts pilnuje, by wartości się nie rozjechały. */
+:root {
+  --map-bg: #eef0ea;
+  --panel: #ffffff;
+  --text: #0e2433;
+  --muted: #4c6475;
+  --border: #d8e0e5;
+  --border-strong: #afc0cb;
+  --subtle: #f3f6f8;
+  --accent: #1c5d8c;
+  --accent-soft: #e4eff7;
+  --accent-text: #ffffff;
+  --track: #dce4ea;
+  --track-obs: #9fc2da;
+  --warn-bg: #fff4db;
+  --warn-text: #6e4300;
+  --bar-bg: #0e2433;
+  --bar-text: #ffffff;
+  --safe: #2ba6a0;
+  --risk: #f2b134;
+  --hatch: #8a5a00;
+  --danger: #8e1b4f;
+  --bottom-1: #c4dde9;
+  --bottom-2: #98c3d9;
+  --bottom-3: #6aa4c4;
+  --bottom-4: #3f80aa;
+  --bottom-5: #215c86;
+  --unc-dot: #0e2433;
+  --shore: #5f889c;
+  --dam: #3a4a55;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --map-bg: #151b20;
+    --panel: #12191f;
+    --text: #e6eef3;
+    --muted: #a3b6c3;
+    --border: #2a3640;
+    --border-strong: #40505c;
+    --subtle: #1a232b;
+    --accent: #6fb3e0;
+    --accent-soft: #1b3446;
+    --accent-text: #0b1a24;
+    --track: #2a3640;
+    --track-obs: #3d6680;
+    --warn-bg: #3a2a0a;
+    --warn-text: #f6c66b;
+    --bar-bg: #0a0f13;
+    --bar-text: #d6e1e8;
+    --safe: #34b8b0;
+    --risk: #f2b134;
+    --hatch: #6b4300;
+    --danger: #d0508a;
+    --bottom-1: #2a4c5e;
+    --bottom-2: #24546e;
+    --bottom-3: #1e5f82;
+    --bottom-4: #1a6a97;
+    --bottom-5: #1675ab;
+    --unc-dot: #e6eef3;
+    --shore: #5f889c;
+    --dam: #3a4a55;
+    color-scheme: dark;
+  }
+}

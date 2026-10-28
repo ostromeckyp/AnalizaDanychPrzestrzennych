@@ -54,6 +54,18 @@ uv run pytest -m real -q                      # testy na prawdziwych danych (wym
 Zmienne środowiskowe: `MIELIZNA_DATA_DIR` (katalog danych), `MIELIZNA_PERIOD` (domyślnie `all`),
 `MIELIZNA_LIVE` (`0` wyłącza tryb na żywo), `MIELIZNA_REFRESH_H`, `MIELIZNA_FRESH_DAYS`.
 
+## Frontend
+
+React + TypeScript + Vite (`frontend/`), MapLibre GL, TanStack Query. Typy API generowane z `backend/openapi.json`.
+
+```bash
+cd frontend && npm ci
+npm run dev        # http://localhost:5173, proxy /api -> http://localhost:8000
+npm test           # Vitest (w tym test architektury warstw)
+npm run lint && npm run build
+npm run gen:api    # odświeża src/api/schema.ts po zmianie openapi.json
+```
+
 ## Dokumentacja
 
 - Brief: [`docs/BRIEF.md`](docs/BRIEF.md)
