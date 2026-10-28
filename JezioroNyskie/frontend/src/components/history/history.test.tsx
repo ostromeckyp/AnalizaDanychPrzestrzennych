@@ -96,4 +96,10 @@ describe('SceneList', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Pokaż wszystkie sceny' }));
     expect(onReset).toHaveBeenCalled();
   });
+  it('no scenes at all: no reset button or year hint', () => {
+    render(<SceneList {...base} year="all" years={[]} rows={[]} counter="0 scen · nałożone: 0" />);
+    expect(screen.getByText('Brak scen dla tego filtra')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pokaż wszystkie sceny' })).toBeNull();
+    expect(screen.queryByText(/Wybierz inny rok/)).toBeNull();
+  });
 });

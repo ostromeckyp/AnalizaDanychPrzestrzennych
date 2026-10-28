@@ -129,4 +129,27 @@ describe('useHistoryVm', () => {
     act(() => result.current.retry());
     await waitFor(() => expect(result.current.status).toBe('ready'));
   });
+
+  it('years cover the full range including gap years, so an empty year is selectable', async () => {
+    m.scenes.mockResolvedValue([
+      { ...scenes[0], date: '2023-05-01' },
+      { ...scenes[2], date: '2026-10-20' },
+    ]);
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.years).toEqual([2026, 2025, 2024, 2023]);
+    act(() => result.current.setYear(2025));
+    expect(result.current.scenes).toEqual([]);
+    expect(result.current.counter).toBe('0 scen · nałożone: 0');
+  });
+
+  it('rerender without changes keeps shorelines identity', async () => {
+    const { result, rerender } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    act(() => result.current.toggleOverlay('2026-10-20'));
+    await waitFor(() => expect(result.current.shorelines.features).toHaveLength(1));
+    const first = result.current.shorelines;
+    rerender();
+    expect(result.current.shorelines).toBe(first);
+  });
 });

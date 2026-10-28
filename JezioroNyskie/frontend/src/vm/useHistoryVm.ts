@@ -53,6 +53,7 @@ export function useHistoryVm(): HistoryVm {
   const npp = metaVm.slider?.npp;
   const q = useQuery({ queryKey: queryKeys.scenes(), queryFn: ({ signal }) => api.scenes(signal) });
 
+  const refetch = q.refetch;
   const [yearSel, setYearSel] = useState<YearFilter | undefined>();
   const [overlay, setOverlay] = useState<string[]>([]);
   const [selDate, setSelDate] = useState<string | undefined>();
@@ -62,10 +63,14 @@ export function useHistoryVm(): HistoryVm {
     return rows.sort((a, b) => (a.date < b.date ? 1 : -1)); // najnowsze pierwsze
   }, [q.data, npp]);
 
-  const years = useMemo(
-    () => [...new Set(all.map((r) => Number(r.date.slice(0, 4))))].sort((a, b) => b - a),
-    [all],
-  );
+  // Pełny zakres lat (także bez scen), żeby pusty rok dało się wybrać (stan F).
+  const years = useMemo(() => {
+    if (all.length === 0) return [];
+    const ys = all.map((r) => Number(r.date.slice(0, 4)));
+    const out: number[] = [];
+    for (let y = Math.max(...ys); y >= Math.min(...ys); y--) out.push(y);
+    return out;
+  }, [all]);
   const year: YearFilter = yearSel ?? years[0] ?? 'all';
 
   const filtered = useMemo(
@@ -73,12 +78,9 @@ export function useHistoryVm(): HistoryVm {
     [all, year],
   );
 
-  const info = useQueries({
-    queries: overlay.map((date) => ({
-      queryKey: queryKeys.shoreline(date),
-      queryFn: ({ signal }: { signal: AbortSignal }) => api.shoreline(date, signal),
-    })),
-    combine: (results): OverlayInfo => {
+  // Stabilna funkcja: wynik zmienia tożsamość tylko, gdy zmienią się dane.
+  const combine = useCallback(
+    (results: { data?: Shoreline; isError: boolean }[]): OverlayInfo => {
       const features: Shoreline[] = [];
       const status: OverlayInfo['status'] = {};
       results.forEach((r, i) => {
@@ -87,6 +89,15 @@ export function useHistoryVm(): HistoryVm {
       });
       return { features, status };
     },
+    [overlay],
+  );
+
+  const info = useQueries({
+    queries: overlay.map((date) => ({
+      queryKey: queryKeys.shoreline(date),
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.shoreline(date, signal),
+    })),
+    combine,
   });
 
   const shorelines = useMemo(
@@ -102,7 +113,7 @@ export function useHistoryVm(): HistoryVm {
 
   return {
     status: q.isError ? 'error' : q.data ? 'ready' : 'loading',
-    retry: useCallback(() => void q.refetch(), [q]),
+    retry: useCallback(() => void refetch(), [refetch]),
     years,
     year,
     scenes,

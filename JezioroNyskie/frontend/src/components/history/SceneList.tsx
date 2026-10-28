@@ -31,12 +31,14 @@ export function SceneList(p: SceneListProps) {
       {p.rows.length === 0 ? (
         <div className="hempty">
           <strong>Brak scen dla tego filtra</strong>
-          <span>
-            {p.year === 'all' ? 'Brak scen.' : `W ${p.year} r. żadna scena nie przeszła filtra zachmurzenia.`} Wybierz inny rok.
-          </span>
-          <button type="button" className="btn-outline" onClick={p.onReset}>
-            Pokaż wszystkie sceny
-          </button>
+          {p.year !== 'all' && (
+            <>
+              <span>W {p.year} r. żadna scena nie przeszła filtra zachmurzenia. Wybierz inny rok.</span>
+              <button type="button" className="btn-outline" onClick={p.onReset}>
+                Pokaż wszystkie sceny
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <ul className="hlist">
