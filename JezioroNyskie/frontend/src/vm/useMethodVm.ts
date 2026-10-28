@@ -160,10 +160,14 @@ export function useMethodVm(): MethodVm {
       ? {
           label: 'RMSE dna',
           value: fmtM(num(acc.bottom_rmse_nmt)),
+          // Bez przypisywania obciążenia układowi wysokości: hipoteza RZGW↔EVRF2007 ma przeciwny znak (raport §5.2).
           sub:
             'vs NMT LiDAR, bloki walidacyjne' +
             (Number.isFinite(num(acc.bottom_bias_nmt))
-              ? `; obciążenie ${signedM(num(acc.bottom_bias_nmt))} (w tym możliwe przesunięcie układu wysokości)`
+              ? `; obciążenie ${signedM(num(acc.bottom_bias_nmt))} na odsłoniętym brzegu (przyczyna nieustalona)`
+              : '') +
+            (Number.isFinite(num(acc.bottom_in_bounds_nmt))
+              ? ` · przedział [z_min, z_max] zawiera teren w ${fmtPct(num(acc.bottom_in_bounds_nmt) * 100, 0)} pikseli — to nie jest przedział ufności`
               : ''),
         }
       : {

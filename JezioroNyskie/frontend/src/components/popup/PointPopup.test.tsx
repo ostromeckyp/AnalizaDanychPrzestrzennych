@@ -50,6 +50,13 @@ describe('PointPopup', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the depth-range caveat under the facts when the model has one', () => {
+    const { rerender } = render(<PointPopup model={A} onClose={vi.fn()} />);
+    expect(screen.queryByText(/nie jest przedziałem ufności/)).not.toBeInTheDocument();
+    rerender(<PointPopup model={{ ...A, caveat: 'Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.' }} onClose={vi.fn()} />);
+    expect(screen.getByText('Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.')).toHaveClass('popup__caveat');
+  });
+
   it('variant D: no zone bar, shows "Bez oceny strefy", no definition list', () => {
     render(<PointPopup model={D} onClose={() => {}} />);
     expect(screen.getByText('Poza obszarem modelu')).toBeInTheDocument();

@@ -20,6 +20,9 @@ const ZONE_NAMES: Record<ZoneKey, string> = { safe: 'Bezpieczna', risk: 'Ryzykow
 // Każda liczba z API może być null (a zepsuty backend da NaN); brakujące wiersze po prostu pomijamy.
 const num = (x: number | null | undefined): x is number => typeof x === 'number' && Number.isFinite(x);
 
+// Przedział [z_min, z_max] zawiera teren w ok. 6 % pikseli kontrolnych (raport §5.2) — żeglarz musi to wiedzieć przy zakresie.
+const RANGE_CAVEAT = 'Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.';
+
 const range = (a: number, b: number) => (a === b ? fmtM(a) : `${fmtNum(a, 2)}–${fmtNum(b, 2)}${NBSP}m`);
 
 function zoneOf(p: Point, withLabel: boolean): PopupModel['zone'] {
@@ -61,15 +64,19 @@ export function toPopupModel(p: Point, meta: Meta): PopupModel {
 
 function baseModel(p: Point, meta: Meta): PopupModel {
   switch (p.kind) {
-    case 'model':
+    case 'model': {
+      const { depth_min: lo, depth_max: hi } = p;
+      const depth = num(lo) && num(hi) ? range(lo, hi) : undefined;
       return {
         variant: 'A',
         title: 'Głębokość w tym miejscu',
-        value: num(p.depth_min) && num(p.depth_max) ? range(p.depth_min, p.depth_max) : 'Brak oceny głębokości',
+        value: depth ?? 'Brak oceny głębokości',
         note: clearanceNote(p),
         zone: zoneOf(p, true),
         rows: [...heightRow('Wysokość dna', p), ...scenes(p), location(p)],
+        ...(depth ? { caveat: RANGE_CAVEAT } : {}),
       };
+    }
     case 'always_water': {
       const floor = num(p.z_max) ? p.z_max : meta.z_max_floor;
       return {

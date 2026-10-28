@@ -15,6 +15,8 @@ import { api } from '../api/client';
 
 const pointMock = vi.mocked(api.point);
 const NB = '\u00a0';
+// Szukamy placeholderów (null/NaN/„—”) w danych; stałe zastrzeżenie `caveat` ma myślnik celowo, więc je pomijamy.
+const artefacts = (m: ReturnType<typeof toPopupModel>) => JSON.stringify({ ...m, caveat: undefined });
 
 describe('toPopupModel', () => {
   it.each([
@@ -26,7 +28,7 @@ describe('toPopupModel', () => {
     const m = toPopupModel(resp, meta);
     expect(m.variant).toBe(variant);
     expect(m.value).toBe(value);
-    expect(JSON.stringify(m)).not.toMatch(/null|NaN|Infinity|undefined|—/);
+    expect(artefacts(m)).not.toMatch(/null|NaN|Infinity|undefined|—/);
   });
 
   it('popup adds gravel warning row only when gravel is true', () => {
@@ -51,6 +53,14 @@ describe('toPopupModel', () => {
     expect(m.rows.find((r) => r.term === 'Położenie')?.desc).toMatch(/50,4500.*17,0500/);
   });
 
+  it('A: depth range carries the "not a confidence interval" caveat; single value and other variants do not', () => {
+    const caveat = 'Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.';
+    expect(toPopupModel(pointModel, meta).caveat).toBe(caveat);
+    expect(toPopupModel({ ...pointModel, depth_min: 1.5, depth_max: 1.5 }, meta).caveat).toBe(caveat);
+    expect(toPopupModel({ ...pointModel, depth_min: null, depth_max: null }, meta).caveat).toBeUndefined();
+    for (const p of [pointAlwaysWater, pointLand, pointOutside]) expect(toPopupModel(p, meta).caveat).toBeUndefined();
+  });
+
   it('A: zone label follows API zone, never computed', () => {
     expect(toPopupModel({ ...pointModel, zone: 'safe' }, meta).zone?.name).toBe('Bezpieczna');
     expect(toPopupModel({ ...pointModel, zone: 'danger' }, meta).zone?.name).toBe('Zbyt płytka / ląd');
@@ -59,7 +69,7 @@ describe('toPopupModel', () => {
 
   it('A: negative or missing clearance and missing optional numbers produce no artefacts', () => {
     const m = toPopupModel({ ...pointModel, clearance_min: null, clearance_max: null, z: null, unc: null, obs_count: null }, meta);
-    expect(JSON.stringify(m)).not.toMatch(/null|NaN|Infinity|undefined|—/);
+    expect(artefacts(m)).not.toMatch(/null|NaN|Infinity|undefined|—/);
     expect(m.rows.map((r) => r.term)).toEqual(['Położenie']);
     const neg = toPopupModel({ ...pointModel, clearance_min: -0.5, clearance_max: -0.1 }, meta);
     expect(neg.note).not.toMatch(/-|−/);

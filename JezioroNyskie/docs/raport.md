@@ -452,6 +452,9 @@ Backend FastAPI wczytuje produkty pipeline'u (rastry modelu, `scenes.json`, krzy
 `h − z_min < d` lub piksel suchy, **ryzykowna** pozostałe. Frontend React + MapLibre pokazuje mapę stref, popup punktu (głębokość z
 przedziałem i liczbą obserwacji), historię linii brzegowych i stronę „O metodzie” z liczbami oceny z `/api/meta`. Model serwowany:
 `all` (z `model_choice.json`). Warstwa żwirowni ma atrybucję mapy KŻ, a popup w jej obrębie dodaje ostrzeżenie „dno zmienne”.
+Popup z zakresem głębokości ma dopisek „Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.”, a kafel „RMSE dna”
+podaje obciążenie bez przypisywania go układowi wysokości („przyczyna nieustalona”, §5.2) i udział pikseli, w których przedział
+[`z_min`, `z_max`] zawiera teren.
 Uruchomienie: `docker compose up --build` (README, „Uruchomienie”); `/api/zones` przez nginx: mediana 0,09 s (pomiar Task 11, M7 §8),
 więc kryterium BRIEF §11 (≤ 2 s) i M5 (< 1 s) jest spełnione.
 

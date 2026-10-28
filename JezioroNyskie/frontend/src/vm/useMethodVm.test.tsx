@@ -40,12 +40,26 @@ describe('useMethodVm', () => {
   });
 
   it('RMSE tile shows the NMT value when present, pending otherwise', async () => {
-    metaMock.mockResolvedValue({ ...meta, accuracy: { ...meta.accuracy, bottom_rmse_nmt: 1.508, bottom_bias_nmt: 1.157 } });
+    metaMock.mockResolvedValue({
+      ...meta,
+      accuracy: { ...meta.accuracy, bottom_rmse_nmt: 1.508, bottom_bias_nmt: 1.157, bottom_in_bounds_nmt: 0.0642 },
+    });
     const { result } = setup();
     await waitFor(() => expect(result.current.status).toBe('ready'));
     const t = result.current.tiles.find((x) => x.label === 'RMSE dna')!;
     expect(t.value).toBe('1,51\u00a0m');
-    expect(t.sub).toBe('vs NMT LiDAR, bloki walidacyjne; obciążenie +1,16\u00a0m (w tym możliwe przesunięcie układu wysokości)');
+    expect(t.sub).toBe(
+      'vs NMT LiDAR, bloki walidacyjne; obciążenie +1,16\u00a0m na odsłoniętym brzegu (przyczyna nieustalona)' +
+        ' · przedział [z_min, z_max] zawiera teren w 6% pikseli — to nie jest przedział ufności',
+    );
+    expect(t.sub).not.toMatch(/układu wysokości|datum/);
+  });
+
+  it('RMSE tile omits bias and in-bounds parts when they are missing', async () => {
+    metaMock.mockResolvedValue({ ...meta, accuracy: { ...meta.accuracy, bottom_rmse_nmt: 1.508 } });
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.tiles.find((x) => x.label === 'RMSE dna')!.sub).toBe('vs NMT LiDAR, bloki walidacyjne');
   });
 
   it('KŻ agreement tile: bias and RMSE when present, pending otherwise', async () => {

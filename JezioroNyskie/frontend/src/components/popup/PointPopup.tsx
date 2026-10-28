@@ -82,6 +82,7 @@ export function PointPopup({ model, state, onClose }: PointPopupProps) {
           ))}
         </dl>
       )}
+      {model.caveat && <p className="popup__caveat">{model.caveat}</p>}
       {warnings.map((r) => (
         <p key={r.term} role="note" className="popup__warn">
           {r.term} — {r.desc}
