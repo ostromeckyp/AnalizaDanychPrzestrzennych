@@ -22,3 +22,26 @@ export const UNC_DOT: Record<ThemeName, string> = {
   light: '#0e2433',
   dark: '#e6eef3',
 };
+
+// Brzeg, zapora i znaczniki POI (tokeny --shore, --dam, --accent, --panel).
+export const SHORE_COLOR: Record<ThemeName, string> = { light: '#5f889c', dark: '#5f889c' };
+export const DAM_COLOR: Record<ThemeName, string> = { light: '#3a4a55', dark: '#3a4a55' };
+export const POI_COLORS: Record<ThemeName, { fg: string; bg: string }> = {
+  light: { fg: '#1c5d8c', bg: '#ffffff' },
+  dark: { fg: '#6fb3e0', bg: '#12191f' },
+};
+
+// Skala linii brzegowych wg poziomu wody (m n.p.m.): jasny błękit -> granat, z obcięciem.
+export const LEVEL_SCALE = { h0: 190, c0: '#9cc9e4', h1: 195.5, c1: '#143f66' } as const;
+
+export function levelColor(h: number): string {
+  const { h0, c0, h1, c1 } = LEVEL_SCALE;
+  const t = Math.min(1, Math.max(0, (h - h0) / (h1 - h0)));
+  const ch = (hex: string, i: number) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  return (
+    '#' +
+    [0, 1, 2]
+      .map((i) => Math.round(ch(c0, i) + (ch(c1, i) - ch(c0, i)) * t).toString(16).padStart(2, '0'))
+      .join('')
+  );
+}

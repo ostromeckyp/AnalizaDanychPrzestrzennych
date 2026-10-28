@@ -1,0 +1,191 @@
+import 'maplibre-gl/dist/maplibre-gl.css';
+import maplibregl, { type ImageSource, type GeoJSONSource, type Map as MlMap } from 'maplibre-gl';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { POI_COLORS, ZONE_COLORS, type ThemeName } from '../../theme';
+import { withTheme } from '../../urls';
+import {
+  HATCH_IMAGE,
+  IDS,
+  POI_IMAGE,
+  baseStyle,
+  marinaLayers,
+  pinLayer,
+  pinPaint,
+  shorelineFilter,
+  shorelineLayers,
+  zoneLayers,
+} from './layers';
+import { makeHatch, poiLetters } from './patterns';
+import type { Bbox, GeoJsonData, ImageLayerData, Visible } from './types';
+
+export interface MapViewProps {
+  theme: ThemeName;
+  bbox: Bbox;
+  zones?: GeoJsonData;
+  bottomLayer?: ImageLayerData;
+  uncertaintyLayer?: ImageLayerData;
+  shorelines?: GeoJsonData;
+  marinas?: GeoJsonData;
+  visible: Visible;
+  basemap: 'osm' | 'orto';
+  npp?: number;
+  pin?: { lon: number; lat: number };
+  onMapClick: (lon: number, lat: number) => void;
+  onReady?: () => void;
+}
+
+const ATTRIBUTION = '© OpenStreetMap contributors · Copernicus Sentinel-2 · GUGiK';
+const EMPTY = { type: 'FeatureCollection', features: [] } as const;
+
+const btn: CSSProperties = {
+  width: 44,
+  height: 44,
+  background: 'var(--panel)',
+  color: 'var(--text)',
+  border: '1px solid var(--border-strong)',
+  borderRadius: 8,
+  fontSize: 20,
+  cursor: 'pointer',
+};
+
+const setVis = (map: MlMap, ids: string[], on: boolean) => {
+  for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+};
+
+export function MapView(props: MapViewProps) {
+  const { theme, visible, basemap } = props;
+  const container = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MlMap | null>(null);
+  const [ready, setReady] = useState(false);
+  const propsRef = useRef(props);
+  propsRef.current = props;
+  const appliedTheme = useRef<ThemeName>(theme);
+  const imageUrls = useRef<Record<string, string>>({});
+
+  // Jedna mapa na cały czas życia komponentu; motyw i dane zmieniamy imperatywnie.
+  useEffect(() => {
+    const p = propsRef.current;
+    const map = new maplibregl.Map({
+      container: container.current!,
+      style: baseStyle(p.basemap),
+      attributionControl: false,
+    });
+    mapRef.current = map;
+    const [w, s, e, n] = p.bbox;
+    map.fitBounds([[w, s], [e, n]], { padding: 24, animate: false });
+    map.addControl(new maplibregl.AttributionControl({ compact: false, customAttribution: ATTRIBUTION }), 'bottom-right');
+    map.on('click', (ev: { lngLat: { lng: number; lat: number } }) =>
+      propsRef.current.onMapClick(ev.lngLat.lng, ev.lngLat.lat),
+    );
+    map.on('load', () => {
+      const t = propsRef.current.theme;
+      appliedTheme.current = t;
+      map.addImage(HATCH_IMAGE, makeHatch(t));
+      const letters = poiLetters(t);
+      map.addImage(POI_IMAGE.marina, letters.P);
+      map.addImage(POI_IMAGE.slipway, letters.S);
+      for (const id of [IDS.zones, IDS.shorelines, IDS.marinas, IDS.pin]) {
+        map.addSource(id, { type: 'geojson', data: EMPTY as never });
+      }
+      for (const l of zoneLayers(t)) map.addLayer(l, undefined);
+      for (const l of shorelineLayers(propsRef.current.npp)) map.addLayer(l, undefined);
+      for (const l of marinaLayers(t)) map.addLayer(l, undefined);
+      map.addLayer(pinLayer(t), undefined);
+      setReady(true);
+      propsRef.current.onReady?.();
+    });
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      imageUrls.current = {};
+      setReady(false);
+    };
+  }, []);
+
+  // Dane GeoJSON: tylko setData.
+  const setData = (id: string, data: GeoJsonData | undefined) => {
+    const src = mapRef.current?.getSource(id) as GeoJSONSource | undefined;
+    if (src && data) src.setData(data as never);
+  };
+  useEffect(() => { if (ready) setData(IDS.zones, props.zones); }, [ready, props.zones]);
+  useEffect(() => { if (ready) setData(IDS.shorelines, props.shorelines); }, [ready, props.shorelines]);
+  useEffect(() => { if (ready) setData(IDS.marinas, props.marinas); }, [ready, props.marinas]);
+  const { pin } = props;
+  useEffect(() => {
+    if (!ready) return;
+    setData(IDS.pin, pin ? { type: 'Feature', geometry: { type: 'Point', coordinates: [pin.lon, pin.lat] }, properties: {} } as GeoJsonData : EMPTY);
+  }, [ready, pin]);
+
+  // Linie poniżej NPP rysujemy przerywane.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    map.setFilter(IDS.shorelines, shorelineFilter(props.npp, false) as never);
+    map.setFilter(IDS.shorelinesDashed, shorelineFilter(props.npp, true) as never);
+  }, [ready, props.npp]);
+
+  // Warstwy rastrowe z obrazów API; url zależy od motywu (?theme=).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    for (const [id, data] of [[IDS.bottom, props.bottomLayer], [IDS.uncertainty, props.uncertaintyLayer]] as const) {
+      if (!data) continue;
+      const url = withTheme(data.url, theme);
+      const spec = { url, coordinates: data.coordinates };
+      const src = map.getSource(id) as ImageSource | undefined;
+      if (!src) {
+        map.addSource(id, { type: 'image', ...spec } as never);
+        map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-fade-duration': 0 } }, IDS.zonesSafe);
+        setVis(map, [id], propsRef.current.visible[id]);
+      } else if (imageUrls.current[id] !== url) {
+        src.updateImage(spec as never);
+      }
+      imageUrls.current[id] = url;
+    }
+  }, [ready, theme, props.bottomLayer, props.uncertaintyLayer]);
+
+  // Zmiana motywu: kolory, kreskowanie, znaczniki i pin; mapa zostaje ta sama.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map || appliedTheme.current === theme) return;
+    appliedTheme.current = theme;
+    const c = ZONE_COLORS[theme];
+    map.setPaintProperty(IDS.zonesSafe, 'fill-color', c.safe);
+    map.setPaintProperty(IDS.zonesDanger, 'fill-color', c.danger);
+    map.updateImage(HATCH_IMAGE, makeHatch(theme));
+    const letters = poiLetters(theme);
+    map.updateImage(POI_IMAGE.marina, letters.P);
+    map.updateImage(POI_IMAGE.slipway, letters.S);
+    map.setPaintProperty(IDS.marinas, 'circle-color', POI_COLORS[theme].bg);
+    map.setPaintProperty(IDS.marinas, 'circle-stroke-color', POI_COLORS[theme].fg);
+    for (const [k, v] of Object.entries(pinPaint(theme))) map.setPaintProperty(IDS.pin, k, v);
+  }, [ready, theme]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    setVis(map, [IDS.zonesSafe, IDS.zonesRisk, IDS.zonesDanger], visible.zones);
+    setVis(map, [IDS.bottom], visible.bottom);
+    setVis(map, [IDS.uncertainty], visible.uncertainty);
+    setVis(map, [IDS.shorelines, IDS.shorelinesDashed], visible.shorelines);
+    setVis(map, [IDS.marinas, IDS.marinasLetters], visible.marinas);
+  }, [ready, visible.zones, visible.bottom, visible.uncertainty, visible.shorelines, visible.marinas, props.bottomLayer, props.uncertaintyLayer]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    setVis(map, [IDS.osm], basemap === 'osm');
+    setVis(map, [IDS.orto], basemap === 'orto');
+  }, [ready, basemap]);
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div ref={container} style={{ position: 'absolute', inset: 0 }} />
+      <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <button type="button" aria-label="Przybliż" style={btn} onClick={() => mapRef.current?.zoomIn()}>+</button>
+        <button type="button" aria-label="Oddal" style={btn} onClick={() => mapRef.current?.zoomOut()}>−</button>
+        <button type="button" aria-label="Północ" style={btn} onClick={() => mapRef.current?.resetNorth()}>N</button>
+      </div>
+    </div>
+  );
+}

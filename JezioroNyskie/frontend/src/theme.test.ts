@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { BOTTOM_RAMP, UNC_DOT, ZONE_COLORS } from './theme';
+import {
+  BOTTOM_RAMP,
+  DAM_COLOR,
+  POI_COLORS,
+  SHORE_COLOR,
+  UNC_DOT,
+  ZONE_COLORS,
+  levelColor,
+} from './theme';
 
 // CSS czytany przez fs: import ?raw bywa pustym stubem przy `css: false` w Vitest.
 const tokensCss = readFileSync(resolve(__dirname, 'styles/tokens.css'), 'utf8');
@@ -39,5 +47,25 @@ describe('theme.ts a tokens.css', () => {
 
   it('krycie stref wynosi 0,55', () => {
     expect(ZONE_COLORS.opacity).toBe(0.55);
+  });
+});
+
+describe('theme.ts: dodatki mapy', () => {
+  for (const theme of ['light', 'dark'] as const) {
+    it(`brzeg, zapora i znaczniki zgodne z tokenami (${theme})`, () => {
+      const t = tokens(theme);
+      expect(SHORE_COLOR[theme]).toBe(t['shore']);
+      expect(DAM_COLOR[theme]).toBe(t['dam']);
+      expect(POI_COLORS[theme].fg).toBe(t['accent']);
+      expect(POI_COLORS[theme].bg).toBe(t['panel']);
+    });
+  }
+
+  it('levelColor: skala 190,0 -> 195,5 z obcięciem', () => {
+    expect(levelColor(190)).toBe('#9cc9e4');
+    expect(levelColor(150)).toBe('#9cc9e4');
+    expect(levelColor(195.5)).toBe('#143f66');
+    expect(levelColor(300)).toBe('#143f66');
+    expect(levelColor(192.75)).toBe('#5884a5'); // środek skali
   });
 });
