@@ -43,3 +43,13 @@ Wyniki (221 scen):
   Znak różnicy zależy od epoki (2024 powyżej B, 2017 i 2022 poniżej), więc to raczej obciążenie metody/pokrycia NMT (2017 i 2022: tylko wschodni nasyp, ≥ 3 z 8 sektorów; stromy profil; położenie linii brzegowej ±10 m) niż jedno stałe przesunięcie układu RZGW. **Uwaga (R12): poziomy A wypełniające luki B (głównie epoka 2017, 36 z 37 scen) są prawdopodobnie ok. 0,3 m za niskie względem B (mediana A−B dla 2017: −0,28 m); nie robimy korekty epokowej.** Wniosek do Task 8: A traktować jako uzupełnienie z niepewnością większą niż deklarowane `h_sigma`.
 - **Pokrycie NMT:** epoki 2017 i 2022 mają NMT tylko dla 2 arkuszy; 7 (2017) i 10 (2022) scen odpadło na sektorach.
 - **M3 (2024-09-06, cel 194,70 ± 0,3):** h_t = B = 194,61 m (A = 194,41 m, epoka 2017).
+
+## 3. Mapa KŻ — georeferencja (`09_kz_digitize.py georef` → `data/processed/kz/kz_meta.json`, `qc_georef.png`)
+
+Po ludzku: mapa KŻ to skan z siatką linii co pół minuty kątowej (WGS84, stopnie i minuty, opis na krawędziach: 17°10′–17°18′, 50°28′–50°26′). Przecięcia tych linii mają znane współrzędne, więc przypinamy do nich skan; kilka przecięć zostawiamy „na boku” i sprawdzamy na nich, czy dopasowanie jest uczciwe.
+
+- Obraz: największy obraz strony PDF, 9867 × 4791 px; linie siatki narysowane cyfrowo (poziomo co 560 px, pionowo co ok. 873,7 px), położenia mierzone medianą po wielu odcinkach linii, nie „na oko”.
+- GCP (`data/reference/kz_gcp.csv`): 19 `fit` i 10 `check`, rozłożone po całej mapie poza legendą (lewy dolny róg).
+- RMSE (m): afiniczna fit 0,93 / check 0,77; wielomian 2. st. fit 0,12 / check 0,13. Wybrany: **poly2** (mniejszy RMSE na punktach wstrzymanych). Wielomian jest potrzebny, bo siatka stopni jest „prostokątna”, a EPSG:2180 to odwzorowanie Gaussa-Krügera.
+- **Werdykt: `good`** (próg ≤ 5 m). Uwaga: RMSE mierzy zgodność skanu z jego siatką, nie błąd rysowania treści mapy; kontrolą niezależną jest zapora.
+- Zapora (OSM `dam`) leży na koronie zapory z mapy w ocenie wzrokowej (nakładka `qc_georef.png` i powiększenia); automatyczny `dam_offset_m` = 12 m (mediana |odsunięcia| najciemniejszego piksela w ±40 m od linii OSM; mediana ze znakiem −2 m, czyli bez systematycznego przesunięcia). Wartość 12 m odzwierciedla szerokość zapory i drogi na mapie (ok. 25 m), nie błąd georeferencji; to kontrola zgrubna.

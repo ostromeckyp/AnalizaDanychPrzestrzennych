@@ -26,10 +26,11 @@ BULLS   := $(PROC)/bulletins.csv
 LEVELSA := $(PROC)/levels_a.csv
 SCENES  := $(PROC)/scenes.json
 BOTTOM  := $(PROC)/model/all/model_meta.json
+KZMETA  := $(PROC)/kz/kz_meta.json
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom test clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef test clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -107,6 +108,10 @@ $(SCENES): $(LEVELS_DEPS)                  # 06: poziom wody h_t każdej sceny (
 bottom: $(BOTTOM)
 $(BOTTOM): $(SCENES)                       # 07: model dna (okresy all, pre_flood, post_flood)
 	$(UV) 07_bottom_model.py
+
+kz-georef: $(KZMETA)
+$(KZMETA): $(REF)/kz_gcp.csv $(LAKE)       # 09 georef: mapa KŻ -> EPSG:2180, RMSE na punktach wstrzymanych, werdykt
+	$(UV) 09_kz_digitize.py georef
 
 test:
 	uv run pytest -q
