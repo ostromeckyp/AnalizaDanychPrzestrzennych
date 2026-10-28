@@ -86,7 +86,7 @@ Liczby i skutki: `docs/raport.md`, `docs/nauka/M7-lidar-kz.md`. Gdy dwie decyzje
 - **P4-R7** NMT 2011 i 2017 przeliczany z KRON86 do EVRF2007 przed liczeniem wariantu A; poziom wody nalotu = `h_water_evrf`. Spójność z `h_datum` w `scenes.json`. Koszt: brak.
 
 **Wariant A i pierwszeństwo poziomów**
-- **P4-R8** Pierwszeństwo **R > B > A > C**: A tylko uzupełnia luki B (specyfikacja §5 pkt 7), zamiast wygrywać z B (wcześniejsze brzmienie planu i spec §6a). Powód: A ma obciążenie zależne od epoki (A − B: 2017 −0,28, 2024 +0,62 m) i pogarszał krzywą C. Gdy są A i B, `h_t` = B, a `h_t_a`, `h_t_b`, `h_diff_ab` zostają jako diagnostyka. Koszt pomyłki: A niewykorzystane w dniach z B; zmiana jedną stałą (`levels.PRECEDENCE`).
+- **P4-R8** Pierwszeństwo **R > B > A > C**: A tylko uzupełnia luki B (specyfikacja §5 pkt 7), zamiast wygrywać z B (wcześniejsze brzmienie planu i spec §6a). Powód: A ma obciążenie zależne od epoki (mediana A − B: 2017 −0,28, 2024 +0,62 m — wartości z chwili decyzji; po ocenie w Task 8 bias 2017 −0,35, 2024 +0,59 m) i pogarszał krzywą C. Gdy są A i B, `h_t` = B, a `h_t_a`, `h_t_b`, `h_diff_ab` zostają jako diagnostyka. Koszt pomyłki: A niewykorzystane w dniach z B; zmiana jedną stałą (`levels.PRECEDENCE`).
 - **P4-R9** Bramka `h_sigma` < 0,3 m (kryterium M3) dla wariantu A. Koszt: mniej scen A (bez niej 54 sceny z rozrzutem do 0,73 m).
 - **P4-R10** Testy backendu na prawdziwych danych (hash wersji modelu, pole strefy bezpiecznej) przepięte na nowy stan danych po P4-R8: przypięte wartości śledzą dane, a dane zmieniły się zasadnie. Koszt: brak.
 - **P4-R11** Krzywa powierzchnia → rzędna (wariant C) dopasowana tylko na R i B; A wyłączone z dopasowania (LOO 0,466 m bez A wobec 0,508 m z A). C nie dziedziczy obciążenia A. Koszt: brak.

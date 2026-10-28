@@ -10,7 +10,8 @@ a jego przedziały [`z_min`, `z_max`] obejmują rzędną NMT tylko w 6,4 %<!-- e
 pikseli; tej rozbieżności nie umiemy jeszcze w pełni wyjaśnić (otwarte ustalenie, §5.2). Pod wodą, w porównaniu z amatorską mapą
 KŻ Nysa, model sprzed powodzi jest średnio o +0,31<!-- eval:kz_points.json:pooled.bias --> m płytszy (RMSE
 0,84<!-- eval:kz_points.json:pooled.rmse --> m), ale na małej próbie (n = 32<!-- eval:kz_points.json:pooled.n -->) i tylko
-w paśmie 192,5–195 m. Model nie wie nic o dnie poniżej ok. 192,9 m (najniższy zaobserwowany poziom wody). **To projekt naukowy;
+w paśmie 192,5–195 m; to porównanie dotyczy wyłącznie modelu `pre_flood`, a model serwowany w aplikacji (`all`) ma jako
+jedyną niezależną kontrolę wynik względem NMT podany wyżej. Model nie wie nic o dnie poniżej ok. 192,9 m (najniższy zaobserwowany poziom wody). **To projekt naukowy;
 aplikacja nie służy do nawigacji** (ten sam napis jest w stopce aplikacji i na stronie „O metodzie”).
 
 Konwencje. Rzędne w m n.p.m.; docelowy układ wysokości PL-EVRF2007-NH, ale poziomy z komunikatów RZGW mają układ nieznany
@@ -42,7 +43,7 @@ liczby mają podane źródło w tekście. Notatki do nauki z uzasadnieniami i py
 |---|---|---|---|---|
 | D1 | Sentinel-2 L2A, 2017–2026 (pasma B02, B03, B04, B08, B11, B12, SCL) | Copernicus (ESA/KE), katalog Earth Search (AWS) | dane Copernicus: bezpłatny, pełny i otwarty dostęp; atrybucja „zawiera zmodyfikowane dane Copernicus Sentinel 2017–2026” | maski woda/ląd, linie brzegowe, model dna, poziom na żywo w aplikacji |
 | D2 | NMT 1 m i chmury punktów LiDAR (LAZ), epoki 2011, 2017, 2022, 2024 | GUGiK, Geoportal (PZGiK, skorowidze WFS) | dane PZGiK udostępniane bezpłatnie; źródło: GUGiK | poziom wody w dniu nalotu, wariant A `h_t`, ocena dna na odsłoniętym brzegu |
-| D4 | Komunikaty o pojemności zbiornika Nysa | RZGW Wrocław (archiwum Wayback Machine, 11.2019–03.2024) i Wody Polskie (gov.pl, od 02.2024) | informacja publiczna; źródło: PGW Wody Polskie | wariant B `h_t` (pojemność → rzędna) |
+| D4 | Komunikaty o pojemności zbiornika Nysa | RZGW Wrocław (archiwum Wayback Machine, 11.2019–03.2024) i Wody Polskie (gov.pl; lista komunikatów sięga od 2024-02-26, więc obejmuje 03.2024–06.2025) | informacja publiczna; źródło: PGW Wody Polskie | wariant B `h_t` (pojemność → rzędna) |
 | D5 | Obrys jeziora, zapora, przystanie, slipy | OpenStreetMap (Overpass) | ODbL 1.0, „© współtwórcy OpenStreetMap” | AOI, bufor zapory, warstwa przystani |
 | D8 | „Jezioro Nyskie (amatorska mapka dla wodniaków)”, W. Wróblewski, KŻ Nysa, aktualizacja 23.05.2023 | `docs/JN_2023_05_23__KZ.pdf` | **bezpłatna, niekomercyjna; dane pozyskane sposobem amatorskim; ryzyko ponosi użytkownik; każda kopia musi zawierać warunki „UWAGA”** (pełny tekst: `data/reference/KZ_ZRODLO_I_WARUNKI.md`) | tabela pojemność ↔ rzędna (wariant B), walidacja dna (K5), kontrola `h_t` (wariant D), obrys żwirowni |
 | — | Znane poziomy: piętrzenie 2025 (197,84–198,00 m), odpowiedź na interpelację (12.09.2024: 194,70 m) | komunikat RZGW 2025, interpelacja poselska | informacja publiczna | punkty kontrolne `h_t` (wariant R, kontrola M3) |
@@ -195,6 +196,10 @@ ok. 0,48 m za nisko.
   0,2 m wyżej): 2024-09-06 B = 194,61<!-- eval:levels.json:control_2024_09_12.scenes.1.B --> m wobec wody LiDAR 194,89 m
   (różnica 0,28 m), a interpelacja (12.09.2024: 194,70 m) + 0,199 m = 194,90 m. To jeden dzień i jedna wartość, więc **nic nie
   korygujemy**; różnica A − B i bias dna zawierają możliwe przesunięcie RZGW ↔ EVRF2007.
+- Dowód przeciwny: gdyby B było w KRON86, B czytane jako EVRF byłoby o ok. 0,2 m za nisko, więc A − B powinno wynosić ok. +0,2 m.
+  Tymczasem dla epok 2017 i 2022 A − B = −0,35<!-- eval:levels.json:a_vs_b.by_lidar_epoch.2017.bias --> m i
+  −0,33<!-- eval:levels.json:a_vs_b.by_lidar_epoch.2022.bias --> m (tylko 2024: +0,59 m). Obciążenie metody A (§3.3) zasłania tu
+  ewentualne przesunięcie układu, więc dane nie rozstrzygają hipotezy w żadną stronę.
 
 ### 3.5 Punkty kontrolne `h_t`
 
@@ -380,7 +385,8 @@ pomiaru amatorski, bez podanej niepewności.
 **Co znaczy bias +0,31 m.** Dno modelu jest średnio o 0,31 m wyżej niż rzędna KŻ, czyli model pokazuje wodę średnio o tyle
 **płytszą** niż mapa (kierunek ostrożny dla żeglarza). Ale RMSE 0,84 m jest prawie trzy razy większe niż bias, a tylko 31 % punktów KŻ
 mieści się w przedziale modelu: pojedyncze miejsca mogą być w modelu głębsze niż na mapie. Próba jest mała (32 punkty) i dotyczy
-tylko pasa 192,5–195 m.
+tylko pasa 192,5–195 m. **Zakres wniosku:** porównanie z KŻ dotyczy wyłącznie modelu `pre_flood` (mapa z 2023 r.); model `all`,
+serwowany w aplikacji, nie był porównywany z KŻ, a jego jedyną niezależną kontrolą jest +1,16 m względem NMT (§5.2).
 
 ### 6.5 Wariant D — kontrola `h_t`
 
@@ -439,7 +445,9 @@ dodanych w planie 4.*
 
 **Nadaje się do:** pokazania, **gdzie** w jeziorze są mielizny względem siebie i jak strefy zmieniają się z poziomem wody;
 porównania okresów i historii linii brzegowych; nauki metody (każdy krok da się sprawdzić w QGIS i w notatkach M1–M7); rzędu
-wielkości rzędnych dna w paśmie 192,5–195 m (bias względem KŻ +0,31 m, RMSE 0,84 m, n = 32).
+wielkości rzędnych dna w paśmie 192,5–195 m **w modelu `pre_flood`** (bias względem KŻ +0,31 m, RMSE 0,84 m, n = 32).
+Uwaga: aplikacja serwuje model `all`, którego z KŻ nie porównywano; jego jedyna niezależna kontrola to +1,16 m (RMSE 1,51 m)
+względem NMT na odsłoniętym brzegu, więc rzędne dna pokazywane w aplikacji należy traktować jako orientacyjne co do metra.
 
 **Nie nadaje się do:** nawigacji ani decyzji o bezpieczeństwie żeglugi (aplikacja: „Projekt naukowy. Nie służy do nawigacji.”);
 podawania głębokości z dokładnością lepszą niż ok. 1 m; traktowania przedziału [`z_min`, `z_max`] jako przedziału ufności (zawiera
@@ -467,10 +475,14 @@ Lista ograniczeń (z notatek M1–M7 i ledgerów planów 1–4):
 9. **Stałe niewalidowane:** próg dominanty 2 %, płaskość 0,03 m, zapas 0,1 m nad wodą arkusza (ocena vs NMT); próg 5 % dla wyboru
    modelu; bufor zapory 150 m; promienie i progi kolorów w digitalizacji KŻ.
 10. **Odtwarzalność:** łańcuch `make` ma reguły z nieaktualnymi datami plików, więc `make levels` może uruchomić retrening RF
-    (godziny); dlatego kroki oceny zależą tylko od kodu i są uruchamiane jawnie (§9).
+    (godziny); dlatego kroki oceny nie zależą w Makefile od tego łańcucha i są uruchamiane jawnie (§9).
 11. **Aplikacja:** poziom „na żywo” pochodzi z krzywej C (σ ok. 0,5 m) na najnowszej scenie; strefy nie są przycinane do obrysu OSM;
     zrzuty ekranu w raporcie sprzed planu 4; podpis kafla KŻ na stronie „O metodzie” mówi o „komórkach 50 m”, a porównanie liczy
     się w pikselu 10 m (§6.4) — do poprawienia w tekście UI.
+12. **Pytanie otwarte do autora (nie decyzja):** reguła wyboru modelu jest mechaniczna (≥ 5 % akwenu ze zmianą dna → `post_flood`,
+    inaczej `all`) i wybrała `all`, choć `pre_flood` wypada lepiej zarówno względem LiDAR (bias +0,20 m wobec +1,16 m, RMSE 0,96 wobec
+    1,51 m), jak i jest jedynym modelem sprawdzonym z KŻ. Warto rozważyć, czy aplikacja nie powinna serwować `pre_flood` (kosztem
+    braku scen po powodzi) albo czy reguła nie powinna uwzględniać wyników oceny.
 
 ---
 
@@ -499,5 +511,7 @@ wpisie: daty lodu (`config.yaml: exclude_dates`), GCP mapy KŻ (`data/reference/
 żwirowni (`zwirownia_vertices.csv`), odrzucone fragmenty poziomic i kotwice punktów (`config.yaml: kz.contour_drop`,
 `kz.spot_position_reject`), znane poziomy (`known_levels.csv`) i tabela KŻ (`kz_pojemnosc_rzedna.csv`). Dane źródłowe pobierają
 skrypty (`01`, `02`, `03`, `06a`; PDF mapy KŻ jest w repo). Wymagane narzędzia poza `uv`: `tesseract` (OCR) i siatki quasi-geoidy
-GUGiK dla PROJ (pobierane przez sieć PROJ). Kroki oceny (`evaluate`, `kz-compare`, `variant-d`) zależą w Makefile tylko od kodu, bo
-łańcuch danych ma nieaktualne daty (ograniczenie 10); po zmianie modelu: `rm data/processed/eval/model_choice.json && make evaluate`.
+GUGiK dla PROJ (pobierane przez sieć PROJ). Kroki oceny celowo nie zależą w Makefile od łańcucha modelu (`scenes.json`, `model/*`), bo
+ten ma nieaktualne daty (ograniczenie 10): `evaluate` zależy tylko od kodu oceny, `kz-compare` od kodu porównania, kontroli punktów KŻ
+i obrysu żwirowni, a `variant-d` od danych KŻ (punkty, poziomice, żwirownia, kontrola punktów). Po zmianie modelu trzeba je wymusić:
+`rm data/processed/eval/model_choice.json && make evaluate` (analogicznie `kz_compare.json`, `variant_d.json`).

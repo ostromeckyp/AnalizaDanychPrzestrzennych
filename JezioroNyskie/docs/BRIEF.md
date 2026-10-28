@@ -425,7 +425,7 @@ Kolejność krytyczna: **M1 → M3**. Jeśli NMT nie pozwala skalibrować poziom
 - [x] BBOX poprawiony według obrysu z OSM (§4).
 - [x] Archiwum komunikatów RZGW: Wayback 11.2019–03.2024 plus gov.pl co najmniej od 06.2025 (§5.1). IMGW ma tylko stację rzeczną.
 - [x] Data nalotu LiDAR dla każdej epoki (GPS time z LAZ) i poziom wody tego dnia (punkty klasy 8). Zrobić w M1. *Zrobione (klasa wody to 9): [raport](raport.md) §3.2, `data/processed/lidar/epochs.csv`.*
-- [ ] Jak daleko wstecz sięga lista komunikatów krajowych gov.pl (czy obejmuje 03.2024–06.2025)? *Wynik: [raport](raport.md) §1.1.*
+- [x] Jak daleko wstecz sięga lista komunikatów krajowych gov.pl (czy obejmuje 03.2024–06.2025)? *Lista sięga od 2024-02-26, więc obejmuje ten okres: [raport](raport.md) §1.1.*
 - [ ] Zmiana pojemności przy NPP / Max PP między 2021 (66,3 / 122,1) a 2024+ (65,7 / 121,7): która krzywa V ↔ h obowiązywała kiedy? *Stan: nierozstrzygnięte, [raport](raport.md) §3.1.*
 - [x] Przeliczenie epok KRON86 (2011, 2017) do EVRF2007. *Zrobione siatkami quasi-geoidy GUGiK (+0,199 m): [raport](raport.md) §1.2.*
 - [ ] Ostateczny termin oddania projektu i forma obrony (pierwszy termin, link do repo, minął 17.10.2026).

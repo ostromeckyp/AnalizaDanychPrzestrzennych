@@ -115,6 +115,12 @@ Licencja MIT **nie obejmuje danych** ani materiałów pochodzących z mapy KŻ; 
 | NMT 1 m i chmury punktów LiDAR | GUGiK (Geoportal, PZGiK) | dane PZGiK udostępniane bezpłatnie; źródło: GUGiK |
 | obrys jeziora, zapora, przystanie | OpenStreetMap | ODbL 1.0, „© współtwórcy OpenStreetMap” (atrybucja na mapie aplikacji) |
 | komunikaty o pojemności zbiornika Nysa, znane poziomy | RZGW Wrocław / PGW Wody Polskie | informacja publiczna; źródło: PGW Wody Polskie |
-| mapa „Jezioro Nyskie (amatorska mapka dla wodniaków)”, `docs/JN_2023_05_23__KZ.pdf`, oraz wszystko, co z niej wyprowadzono (`data/reference/kz_*.csv`, `zwirownia*.{gpkg,csv}`, `data/processed/kz/`, `docs/img/kz-overlay.png`, warstwa żwirowni w aplikacji) | Wiktor Wróblewski, KŻ Nysa, aktualizacja 23.05.2023 | **tylko niekomercyjnie**; dane pozyskane sposobem amatorskim, mogą zawierać błędy; całość ryzyka ponosi użytkownik; **każda kopia musi zawierać warunki „UWAGA”** — pełny tekst: [`data/reference/KZ_ZRODLO_I_WARUNKI.md`](data/reference/KZ_ZRODLO_I_WARUNKI.md) |
+| mapa „Jezioro Nyskie (amatorska mapka dla wodniaków)”, `docs/JN_2023_05_23__KZ.pdf`, oraz wszystko, co z niej wyprowadzono (`data/reference/kz_*.csv`, wycinek testowy `pipeline/tests/fixtures/kz_crop.png` z warunkami w `KZ_CROP_TERMS.md`, `zwirownia*.{gpkg,csv}`, `data/processed/kz/`, `docs/img/kz-overlay.png`, warstwa żwirowni w aplikacji) | Wiktor Wróblewski, KŻ Nysa, aktualizacja 23.05.2023; podkład mapy: © współtwórcy OpenStreetMap (ODbL) | **tylko niekomercyjnie**; dane pozyskane sposobem amatorskim, mogą zawierać błędy; całość ryzyka ponosi użytkownik; **każda kopia musi zawierać warunki „UWAGA”** — pełny tekst: [`data/reference/KZ_ZRODLO_I_WARUNKI.md`](data/reference/KZ_ZRODLO_I_WARUNKI.md) |
+
+Próbki danych w repo (`data/raw/check/`, wynik weryfikacji źródeł z BRIEF §5.1) mają licencje swoich źródeł: `osm_objects.json` —
+OpenStreetMap, ODbL 1.0; `nmt_test.tif` (wycinek NMT) i `orto_test.jpg` (wycinek ortofotomapy) — GUGiK; `rzgw_wayback_sample.pdf`
+oraz indeksy `rzgw_wayback_index.csv` i `govpl_komunikaty_index.csv` — RZGW Wrocław / PGW Wody Polskie (informacja publiczna, kopia z
+Wayback Machine); `s2_scenes_earthsearch.csv` — metadane Copernicus Sentinel-2; `wfs_skorowidze.json` — skorowidze GUGiK.
+Fikstury testów z komunikatów i skorowidzów (`pipeline/tests/fixtures/`) pochodzą z tych samych źródeł.
 
 Projekt jest naukowy i niekomercyjny (bez przychodów, reklam i płatnych funkcji).
