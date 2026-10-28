@@ -32,11 +32,13 @@ KZCONT  := $(PROC)/kz/kz_contours.gpkg
 LEVELSD := $(PROC)/kz/levels_d.csv
 EVALD   := $(PROC)/eval/variant_d.json
 EVALCH  := $(PROC)/eval/model_choice.json
+EVALKZ  := $(PROC)/eval/kz_compare.json
+KZOVER  := ../docs/img/kz-overlay.png
 ZWIR    := $(REF)/zwirownia.gpkg
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d evaluate test clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate test clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -146,6 +148,17 @@ $(ZWIR): $(KZMETA) $(LAKE) $(REF)/zwirownia_vertices.csv   # 09 gravel: obrys re
 variant-d: $(EVALD)
 $(EVALD): $(KZSPOTS) $(KZCONT) $(ZWIR) $(wildcard $(REF)/kz_spot_qc.csv)
 	$(UV) 10_kz_compare.py variant-d
+
+# kz-compare / kz-overlay (K5): punkty, poziomice, go/no-go i nakladka. Zaleznosci TYLKO od kodu porownania i danych KŻ-referencyjnych;
+# model, spots i kz_contours maja reguly, ale ich lancuch ma nieaktualne daty (make odpalilby kz-spots/RF), wiec nie sa prerekwizytami.
+# Po zmianie modelu/QC: rm $(EVALKZ) && make kz-compare.  Nie dotyka variant_d.json.
+kz-compare: $(EVALKZ)
+$(EVALKZ): 10_kz_compare.py mielizna/kz_compare.py $(wildcard $(REF)/kz_spot_qc.csv) $(ZWIR)
+	$(UV) 10_kz_compare.py compare
+
+kz-overlay: $(KZOVER)
+$(KZOVER): 10_kz_compare.py mielizna/kz_compare.py $(wildcard $(REF)/kz_spot_qc.csv)
+	$(UV) 10_kz_compare.py overlay
 
 # evaluate: ocena dokladnosci (§7). Zaleznosci TYLKO od kodu oceny: pliki wejsciowe (scenes.json, model/*, epochs.csv) maja w tym
 # Makefile reguly, a ich lancuch ma nieaktualne daty (make wymusilby retrening RF/klasyfikacje), wiec nie sa prerekwizytami.

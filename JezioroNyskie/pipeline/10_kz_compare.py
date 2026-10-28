@@ -1,4 +1,12 @@
-"""10 - Porównanie z mapą KŻ: wariant D (kontrola poziomów wody z powierzchni dna KŻ); dalsze podkomendy w Task 9.
+"""10 - Porównanie z mapą KŻ: wariant D (kontrola poziomów wody) oraz K5: punkty, poziomice, nakładka.
+
+Podkomendy K5 (`points`, `contours`, `overlay`; `compare` = points + contours + kz_compare.json): porównują dno modelu
+  `pre_flood` z rzędnymi punktowymi i poziomicami mapy KŻ (mielizna/kz_compare.py), zapisują
+  data/processed/eval/{kz_points,kz_contours,kz_compare}.json i docs/img/kz-overlay.png (mapa KŻ pod strefami modelu).
+  Wynik jest orientacyjny: mapa KŻ jest amatorska, a poziomice to próbka „precision-first” (patrz kz_contours_stats.json).
+  Układ wysokości KŻ jest nieznany: bias jest zestawiany z `datum_offset` i biasami LiDAR, bez korekt (go_no_go.notes).
+  Punkty bez ręcznej kontroli (jeśli są) wchodzą po filtrze koloru i pewności; `ocr_error_rate` jest ważony warstwami.
+  Użycie: uv run python 10_kz_compare.py {points|contours|overlay|compare}
 
 Co robi (`variant-d`): z punktów rzędnych KŻ (po kontroli ręcznej, a bez niej po filtrze koloru i pewności OCR;
   `kz.load_qc_spots`) i poziomic 192,5 oraz 195,0 m buduje powierzchnię dna (TIN na siatce modelu, NaN poza otoczką
@@ -29,13 +37,177 @@ import rasterio
 import shapely
 from rasterio.features import rasterize
 
-from mielizna import kz, variant_d
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from pathlib import Path
+
+from mielizna import bottom, kz, kz_compare, variant_d
 from mielizna.config import data_path
 from mielizna.grid import reference_grid
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 log = logging.getLogger("10_kz_compare")
 PRE_FLOOD_END = "2024-08-31"
+IMG = Path(__file__).resolve().parents[1] / "docs" / "img"
+UWAGA = ("UWAGA: 1. Dane zawarte w obrysie zbiornika pozyskano i odwzorowano sposobem amatorskim, toteż mogą być obarczone błędami. "
+         "2. Niniejszą mapkę udostępnia się nieodpłatnie, zatem nie może służyć celom komercyjnym. "
+         "3. CAŁOŚĆ RYZYKA związanego z ewentualnymi stratami powstałymi wskutek decyzji korzystania z mapki PONOSI UŻYTKOWNIK. "
+         "KAŻDA KOPIA MAPKI MUSI ZAWIERAĆ POWYŻSZE WARUNKI. DNO ZBIORNIKA PONIŻEJ RZĘDNEJ 192.5 ODWZOROWANO ORIENTACYJNIE "
+         "Z POWODU NIEWYSTARCZAJĄCEJ ILOŚCI DANYCH.")
+SOURCE = ("Tło: Wiktor Wróblewski, KŻ Nysa, „Jezioro Nyskie (amatorska mapka dla wodniaków)”, aktualizacja 23.05.2023; "
+          "dane otoczenia: OpenStreetMap.org. Źródło i warunki: data/reference/KZ_ZRODLO_I_WARUNKI.md")
+DRAFT, MARGIN = 0.5, 0.3      # parametry ilustracyjne stref nakładki (zanurzenie, zapas); to nie jest wynik oceny
+
+
+def _qc_spots():
+    proc = data_path("processed")
+    ocr = gpd.read_file(proc / "kz" / "kz_spot_ocr.gpkg")
+    qc_path = data_path("reference", "kz_spot_qc.csv")
+    qc = pd.read_csv(qc_path) if qc_path.exists() else None
+    return ocr, qc, kz.load_qc_spots(ocr, qc)
+
+
+def _clean(o):
+    """NaN/inf -> None (JSON bez NaN, bo backend i przeglądarka go nie przyjmą)."""
+    if isinstance(o, dict):
+        return {k: _clean(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_clean(v) for v in o]
+    if isinstance(o, (float, np.floating)):
+        return float(o) if np.isfinite(o) else None
+    return o
+
+
+def _write(name: str, obj) -> None:
+    obj = _clean(obj)
+    out = data_path("processed", "eval")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / name).write_text(json.dumps(obj, ensure_ascii=False, indent=1, default=float) + "\n", encoding="utf-8")
+
+
+def _json(path):
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def run_points() -> dict:
+    proc = data_path("processed")
+    grid = reference_grid()
+    ocr, qc, spots = _qc_spots()
+    meta = _json(proc / "kz" / "kz_meta.json")
+    gravel = gpd.read_file(data_path("reference", "zwirownia.gpkg")).geometry.union_all()
+    model, _ = bottom.read_model(proc / "model" / "pre_flood")
+    npp = kz_compare.npp_level(pd.read_csv(data_path("reference", "kz_pojemnosc_rzedna.csv")))
+    res = kz_compare.compare_points(spots, model, gravel, npp=npp, grid=grid, verdict=meta["verdict"])
+    res.update({"georef_verdict": meta["verdict"], "georef_rmse_check_m": meta["rmse_check"], "model": "pre_flood",
+                "n_spots_used": int(len(spots)), "n_spots_checked": int(spots.checked.sum()),
+                "spots_source": spots.z_source.value_counts().to_dict(),
+                "gravel_excluded": int(shapely.contains_xy(gravel, spots.geometry.x, spots.geometry.y).sum()),
+                "bias_definition": "bias = średnia(model z - KŻ z)", "indicative": True})
+    if qc is not None and len(qc):
+        matched, n_unmatched = kz.match_qc(qc, ocr)                          # QC z kotwicą -> id punktu OCR
+        matched = matched.merge(ocr[["id", "color_ok", "conf"]], on="id", how="left")
+        rate, n_ev = kz.ocr_error_rate(matched, ocr)
+        res["ocr_error_rate"] = {"rate_weighted": rate, "n_judged": n_ev, "n_population": int(len(ocr)), "n_unmatched_qc_rows": n_unmatched,
+                                 "qc_counts": qc.qc.value_counts().to_dict(),
+                                 "note": "ważony warstwami (podejrzane vs pewne); próg roboczy <= 10 % na próbie >= 200"}
+    _write("kz_points.json", res)
+    p = res["pooled"]
+    log.info("punkty: pooled n=%d rmse=%.2f bias=%+.2f in_bounds=%.2f; pasma %s", p["n"], p["rmse"], p["bias"], p["share_in_bounds"],
+             {k: (res[k]["n"], round(res[k]["bias"], 2) if res[k]["n"] else None) for k in kz_compare.BAND_KEYS})
+    return res
+
+
+def run_contours() -> dict:
+    proc = data_path("processed")
+    grid = reference_grid()
+    model, _ = bottom.read_model(proc / "model" / "pre_flood")
+    kzc = gpd.read_file(proc / "kz" / "kz_contours.gpkg")
+    res = {"model": "pre_flood", "indicative": True,
+           "note": "poziomice KŻ to próbka precision-first (nie cała poziomica); wynik orientacyjny"}
+    for level in (192.5, 195.0):
+        kz_geom = shapely.union_all(kzc[kzc.level == level].geometry.to_numpy())
+        r = kz_compare.compare_contours(kz_geom, kz_compare.model_contour(model["z"], grid, level))
+        r["n_kz_lines"] = int((kzc.level == level).sum())
+        res[f"{level:.1f}"] = r
+        log.info("poziomica %.1f: %s", level, {k: round(v, 3) if isinstance(v, float) else v for k, v in r.items()})
+    _write("kz_contours.json", res)
+    return res
+
+
+def run_compare() -> int:
+    pts = run_points()
+    con = run_contours()
+    proc = data_path("processed")
+    ep = pd.read_csv(proc / "lidar" / "epochs.csv")
+    offset = float(ep.loc[ep.uklad_h != "PL-EVRF2007-NH", "datum_offset"].iloc[0])
+    nmt = _json(proc / "eval" / "bottom_vs_nmt.json")
+    others = {"wszystkie epoki, model all": nmt["all"]["bias"], "pre_flood zbiorczo": nmt["pre_flood"]["bias"]}
+    p = pts["pooled"]
+    gng = kz_compare.go_no_go(p["bias"], offset, others)
+    out = {"points": {k: p[k] for k in ("rmse", "bias", "mae", "n", "bands", "share_in_bounds", "n_spots")},
+           "go_no_go": gng, "ocr_error_rate": pts.get("ocr_error_rate"), "bands": {k: pts[k] for k in kz_compare.BAND_KEYS},
+           "contours": {k: v for k, v in con.items() if k[0].isdigit()}, "georef_verdict": pts["georef_verdict"],
+           "unit": pts["unit"], "npp": pts["npp"], "indicative": True,
+           "source": "data/reference/KZ_ZRODLO_I_WARUNKI.md"}
+    _write("kz_compare.json", out)
+    log.info("go/no-go: %s (bias %+.2f)", gng["decision"], p["bias"])
+    return 0
+
+
+def run_overlay() -> int:
+    proc = data_path("processed")
+    grid = reference_grid()
+    model, _ = bottom.read_model(proc / "model" / "pre_flood")
+    npp = kz_compare.npp_level(pd.read_csv(data_path("reference", "kz_pojemnosc_rzedna.csv")))
+    zl, zh, z = model["z_min"], model["z_max"], model["z"]
+    in_model = np.isfinite(z)
+    lo = np.where(np.isnan(zl), -np.inf, zl)
+    hi = np.where(np.isnan(zh), np.inf, zh)
+    with np.errstate(invalid="ignore"):
+        cls = np.full(z.shape, 2, int)                          # 2 = ryzyko
+        cls[npp - hi >= DRAFT + MARGIN] = 1                     # 1 = bezpiecznie (jak backend/app/zones.py)
+        cls[npp - lo < DRAFT] = 3                               # 3 = zbyt płytko
+    cls = np.where(in_model & (npp > z), cls, 0)
+    cmap = ListedColormap([(0, 0, 0, 0), (0.1, 0.65, 0.25, 0.5), (0.95, 0.75, 0.1, 0.5), (0.85, 0.15, 0.15, 0.5)])
+    with rasterio.open(proc / "kz" / "kz_map_2180.tif") as ds:
+        img = np.moveaxis(ds.read(), 0, -1)
+        b = ds.bounds
+    rgba = img.astype(float) / 255.0
+    rgba[..., 3] = 0.55 * rgba[..., 3]                          # mapa KŻ półprzezroczysta
+    fig, ax = plt.subplots(figsize=(13, 7.4))
+    ax.imshow(rgba, extent=(b.left, b.right, b.bottom, b.top), interpolation="bilinear")
+    xmin, ymin, xmax, ymax = grid.bounds()
+    ax.imshow(cls, extent=(xmin, xmax, ymin, ymax), cmap=cmap, vmin=0, vmax=3, interpolation="nearest")
+    for level, col in ((192.5, "#7b3294"), (195.0, "#d7301f")):
+        line = kz_compare.model_contour(z, grid, level)
+        for g in line.geoms:
+            ax.plot(*g.xy, color=col, lw=1.0)
+    kzc = gpd.read_file(proc / "kz" / "kz_contours.gpkg")
+    for level, col in ((192.5, "#7b3294"), (195.0, "#d7301f")):
+        for g in kzc[kzc.level == level].geometry:
+            ax.plot(*g.xy, color=col, lw=1.0, ls=(0, (1, 2)), alpha=0.9)
+    _, _, spots = _qc_spots()
+    ax.scatter(spots.geometry.x, spots.geometry.y, s=3, c="k", alpha=0.6, zorder=5)
+    ax.set_xlim(b.left, b.right); ax.set_ylim(b.bottom, b.top); ax.set_aspect("equal"); ax.axis("off")
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+    ax.legend(handles=[Patch(color=(0.1, 0.65, 0.25, 0.6), label=f"strefa bezpieczna (zanurzenie {DRAFT} m + zapas {MARGIN} m)"),
+                       Patch(color=(0.95, 0.75, 0.1, 0.6), label="strefa ryzyka"), Patch(color=(0.85, 0.15, 0.15, 0.6), label="zbyt płytko"),
+                       Line2D([], [], color="#7b3294", label="poziomica 192,5 m: model (ciągła) / KŻ (kropkowana)"),
+                       Line2D([], [], color="#d7301f", label="poziomica 195,0 m: model (ciągła) / KŻ (kropkowana)"),
+                       Line2D([], [], marker="o", color="k", ls="", ms=3, label="rzędne punktowe KŻ użyte w ocenie")],
+              loc="upper left", fontsize=7.5, framealpha=0.9)
+    ax.set_title(f"Model dna (pre_flood) na tle mapy KŻ Nysa; strefy przy NPP = {npp:.2f} m n.p.m. (ilustracja, nie ocena)", fontsize=10)
+    import textwrap
+    fig.text(0.01, 0.01, "\n".join(textwrap.wrap(SOURCE, 190) + textwrap.wrap(UWAGA, 190)), fontsize=6, va="bottom", ha="left")
+    fig.subplots_adjust(left=0.01, right=0.99, top=0.95, bottom=0.14)
+    IMG.mkdir(parents=True, exist_ok=True)
+    fig.savefig(IMG / "kz-overlay.png", dpi=130)
+    log.info("zapisano %s", IMG / "kz-overlay.png")
+    return 0
 
 
 def run_variant_d() -> int:
@@ -110,9 +282,10 @@ def run_variant_d() -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("cmd", choices=["variant-d"])
+    ap.add_argument("cmd", choices=["variant-d", "points", "contours", "overlay", "compare"])
     args = ap.parse_args(argv)
-    return {"variant-d": run_variant_d}[args.cmd]()
+    return {"variant-d": run_variant_d, "points": lambda: (run_points(), 0)[1], "contours": lambda: (run_contours(), 0)[1],
+            "overlay": run_overlay, "compare": run_compare}[args.cmd]()
 
 
 if __name__ == "__main__":

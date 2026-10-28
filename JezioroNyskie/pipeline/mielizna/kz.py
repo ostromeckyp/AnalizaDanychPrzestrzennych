@@ -818,4 +818,5 @@ def load_qc_spots(ocr: "gpd.GeoDataFrame", qc: pd.DataFrame | None) -> "gpd.GeoD
     keep_unchecked = unchecked & ~is_suspect(out)
     out.loc[keep_unchecked, "z_source"] = "ocr_ok"
     keep = out["z_source"].isin(["ocr_ok", "qc_ok", "qc_corrected", "qc_corrected_fallback"])
+    out["checked"] = out["z_source"].str.startswith("qc_")             # sprawdzony ręcznie (ok/corrected), nie tylko filtr
     return out[keep].reset_index(drop=True)
