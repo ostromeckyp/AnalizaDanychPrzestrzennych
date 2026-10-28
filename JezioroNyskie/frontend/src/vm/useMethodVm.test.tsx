@@ -60,6 +60,8 @@ describe('useMethodVm', () => {
     expect(t.value).toBe('RMSE 0,62\u00a0m');
     expect(t.sub).toContain('obciążenie -0,20\u00a0m');
     expect(t.sub).toMatch(/sprzed powodzi/);
+    expect(t.sub).toMatch(/komórka modelu 10 m pod punktem/);
+    expect(t.sub).not.toMatch(/50 m/);
   });
 
   it('step 03 describes variant A as working with its scene count; step 04 states the model period', async () => {

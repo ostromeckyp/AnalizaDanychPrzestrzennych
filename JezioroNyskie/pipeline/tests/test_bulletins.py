@@ -147,3 +147,109 @@ def test_list_govpl_recovers_typo_year():
             '<a href="https://www.gov.pl/attachment/22222222-2222-2222-2222-222222222222">'
             'Komunikat z dnia 15.11.20259</a>')
     assert [d for d, _ in list_govpl(html)] == [date(2024, 11, 15)]   # 20259 nie pasuje do 2020X - pominięte
+
+
+# --- latest_govpl: najnowszy komunikat z odświeżaniem listy (przycisk w aplikacji) ---------------
+
+URL_1026 = "https://www.gov.pl/attachment/f2aa91d1-d9e3-4a73-92ba-73d936d5da8d"
+URL_1022 = "https://www.gov.pl/attachment/7c1bef52-5471-411c-840f-2eb94cb0be82"
+
+
+class FakeResp:
+    def __init__(self, text="", content=b"", status=200):
+        self.text, self.content, self.status_code = text, content, status
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise bulletins.requests.HTTPError(str(self.status_code))
+
+
+def make_fetch(calls, list_html=None, bad=()):
+    def fetch(url, **kw):
+        calls.append(url)
+        if url == bulletins.GOVPL_LIST_URL:
+            return FakeResp(text=list_html if list_html is not None else read("govpl_list.html"))
+        return FakeResp(content=b"%PDF-1.4 fake", status=404 if url in bad else 200)
+    return fetch
+
+
+@pytest.fixture
+def pdf_text(monkeypatch):
+    """Tekst „PDF" zależny od nazwy pliku: 26.10 i 22.10 → fixture z 22.10 (v 40,2), inne → 12.03 (v 61,23)."""
+    def fake(path):
+        return read("govpl_2026-10-22.txt") if path.stem in (URL_1026[-36:], URL_1022[-36:]) \
+            else read("govpl_2024-03-12.txt")
+    monkeypatch.setattr(bulletins, "_pdf_text", fake)
+
+
+def test_latest_govpl_returns_newest(tmp_path, pdf_text):
+    calls = []
+    r = bulletins.latest_govpl(tmp_path, fetch=make_fetch(calls))
+    assert r["bulletin_date"] == date(2026, 10, 26) and r["url"] == URL_1026
+    assert (r["v_current"], r["v_npp"], r["v_maxpp"]) == (40.2, 65.7, 121.7)
+    assert r["source"] == "govpl" and "reading_utc" in r
+    assert calls == [bulletins.GOVPL_LIST_URL, URL_1026]
+
+
+def test_latest_govpl_list_cache_ttl(tmp_path, pdf_text):
+    calls = []
+    f = make_fetch(calls)
+    bulletins.latest_govpl(tmp_path, fetch=f)
+    bulletins.latest_govpl(tmp_path, fetch=f, max_age_s=3600)          # świeża lista i PDF z cache: zero sieci
+    assert calls.count(bulletins.GOVPL_LIST_URL) == 1 and calls.count(URL_1026) == 1
+    old = tmp_path / "govpl_list.html"
+    import os
+    os.utime(old, (1, 1))                                               # lista starsza niż TTL → odświeżenie
+    bulletins.latest_govpl(tmp_path, fetch=f, max_age_s=3600)
+    assert calls.count(bulletins.GOVPL_LIST_URL) == 2
+
+
+def test_latest_govpl_refresh_picks_up_new_entry(tmp_path, pdf_text):
+    f1 = make_fetch([])
+    bulletins.latest_govpl(tmp_path, fetch=f1)
+    new = "9d1b0c3e-0000-4000-8000-000000000001"
+    html = read("govpl_list.html") + (f'<a href="https://www.gov.pl/attachment/{new}">'
+                                       'Komunikat z dnia 27.10.2026</a>')
+    import os
+    os.utime(tmp_path / "govpl_list.html", (1, 1))
+    r = bulletins.latest_govpl(tmp_path, fetch=make_fetch([], list_html=html))
+    assert r["bulletin_date"] == date(2026, 10, 27)
+
+
+def test_latest_govpl_falls_back_to_previous_when_unreadable(tmp_path, pdf_text):
+    calls = []
+    r = bulletins.latest_govpl(tmp_path, fetch=make_fetch(calls, bad={URL_1026}))   # 404 na najnowszym
+    assert r["bulletin_date"] == date(2026, 10, 22) and r["url"] == URL_1022
+
+
+def test_latest_govpl_tries_at_most_three(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(bulletins, "_pdf_text", lambda p: "brak tabeli")
+    assert bulletins.latest_govpl(tmp_path, fetch=make_fetch(calls)) is None
+    assert len([c for c in calls if c != bulletins.GOVPL_LIST_URL]) == 3
+
+
+def test_latest_govpl_network_error_on_list_raises(tmp_path):
+    def boom(url, **kw):
+        raise bulletins.requests.ConnectionError("down")
+    with pytest.raises(bulletins.requests.RequestException):
+        bulletins.latest_govpl(tmp_path, fetch=boom)
+    assert not (tmp_path / "govpl_list.html").exists()
+
+
+def test_latest_govpl_pdf_network_error_raises_without_long_backoff(tmp_path):
+    def f(url, **kw):
+        if url == bulletins.GOVPL_LIST_URL:
+            return FakeResp(text=read("govpl_list.html"))
+        raise bulletins.requests.ConnectionError("down")
+    import time
+    t = time.monotonic()
+    with pytest.raises(bulletins.DownloadError):
+        bulletins.latest_govpl(tmp_path, fetch=f)
+    assert time.monotonic() - t < 5
+
+
+def test_fetch_govpl_list_still_never_refreshes(tmp_path, monkeypatch):
+    (tmp_path / "govpl_list.html").write_text(read("govpl_list.html"), encoding="utf-8")
+    monkeypatch.setattr(bulletins.requests, "get", lambda *a, **k: pytest.fail("sieć"))
+    assert len(bulletins.fetch_govpl_list(tmp_path)) == 6

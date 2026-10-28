@@ -42,6 +42,7 @@ vi.mock('../api/client', async (orig) => {
       currentLevel: vi.fn(),
       marinas: vi.fn(),
       gravel: vi.fn(),
+      bulletinLatest: vi.fn(),
       capacityToLevel: vi.fn(),
       levelToCapacity: vi.fn(),
     },
@@ -245,5 +246,22 @@ describe('MapPage', () => {
     // strefy dla 195 są już w cache, więc sprawdzamy to, co dostaje mapa
     await waitFor(() => expect((mapProps.last!.zones as { params: { h: number } }).params.h).toBe(195));
     expect(screen.getByRole('slider')).toHaveValue('195');
+  });
+
+  it('bulletin button: nothing fetched at start; click switches to capacity mode with the bulletin value', async () => {
+    m.bulletinLatest.mockResolvedValue({
+      bulletin_date: '2026-10-27', reading_utc: '06:00', v_current: 41.5, h: 195.4, in_table: true, v_npp: 65.7,
+      url: 'https://www.gov.pl/attachment/x', fetched_at: '2026-10-28T08:00:00Z', stale: false, source: 'govpl',
+    });
+    m.capacityToLevel.mockImplementation(async (v) => ({ v, h: 195.4, in_table: true }));
+    renderPage('/?h=194');
+    await screen.findByText('Kliknij w wodę, aby sprawdzić głębokość');
+    expect(m.bulletinLatest).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Pobierz stan z Wód Polskich' }));
+    expect(await screen.findByText(/Komunikat RZGW z 27\.10\.2026/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pojemność' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText(/Pojemność z komunikatu RZGW/)).toHaveValue('41,5');
+    await waitFor(() => expect(m.capacityToLevel).toHaveBeenCalledWith(41.5, expect.anything()));
+    await waitFor(() => expect(m.zones).toHaveBeenLastCalledWith(expect.objectContaining({ h: 195.4 }), expect.anything()));
   });
 });

@@ -11,6 +11,7 @@ Wejście → wyjście: słowniki z `app.main` → walidowane modele → JSON.
 Jak to obronić: zmiana modelu zmienia `openapi.json`, a test migawki wymusza jej świadome odświeżenie
   (`uv run python scripts/export_openapi.py`).
 """
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -228,6 +229,19 @@ class LevelToCapacity(BaseModel):
     h: float
     v: float | None
     in_table: bool
+
+
+class BulletinLatest(BaseModel):
+    bulletin_date: date
+    reading_utc: str | None
+    v_current: float
+    h: float | None              # rzędna z tabeli KŻ (jak /api/capacity-to-level); None poza tabelą
+    in_table: bool
+    v_npp: float | None
+    url: str
+    fetched_at: datetime
+    stale: bool
+    source: Literal["govpl", "pipeline"]
 
 
 class CurrentLevelResponse(BaseModel):

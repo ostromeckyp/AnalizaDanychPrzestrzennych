@@ -12,6 +12,7 @@ Wejście → wyjście: `create_app(settings, products, *, search_fn, load_fn)` �
   `GET /api/layers/{bottom,uncertainty}.png?theme=light|dark` → PNG (ETag, 304);
   `GET /api/scenes` → `list[SceneOut]`; `GET /api/shorelines?date=` → GeoJSON `Feature` (EPSG:4326, 404 gdy brak);
   `GET /api/marinas` → `FeatureCollection`; `GET /api/capacity-to-level?v=` / `/api/level-to-capacity?h=` → `{v, h, in_table}`.
+  `GET /api/bulletin/latest` → `BulletinLatest` (najnowszy komunikat Wód Polskich, TTL 1 h, fallback CSV, 404 gdy brak).
   `GET /api/current-level` → `CurrentLevelResponse` (zawsze 200, `no-cache`; z `settings.live` odświeżane w tle).
   `search_fn` i `load_fn` (wstrzykiwane wyszukiwanie STAC / wczytanie sceny) trafiają do `CurrentLevelService`;
   pętla `refresh_loop` działa w `lifespan` i jest anulowana przy zamknięciu.
@@ -23,6 +24,7 @@ import functools
 import json
 import logging
 import math
+import time
 from contextlib import asynccontextmanager
 from typing import Literal
 
@@ -31,12 +33,12 @@ from fastapi.exceptions import RequestValidationError
 from mielizna.config import load_config
 from pyproj import Transformer
 
-from app import current
+from app import bulletin, current
 from app.cache import TTLStore
 from app.data import Products, capacity_to_level, level_to_capacity, load_products, short_hash
 from app.layers import RENDER_VERSION, UNC_MIN, layer_coordinates, bottom_breaks, render_bottom_png, render_uncertainty_png
 from app.point import point_info
-from app.schemas import (CapacityToLevel, CurrentLevelResponse, GravelResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
+from app.schemas import (BulletinLatest, CapacityToLevel, CurrentLevelResponse, GravelResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
                          SceneOut, ShorelineFeature, ZonesResponse)
 from app.settings import Settings, get_settings
 from app.zones import (round_param, zone_classes, zone_stats, zone_warnings, zones_geojson)
@@ -195,7 +197,7 @@ async def refresh_loop(service: current.CurrentLevelService, interval_s: float) 
 
 
 def create_app(settings: Settings | None = None, products: Products | None = None, *,
-               search_fn=None, load_fn=None) -> FastAPI:
+               search_fn=None, load_fn=None, bulletin_fn=None, clock=time.time) -> FastAPI:
     settings = settings or get_settings()
 
     def build_service() -> current.CurrentLevelService:
@@ -224,6 +226,8 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
 
     app = FastAPI(title="Mielizna API", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
+    app.state.bulletin = bulletin.BulletinService(
+        settings.current_cache_dir, settings.data_dir, settings.live, bulletin_fn or bulletin.default_fetch, clock)
     app.state.products = products
     app.state.cache = TTLStore()
     app.state.search_fn, app.state.load_fn = search_fn, load_fn
@@ -352,6 +356,18 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
     def current_level(request: Request):
         """Bieżący poziom (najnowsza scena S2 albo pipeline); odpowiedź natychmiastowa, zawsze 200."""
         body = CurrentLevelResponse(**request.app.state.current.get())
+        return Response(content=body.model_dump_json(), media_type="application/json",
+                        headers={"Cache-Control": "no-cache"})
+
+    @app.get("/api/bulletin/latest", response_model=BulletinLatest,
+             responses={404: {"description": "brak komunikatu (sieć niedostępna i brak danych pipeline'u)"}})
+    def bulletin_latest(request: Request):
+        """Najnowszy komunikat Wód Polskich: pojemność i rzędna z tabeli KŻ; przy braku sieci ostatni znany (`stale`)."""
+        b = request.app.state.bulletin.get()
+        if b is None:
+            raise HTTPException(404, "Brak komunikatu Wód Polskich: nie udało się go pobrać, a danych z pipeline'u nie ma.")
+        h = finite_or_none(capacity_to_level(request.app.state.products, b["v_current"]))
+        body = BulletinLatest(**b, h=h, in_table=h is not None)
         return Response(content=body.model_dump_json(), media_type="application/json",
                         headers={"Cache-Control": "no-cache"})
 

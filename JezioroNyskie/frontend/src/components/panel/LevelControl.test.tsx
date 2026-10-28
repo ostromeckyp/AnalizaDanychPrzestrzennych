@@ -150,3 +150,64 @@ describe('LevelControl', () => {
     });
   });
 });
+
+describe('LevelControl: stan z Wód Polskich', () => {
+  const bulletin = (over = {}) => ({ status: 'idle' as const, onFetch: vi.fn(), ...over });
+
+  it('bez propsa `bulletin` nie ma przycisku', () => {
+    setup();
+    expect(screen.queryByRole('button', { name: 'Pobierz stan z Wód Polskich' })).not.toBeInTheDocument();
+  });
+
+  it.each(['desktop', 'mobile'] as const)('przycisk działa w wariancie %s (także w trybie rzędnej)', async (variant) => {
+    const b = bulletin();
+    setup({ variant, bulletin: b });
+    const btn = screen.getByRole('button', { name: 'Pobierz stan z Wód Polskich' });
+    expect(btn).toBeEnabled();
+    expect(btn).not.toHaveAttribute('aria-busy', 'true');
+    await userEvent.click(btn);
+    expect(b.onFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('ładowanie: przycisk wyłączony i aria-busy', () => {
+    setup({ bulletin: bulletin({ status: 'loading' }) });
+    const btn = screen.getByRole('button', { name: /Pobierz stan z Wód Polskich/ });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('wynik: podsumowanie z linkiem do PDF, bez adnotacji gdy nie stale', () => {
+    setup({
+      mode: 'capacity',
+      bulletin: bulletin({
+        status: 'ready',
+        summary: 'Komunikat RZGW z 27.10.2026, odczyt 06:00 UTC — 41,5 mln m³ → 195,12 m n.p.m.',
+        url: 'https://www.gov.pl/attachment/x',
+      }),
+    });
+    expect(screen.getByText(/Komunikat RZGW z 27\.10\.2026, odczyt 06:00 UTC — 41,5 mln m³ → 195,12 m n\.p\.m\./)).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: /komunikat \(PDF\)/i });
+    expect(link).toHaveAttribute('href', 'https://www.gov.pl/attachment/x');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    expect(screen.queryByText(/ostatni dostępny/)).not.toBeInTheDocument();
+  });
+
+  it('stale: pokazuje adnotację', () => {
+    setup({
+      bulletin: bulletin({
+        status: 'ready',
+        summary: 'Komunikat RZGW z 26.10.2026 — 41,0 mln m³ → 195,00 m n.p.m.',
+        url: 'https://www.gov.pl/attachment/y',
+        note: '(ostatni dostępny komunikat, nie udało się pobrać nowszego)',
+      }),
+    });
+    expect(screen.getByText(/ostatni dostępny komunikat, nie udało się pobrać nowszego/)).toBeInTheDocument();
+  });
+
+  it('błąd: komunikat w role=alert, przycisk dalej aktywny', () => {
+    setup({ bulletin: bulletin({ status: 'error', error: 'Nie udało się pobrać komunikatu Wód Polskich.' }) });
+    expect(screen.getByRole('alert')).toHaveTextContent('Nie udało się pobrać komunikatu Wód Polskich.');
+    expect(screen.getByRole('button', { name: 'Pobierz stan z Wód Polskich' })).toBeEnabled();
+  });
+});

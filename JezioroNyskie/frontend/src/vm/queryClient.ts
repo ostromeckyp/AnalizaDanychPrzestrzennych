@@ -24,6 +24,7 @@ export const queryKeys = {
   marinas: () => ['marinas'] as const,
   gravel: () => ['gravel'] as const,
   currentLevel: () => ['current-level'] as const,
+  bulletinLatest: () => ['bulletin-latest'] as const,
   capacity: (v: number) => ['capacity', v] as const,
   levelCapacity: (h: number) => ['level-capacity', h] as const,
 };

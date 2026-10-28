@@ -175,7 +175,7 @@ export function useMethodVm(): MethodVm {
       ? {
           label: 'Zgodność z mapą KŻ',
           value: `RMSE ${fmtM(num(acc.kz_rmse))}`,
-          sub: `obciążenie ${signedM(num(acc.kz_bias))} · mapa KŻ to nie pomiar: model sprzed powodzi, rzędne od 192,5 m, bez żwirowni, komórki 50 m`,
+          sub: `obciążenie ${signedM(num(acc.kz_bias))} · mapa KŻ to nie pomiar: model sprzed powodzi, rzędne od 192,5 m, bez żwirowni, komórka modelu 10 m pod punktem`,
         }
       : {
           label: 'Zgodność z mapą KŻ',

@@ -4,6 +4,7 @@ import { type Gravel, type Marinas, type Meta, type Zones } from '../api/client'
 import type { ParameterPanelProps } from '../components/panel/ParameterPanel';
 import type { LayerKey, LevelMode } from '../components/panel/types';
 import { round05 } from '../format';
+import { useBulletinVm } from './useBulletinVm';
 import { useCapacityVm } from './useCapacityVm';
 import { useCurrentLevelVm } from './useCurrentLevelVm';
 import { useGravelVm } from './useGravelVm';
@@ -93,6 +94,11 @@ export function useMapPageVm(): MapPageVm {
   const baseH = hUser ?? initialH.current ?? NaN;
   const draft = draftUser ?? meta?.defaults.draft ?? NaN;
   const margin = marginUser ?? meta?.defaults.margin ?? NaN;
+  // Stan z komunikatu Wód Polskich ustawia tryb pojemności tak samo jak ręczne wpisanie wartości.
+  const bulletin = useBulletinVm((v) => {
+    setCapacityValue(v);
+    setMode('capacity');
+  });
   const capacity = useCapacityVm(mode, mode === 'level' ? baseH : (capacityValue ?? NaN));
   const hFromCapacity = capacity.hFromCapacity;
   // W trybie pojemności poziom wynika z przeliczenia (bez stanu pośredniego, więc panel i mapa się zgadzają).
@@ -129,6 +135,14 @@ export function useMapPageVm(): MapPageVm {
             level: { capacityAtLevel: capacity.capacityAtLevel, aboveNpp: capacity.aboveNpp },
             capacity: { value: capacityValue ?? 0, hFromCapacity, inTable: capacity.inTable },
             currentLevel: level.level && { label: level.level.label, note: level.level.note },
+            bulletin: {
+              status: bulletin.status,
+              onFetch: bulletin.fetch,
+              summary: bulletin.summary,
+              url: bulletin.url,
+              note: bulletin.note,
+              error: bulletin.error,
+            },
             warnings: zonesVm.warnings,
             onModeChange: (m) => {
               if (m === 'capacity' && capacityValue === undefined && capacity.capacityAtLevel !== undefined) {

@@ -268,7 +268,7 @@ class DownloadError(RuntimeError):
     """Trwała awaria sieci (nie 404): przerywamy przebieg, żeby nie zgubić scen po cichu."""
 
 
-def _download(url: str, dest: Path, retries: int = 5, backoff_s: float = 30.0) -> bool:
+def _download(url: str, dest: Path, retries: int = 5, backoff_s: float = 30.0, fetch=None) -> bool:
     """Pobiera PDF do cache (1 zapytanie/s) z długim odstępem po błędach.
 
     Wayback odcina połączenia („connection refused”) po kilkunastu zapytaniach w serii, więc po
@@ -282,7 +282,7 @@ def _download(url: str, dest: Path, retries: int = 5, backoff_s: float = 30.0) -
     for attempt in range(retries):
         _throttle()
         try:
-            r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=90)
+            r = (fetch or requests.get)(url, headers={"User-Agent": USER_AGENT}, timeout=90)
             if r.status_code == 200 and r.content[:4] == b"%PDF":
                 tmp = dest.with_suffix(".part")
                 tmp.write_bytes(r.content)
@@ -314,6 +314,45 @@ def fetch_govpl_list(cache_dir: Path | None = None) -> list[tuple[date, str]]:
     return list_govpl(cache.read_text(encoding="utf-8"))
 
 
+LATEST_MAX_TRIES = 3          # tyle ostatnich komunikatów próbujemy, gdy najnowszy jest nieczytelny
+
+
+def latest_govpl(cache_dir: Path, *, max_age_s: int = 3600, fetch=requests.get) -> dict | None:
+    """Najnowszy czytelny komunikat z listy gov.pl (dla przycisku „Stan z Wód Polskich” w aplikacji).
+
+    Co robi: odświeża `govpl_list.html`, gdy cache jest starszy niż `max_age_s` (albo go nie ma),
+      bierze najnowszą datę, pobiera PDF do cache i parsuje go tak jak pipeline (`_load`). Gdy
+      najnowszy jest nieczytelny (404, brak wiersza, zła data w PDF), próbuje kolejne wstecz (maks. 3).
+    Dlaczego tak: `fetch_govpl_list` nigdy nie odświeża cache (pipeline ma być powtarzalny), a
+      aplikacja potrzebuje dzisiejszego komunikatu. Błąd sieci przy liście albo PDF-ie rzuca wyjątek
+      (RequestException / DownloadError) - decyzję o awaryjnym powrocie podejmuje wołający. PDF-y mają
+      jedną próbę bez długiego odstępu (użytkownik czeka na odpowiedź). 1 zapytanie/s i User-Agent
+      modułu obowiązują jak w pipeline.
+    Wejście → wyjście: katalog cache (zapisywalny), TTL, `fetch` (wstrzykiwany w testach) →
+      {bulletin_date, v_current, v_npp, v_maxpp, reading_utc, url, source="govpl"} albo None.
+    Jak to obronić: ten sam parser i ta sama walidacja daty co dla wariantu B, brak interpolacji.
+    """
+    cache_dir = Path(cache_dir)
+    cache = cache_dir / "govpl_list.html"
+    if not cache.exists() or time.time() - cache.stat().st_mtime > max_age_s:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        _throttle()
+        r = fetch(GOVPL_LIST_URL, headers={"User-Agent": USER_AGENT}, timeout=90)
+        r.raise_for_status()
+        tmp = cache.with_suffix(".part")
+        tmp.write_text(r.text, encoding="utf-8")
+        tmp.replace(cache)
+    newest_first = list(reversed(list_govpl(cache.read_text(encoding="utf-8"))))
+    for d, url in newest_first[:LATEST_MAX_TRIES]:
+        entry = {"source": "govpl", "url": url, "file": f"govpl/{url.rsplit('/', 1)[-1]}.pdf"}
+        row = _load(d, entry, cache_dir, fetch=fetch, retries=1, backoff_s=0.0)
+        if row is not None:
+            return {"bulletin_date": d, "v_current": row["v_current"], "v_npp": row["v_npp"],
+                    "v_maxpp": row["v_maxpp"], "reading_utc": row["reading_utc"], "url": url,
+                    "source": "govpl"}
+    return None
+
+
 def _candidates(wayback: dict, govpl: list[tuple[date, str]]) -> dict[date, list[dict]]:
     """Wszystkie znane komunikaty wg daty; Wayback przed gov.pl (starsze, zweryfikowane)."""
     cand: dict[date, list[dict]] = {}
@@ -328,10 +367,13 @@ def _candidates(wayback: dict, govpl: list[tuple[date, str]]) -> dict[date, list
     return cand
 
 
-def _load(d: date, entry: dict, cache_dir: Path) -> dict | None:
-    """Pobiera i parsuje jeden komunikat; None gdy brak pliku, wiersza lub zła data w PDF."""
+def _load(d: date, entry: dict, cache_dir: Path, **dl) -> dict | None:
+    """Pobiera i parsuje jeden komunikat; None gdy brak pliku, wiersza lub zła data w PDF.
+
+    `dl` (fetch, retries, backoff_s) trafia do `_download`; domyślnie puste, więc pipeline działa jak dotąd.
+    """
     path = cache_dir / entry["file"]
-    if not _download(entry["url"], path):
+    if not _download(entry["url"], path, **dl):
         log.warning("%s: nie udało się pobrać %s", d, entry["url"])
         return None
     try:

@@ -186,6 +186,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bulletin/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bulletin Latest
+         * @description Najnowszy komunikat Wód Polskich: pojemność i rzędna z tabeli KŻ; przy braku sieci ostatni znany (`stale`).
+         */
+        get: operations["bulletin_latest_api_bulletin_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/layers/bottom.png": {
         parameters: {
             query?: never;
@@ -292,6 +312,38 @@ export interface components {
             ][];
             /** Breaks */
             breaks: number[];
+        };
+        /** BulletinLatest */
+        BulletinLatest: {
+            /**
+             * Bulletin Date
+             * Format: date
+             */
+            bulletin_date: string;
+            /** Reading Utc */
+            reading_utc: string | null;
+            /** V Current */
+            v_current: number;
+            /** H */
+            h: number | null;
+            /** In Table */
+            in_table: boolean;
+            /** V Npp */
+            v_npp: number | null;
+            /** Url */
+            url: string;
+            /**
+             * Fetched At
+             * Format: date-time
+             */
+            fetched_at: string;
+            /** Stale */
+            stale: boolean;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "govpl" | "pipeline";
         };
         /** CapacityToLevel */
         CapacityToLevel: {
@@ -974,6 +1026,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CurrentLevelResponse"];
                 };
+            };
+        };
+    };
+    bulletin_latest_api_bulletin_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulletinLatest"];
+                };
+            };
+            /** @description brak komunikatu (sieć niedostępna i brak danych pipeline'u) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

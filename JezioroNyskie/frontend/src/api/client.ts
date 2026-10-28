@@ -11,6 +11,7 @@ export type Shoreline = S['ShorelineFeature'];
 export type Marinas = S['MarinasResponse'];
 export type Gravel = S['GravelResponse'];
 export type CurrentLevel = S['CurrentLevelResponse'];
+export type BulletinLatest = S['BulletinLatest'];
 export type CapacityToLevel = S['CapacityToLevel'];
 export type LevelToCapacity = S['LevelToCapacity'];
 
@@ -58,6 +59,7 @@ export const api = {
   marinas: (signal?: AbortSignal) => get<Marinas>('/api/marinas', undefined, signal),
   gravel: (signal?: AbortSignal) => get<Gravel>('/api/gravel', undefined, signal),
   currentLevel: (signal?: AbortSignal) => get<CurrentLevel>('/api/current-level', undefined, signal),
+  bulletinLatest: (signal?: AbortSignal) => get<BulletinLatest>('/api/bulletin/latest', undefined, signal),
   capacityToLevel: (v: number, signal?: AbortSignal) => get<CapacityToLevel>('/api/capacity-to-level', { v }, signal),
   levelToCapacity: (h: number, signal?: AbortSignal) => get<LevelToCapacity>('/api/level-to-capacity', { h }, signal),
 };

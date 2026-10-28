@@ -4,6 +4,16 @@ import type { LevelMode, SliderProps } from './types';
 import { useDecimalField } from './useDecimalField';
 import './panel.css';
 
+/** Przycisk „Stan z Wód Polskich”: stan i teksty przygotowuje VM (useBulletinVm). */
+export type BulletinProps = {
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  onFetch: () => void;
+  summary?: string;
+  url?: string;
+  note?: string;
+  error?: string;
+};
+
 export type LevelControlProps = {
   /** „mobile”: krótkie teksty z Mobile.dc.html (przycisk pojemności zamiast przełącznika, krótkie ostrzeżenie). */
   variant?: 'desktop' | 'mobile';
@@ -15,6 +25,8 @@ export type LevelControlProps = {
   /** Tryb „Pojemność”: wpisana wartość i jej przeliczenie na rzędną. */
   capacity: { value: number; hFromCapacity?: number; inTable?: boolean };
   currentLevel?: { label: string; note?: string };
+  /** Brak = bez przycisku pobrania stanu z komunikatu Wód Polskich. */
+  bulletin?: BulletinProps;
   /** Kody ostrzeżeń z API; nieznane są ignorowane. */
   warnings: string[];
   onModeChange: (m: LevelMode) => void;
@@ -173,6 +185,35 @@ export function LevelControl(p: LevelControlProps) {
           </span>
         </div>
       </div>
+
+      {p.bulletin && (
+        <div className="field">
+          <button
+            type="button"
+            className="link-btn"
+            disabled={p.bulletin.status === 'loading'}
+            aria-busy={p.bulletin.status === 'loading' ? 'true' : undefined}
+            onClick={p.bulletin.onFetch}
+          >
+            Pobierz stan z Wód Polskich
+          </button>
+          {p.bulletin.status === 'ready' && p.bulletin.summary && (
+            <span className="hint">
+              {p.bulletin.summary}
+              {p.bulletin.url && (
+                <>
+                  {' · '}
+                  <a href={p.bulletin.url} target="_blank" rel="noopener noreferrer">
+                    komunikat (PDF)
+                  </a>
+                </>
+              )}
+              {p.bulletin.note ? ` ${p.bulletin.note}` : ''}
+            </span>
+          )}
+          {p.bulletin.status === 'error' && p.bulletin.error && <Alert>{p.bulletin.error}</Alert>}
+        </div>
+      )}
 
       {p.currentLevel && (
         <span className="hint">

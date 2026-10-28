@@ -379,6 +379,28 @@
     }
    }
   },
+  "/api/bulletin/latest": {
+   "get": {
+    "summary": "Bulletin Latest",
+    "description": "Najnowszy komunikat Wód Polskich: pojemność i rzędna z tabeli KŻ; przy braku sieci ostatni znany (`stale`).",
+    "operationId": "bulletin_latest_api_bulletin_latest_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BulletinLatest"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "brak komunikatu (sieć niedostępna i brak danych pipeline'u)"
+     }
+    }
+   }
+  },
   "/api/layers/bottom.png": {
    "get": {
     "summary": "Bottom Png",
@@ -764,6 +786,91 @@
      "breaks"
     ],
     "title": "BottomLayer"
+   },
+   "BulletinLatest": {
+    "properties": {
+     "bulletin_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Bulletin Date"
+     },
+     "reading_utc": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reading Utc"
+     },
+     "v_current": {
+      "type": "number",
+      "title": "V Current"
+     },
+     "h": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "H"
+     },
+     "in_table": {
+      "type": "boolean",
+      "title": "In Table"
+     },
+     "v_npp": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "V Npp"
+     },
+     "url": {
+      "type": "string",
+      "title": "Url"
+     },
+     "fetched_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Fetched At"
+     },
+     "stale": {
+      "type": "boolean",
+      "title": "Stale"
+     },
+     "source": {
+      "type": "string",
+      "enum": [
+       "govpl",
+       "pipeline"
+      ],
+      "title": "Source"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bulletin_date",
+     "reading_utc",
+     "v_current",
+     "h",
+     "in_table",
+     "v_npp",
+     "url",
+     "fetched_at",
+     "stale",
+     "source"
+    ],
+    "title": "BulletinLatest"
    },
    "CapacityToLevel": {
     "properties": {
