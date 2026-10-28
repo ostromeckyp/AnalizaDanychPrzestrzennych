@@ -22,10 +22,9 @@ import pandas as pd
 from affine import Affine
 
 from mielizna import bottom, capacity, levels
+from mielizna.capacity import MAX_PP_MLN_M3, NPP_MLN_M3  # brief §4, wspólne z pipeline'em (kz_compare)
 from mielizna.levels import AreaLevelCurve
 
-NPP_MLN_M3 = 65.69      # brief §4: normalny poziom piętrzenia, tabela KŻ Nysa [mln m³]
-MAX_PP_MLN_M3 = 121.70  # brief §4: maksymalny poziom piętrzenia, tabela KŻ Nysa [mln m³]
 CRS = "EPSG:2180"
 
 

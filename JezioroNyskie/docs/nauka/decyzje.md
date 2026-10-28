@@ -101,7 +101,7 @@ Liczby i skutki: `docs/raport.md`, `docs/nauka/M7-lidar-kz.md`. Gdy dwie decyzje
 - **P4-R18** Rzędna poziomicy z sąsiedniego wypełnienia (biały pas 192,5–195,0 m, błękit głębiej, ląd powyżej), bo mapa rysuje wszystkie poziomice jednym kolorem (brief zakładał dwa). Koszt: niska kompletność 192,5 m.
 - **P4-R19** Żwirownia = obrys „REJON EKSPLOATACJI KRUSZYWA (2023)” w jeziorze (zagrożenie dla żeglugi, warstwa `/api/gravel`); wyrobisko na lądzie pominięte. Koszt: brak.
 - **P4-R20** Poziomice KŻ to próbka „najpierw precyzja” (49 linii 195,0 m zamiast fałszywych 173): porównanie poziomic raportuje pokrycie (km porównane / km poziomicy modelu) i jest orientacyjne. Koszt: słabszy dowód z K3.
-- **P4-R30** Dwa punkty z ewidentnie złą kotwicą (id QC 107: przecinek „.195,1”; id QC 98: kropka napisu „193,6 bet.”) wykluczone jawną listą `config.yaml: kz.spot_position_reject` z powodem przy każdym wpisie; plik ocen autora zostaje nietknięty. Powód: kontrola ręczna ocenia rzędną, nie przesuwa kropki. Koszt: 2 punkty mniej (autor poinformowany).
+- **P4-R30** Dwa punkty z ewidentnie złą kotwicą (id QC 107: przecinek „.195,1”; id QC 98: kropka napisu „193,6 bet.”) wykluczone jawną listą `config_kz.yaml: kz.spot_position_reject` z powodem przy każdym wpisie; plik ocen autora zostaje nietknięty. Powód: kontrola ręczna ocenia rzędną, nie przesuwa kropki. Koszt: 2 punkty mniej (autor poinformowany).
 
 **Wariant D**
 - **P4-R21** D ważny tylko poniżej sufitu powierzchni KŻ (`h_max_valid`); dopasowania nasycone (poziomica „przyklejona” do górnej granicy powierzchni) nie trafiają do `scenes.json` ani do metryk głównych: nasycone D niczego nie kontroluje. Koszt: D kontroluje tylko sceny o niskim poziomie.
@@ -125,7 +125,7 @@ Liczby i skutki: `docs/raport.md`, `docs/nauka/M7-lidar-kz.md`. Gdy dwie decyzje
 - epoki LiDAR mieszają naloty (wody arkuszy 2011: 194,43–194,69 m, 2024: 194,89 vs 195,95 m); wariant A 0,48 m za nisko w dniu własnego nalotu 2024;
 - łańcuch `make levels` ma nieaktualne daty (`config.yaml`, `labels.gpkg`) i może wymusić retrening RF; kroki oceny zależą tylko od kodu;
 - stałe oceny (dominanta 2 %, płaskość 0,03 m, zapas 0,1 m) niewalidowane;
-- drobne: kolumna bajtów w inwentarzu, brak `try` per plik przy pobieraniu, niespójna precyzja pikseli GCP, brak ostrzeżenia o niedopasowanych wpisach `spot_position_reject`, import wewnątrz `load_qc_spots`, `uv run` przepisuje `backend/uv.lock`.
+- drobne: kolumna bajtów w inwentarzu, brak `try` per plik przy pobieraniu, niespójna precyzja pikseli GCP, import wewnątrz `load_qc_spots` (naprawione w poprawkach końcowych: ostrzeżenie o niedopasowanych wpisach `spot_position_reject` i wierszach QC, aktualny `backend/uv.lock` + `make check-locks`, sekcje `kz`/`lidar` w osobnych plikach konfiguracji).
 
 ## 2. Znane ograniczenia / do zrobienia (z listy „minor (deferred)" w ledgerze)
 

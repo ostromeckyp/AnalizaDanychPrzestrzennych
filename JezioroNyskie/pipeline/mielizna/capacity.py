@@ -6,6 +6,10 @@ import pandas as pd
 
 from mielizna.config import data_path
 
+# Stałe zbiornika z briefu §4 (tabela KŻ Nysa); jedno źródło dla backendu (app/data.py) i porównania z KŻ (kz_compare.py).
+NPP_MLN_M3 = 65.69      # normalny poziom piętrzenia [mln m³]
+MAX_PP_MLN_M3 = 121.70  # maksymalny poziom piętrzenia [mln m³]
+
 
 def load_table(path: Path | None = None) -> pd.DataFrame:
     """Wczytuje tabelę (kolumny pojemnosc_mln_m3, rzedna_m_npm)."""

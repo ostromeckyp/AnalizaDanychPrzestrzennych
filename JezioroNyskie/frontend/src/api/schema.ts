@@ -331,7 +331,7 @@ export interface components {
             /** V Npp */
             v_npp: number | null;
             /** Url */
-            url: string;
+            url: string | null;
             /**
              * Fetched At
              * Format: date-time

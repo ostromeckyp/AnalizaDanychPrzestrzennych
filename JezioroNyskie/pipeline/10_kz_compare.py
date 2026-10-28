@@ -141,13 +141,31 @@ def run_contours() -> dict:
     return res
 
 
+def compare_inputs() -> tuple[float, dict]:
+    """Wejścia `compare` spoza KŻ: poprawka KRON86->EVRF2007 z lidar/epochs.csv i eval/bottom_vs_nmt.json (bias all, pre_flood).
+
+    Brak pliku lub klucza kończy skrypt czytelnym komunikatem (SystemExit) z poleceniem, które go tworzy, zamiast KeyError."""
+    proc = data_path("processed")
+    ep_path, nmt_path = proc / "lidar" / "epochs.csv", proc / "eval" / "bottom_vs_nmt.json"
+    if not ep_path.exists():
+        raise SystemExit(f"brak {ep_path}: najpierw `make lidar-epochs` (06b_lidar_levels.py --epochs-only)")
+    if not nmt_path.exists():
+        raise SystemExit(f"brak {nmt_path}: najpierw `make evaluate` (08_evaluate.py)")
+    ep = pd.read_csv(ep_path)
+    kron = ep.loc[ep.uklad_h != "PL-EVRF2007-NH", "datum_offset"] if {"uklad_h", "datum_offset"} <= set(ep.columns) else []
+    if len(kron) == 0:
+        raise SystemExit(f"{ep_path}: brak epoki w KRON86 z kolumną datum_offset; odtwórz plik: `make lidar-epochs`")
+    nmt = _json(nmt_path)
+    missing = [k for k in ("all", "pre_flood") if not isinstance(nmt.get(k), dict) or "bias" not in nmt[k]]
+    if missing:
+        raise SystemExit(f"{nmt_path}: brak {missing}.bias (stary format?); odtwórz plik: `make evaluate` (08_evaluate.py)")
+    return float(kron.iloc[0]), nmt
+
+
 def run_compare() -> int:
+    offset, nmt = compare_inputs()          # przed długimi krokami: brak wejść = szybki, czytelny błąd
     pts = run_points()
     con = run_contours()
-    proc = data_path("processed")
-    ep = pd.read_csv(proc / "lidar" / "epochs.csv")
-    offset = float(ep.loc[ep.uklad_h != "PL-EVRF2007-NH", "datum_offset"].iloc[0])
-    nmt = _json(proc / "eval" / "bottom_vs_nmt.json")
     others = {"wszystkie epoki, model all": nmt["all"]["bias"], "pre_flood zbiorczo": nmt["pre_flood"]["bias"]}
     p = pts["pooled"]
     gng = kz_compare.go_no_go(p["bias"], offset, others)

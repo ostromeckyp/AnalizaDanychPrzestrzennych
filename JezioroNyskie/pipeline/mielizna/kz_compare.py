@@ -21,8 +21,8 @@ from shapely.geometry import LineString, MultiLineString
 from skimage.measure import find_contours
 
 from mielizna import capacity, evaluate
+from mielizna.capacity import NPP_MLN_M3   # wspólna z backendem (brief §4)
 
-NPP_MLN_M3 = 65.69        # jak backend/app/data.py (brief §4): normalny poziom piętrzenia, tabela KŻ Nysa [mln m³]
 MAIN_FROM = 192.5         # poniżej mapa KŻ jest orientacyjna
 CELL_M = 50.0
 BIAS_LIMIT = 0.5

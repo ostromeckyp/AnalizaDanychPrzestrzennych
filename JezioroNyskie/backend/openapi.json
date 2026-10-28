@@ -836,7 +836,14 @@
       "title": "V Npp"
      },
      "url": {
-      "type": "string",
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
       "title": "Url"
      },
      "fetched_at": {

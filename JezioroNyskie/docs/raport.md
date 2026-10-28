@@ -371,7 +371,7 @@ jeziora. **Wszystkie 149<!-- eval:kz_compare.json:ocr_error_rate.n_judged --> au
 poprawionych, 2<!-- eval:kz_compare.json:ocr_error_rate.qc_counts.rejected --> odrzucone (`data/reference/kz_spot_qc.csv`). Błąd OCR
 7,4 %<!-- eval:kz_compare.json:ocr_error_rate.rate_weighted -->, czyli w progu ≤ 10 %, ale próba (149) jest mniejsza niż 200 wymaganych
 w briefie, bo tyle punktów w ogóle przeszło detekcję (P4-R16). Kontrola ręczna ocenia rzędną, nie położenie kropki, a lokalizator kropki
-bywa mylony; 2 punkty z ewidentnie złą kotwicą wykluczono jawną listą w `config.yaml: kz.spot_position_reject` (P4-R30). Do porównań
+bywa mylony; 2 punkty z ewidentnie złą kotwicą wykluczono jawną listą w `config_kz.yaml: kz.spot_position_reject` (P4-R30). Do porównań
 weszło 145<!-- eval:kz_points.json:n_spots_used --> punktów; 3<!-- eval:kz_points.json:gravel_excluded --> leżą w żwirowni.
 
 ### 6.3 K3 — poziomice i żwirownia
@@ -507,7 +507,9 @@ Lista ograniczeń (z notatek M1–M7 i ledgerów planów 1–4):
 9. **Stałe niewalidowane:** próg dominanty 2 %, płaskość 0,03 m, zapas 0,1 m nad wodą arkusza (ocena vs NMT); próg 5 % dla wyboru
    modelu; bufor zapory 150 m; promienie i progi kolorów w digitalizacji KŻ.
 10. **Odtwarzalność:** łańcuch `make` ma reguły z nieaktualnymi datami plików, więc `make levels` może uruchomić retrening RF
-    (godziny); dlatego kroki oceny nie zależą w Makefile od tego łańcucha i są uruchamiane jawnie (§9).
+    (godziny); dlatego kroki oceny nie zależą w Makefile od tego łańcucha i są uruchamiane jawnie (§9). Przyczyna kaskady (sekcje
+    `kz`/`lidar` w `config.yaml`) jest usunięta na przyszłość (`config_kz.yaml`, `config_lidar.yaml`), ale istniejące nieaktualne daty
+    zostają. Wynik OCR zależy od wersji `tesseract` (użyto 5.5.2).
 11. **Aplikacja:** poziom „na żywo” pochodzi z krzywej C (σ ok. 0,5 m) na najnowszej scenie; strefy nie są przycinane do obrysu OSM;
     zrzuty ekranu w raporcie sprzed planu 4.
 12. **Pytanie otwarte do autora (nie decyzja):** reguła wyboru modelu jest mechaniczna (≥ 5 % akwenu ze zmianą dna → `post_flood`,
@@ -541,10 +543,21 @@ uv run pytest -q                   # w tym test spójności liczb tego raportu
 Jedyne kroki ręczne to **etykiety RF** i **kontrola punktów KŻ**; oba wyniki są w repo (`data/reference/`), więc przy ponownym
 przebiegu narzędzia ręczne można pominąć. Pozostałe decyzje człowieka są zapisane jako dane w repo z uzasadnieniem przy każdym
 wpisie: daty lodu (`config.yaml: exclude_dates`), GCP mapy KŻ (`data/reference/kz_gcp.csv`, z pomiaru linii siatki), wierzchołki
-żwirowni (`zwirownia_vertices.csv`), odrzucone fragmenty poziomic i kotwice punktów (`config.yaml: kz.contour_drop`,
+żwirowni (`zwirownia_vertices.csv`), odrzucone fragmenty poziomic i kotwice punktów (`config_kz.yaml: kz.contour_drop`,
 `kz.spot_position_reject`), znane poziomy (`known_levels.csv`) i tabela KŻ (`kz_pojemnosc_rzedna.csv`). Dane źródłowe pobierają
-skrypty (`01`, `02`, `03`, `06a`; PDF mapy KŻ jest w repo). Wymagane narzędzia poza `uv`: `tesseract` (OCR) i siatki quasi-geoidy
-GUGiK dla PROJ (pobierane przez sieć PROJ). Kroki oceny celowo nie zależą w Makefile od łańcucha modelu (`scenes.json`, `model/*`), bo
-ten ma nieaktualne daty (ograniczenie 10): `evaluate` zależy tylko od kodu oceny, `kz-compare` od kodu porównania, kontroli punktów KŻ
-i obrysu żwirowni, a `variant-d` od danych KŻ (punkty, poziomice, żwirownia, kontrola punktów). Po zmianie modelu trzeba je wymusić:
+skrypty (`01`, `02`, `03`, `06a`; PDF mapy KŻ jest w repo). Wymagane narzędzia poza `uv`: `tesseract` (OCR; wyniki w repo powstały
+z **tesseract 5.5.2** z leptonica 1.87.0, `tesseract --version`; inna wersja może rozpoznać inne punkty, a numery `id` się zmienią —
+kontrola ręczna trzyma się kotwic, a `load_qc_spots` ostrzega (WARNING) o wierszach kontroli i wpisach `spot_position_reject`, które
+nie trafiły w żaden punkt) i siatki quasi-geoidy GUGiK dla PROJ (pobierane przez sieć PROJ). `make check-locks` sprawdza, czy
+`pipeline/uv.lock` i `backend/uv.lock` są aktualne (obraz Dockera buduje się z `uv sync --locked`).
+
+Konfiguracja: `config.yaml` (siatka, okresy, filtr scen, ścieżki), `config_lidar.yaml` (sekcja `lidar`) i `config_kz.yaml` (sekcja
+`kz`); `load_config` łączy je w jeden słownik. Rozdzielenie usuwa przyczynę kaskady: dawniej każda zmiana strojenia KŻ w `config.yaml`
+unieważniała w `make` łańcuch S2 → klasyfikacja → model; teraz kroki KŻ zależą od `config_kz.yaml`, a `nmt` od `config_lidar.yaml`.
+Dotyczy to zmian od teraz: istniejące daty plików pozostają nieaktualne (samo przeniesienie sekcji zmieniło datę `config.yaml`, więc
+`make s2`/`make bottom` nadal uruchomiłyby łańcuch; dat nie fałszujemy). Kroki oceny celowo nie zależą w Makefile od łańcucha modelu
+(`scenes.json`, `model/*`), bo ten ma nieaktualne daty (ograniczenie 10): `evaluate` zależy tylko od kodu oceny, `kz-compare` od kodu
+porównania, kontroli punktów KŻ, obrysu żwirowni, `config_kz.yaml` i wyniku `evaluate` (`eval/model_choice.json`, którego zależności to
+sam kod; `lidar/epochs.csv` jest wymagany tylko wtedy, gdy go brak), a `variant-d` od danych KŻ (punkty, poziomice, żwirownia, kontrola
+punktów, `config_kz.yaml`). `make -n kz-compare` nie uruchamia RF ani klasyfikacji. Po zmianie modelu trzeba je wymusić:
 `rm data/processed/eval/model_choice.json && make evaluate` (analogicznie `kz_compare.json`, `variant_d.json`).

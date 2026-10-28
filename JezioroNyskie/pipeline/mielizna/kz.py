@@ -794,7 +794,7 @@ def load_qc_spots(ocr: "gpd.GeoDataFrame", qc: pd.DataFrame | None, position_rej
       nieocenionych, więc oceny ręczne zawsze wygrywają z filtrem.
     Wejście → wyjście: GeoDataFrame OCR (id, z, px, py, conf, color_ok, geometry) i QC (ocr_z, qc, z_qc, px, py)
       lub None -> GeoDataFrame tych punktów z kolumną `z` (po korekcie) i `z_source` in {ocr_ok, qc_ok, qc_corrected}.
-      `position_reject` (domyślnie `kz.spot_position_reject` z config.yaml): lista wpisów {px, py, ocr_z, reason} punktów, których
+      `position_reject` (domyślnie `kz.spot_position_reject` z config_kz.yaml): lista wpisów {px, py, ocr_z, reason} punktów, których
       KOTWICA stoi w złym miejscu (np. na przecinku/kropce innej liczby). Kontrola ręczna ocenia rzędną, nie może przesunąć
       kotwicy, więc takie punkty (nawet `ok`/`corrected`) odpadają, dopasowane jak `match_qc` (≤ 3 px i ta sama `ocr_z`).
     Jak to obronić: testy obu ścieżek; kolor i pewność to te same progi co warstwa „podejrzane” w kontroli."""
@@ -803,15 +803,25 @@ def load_qc_spots(ocr: "gpd.GeoDataFrame", qc: pd.DataFrame | None, position_rej
     if position_reject is None:
         from mielizna.config import load_config
         position_reject = load_config().get("kz", {}).get("spot_position_reject") or []
+    log = logging.getLogger(__name__)
     pos_hit = np.zeros(len(out), bool)
+    missed = []
     for e in position_reject:
         d = np.hypot(out["px"].to_numpy(float) - float(e["px"]), out["py"].to_numpy(float) - float(e["py"]))
         hit = (d <= QC_MATCH_PX) & (np.abs(out["z"].to_numpy(float) - float(e["ocr_z"])) < QC_MATCH_DZ)
         if hit.any():
-            logging.getLogger(__name__).info("load_qc_spots: odrzucono %d punkt(ów) o błędnej kotwicy (%s)", int(hit.sum()), e.get("reason", ""))
+            log.info("load_qc_spots: odrzucono %d punkt(ów) o błędnej kotwicy (%s)", int(hit.sum()), e.get("reason", ""))
             pos_hit |= hit
+        else:
+            missed.append(e)
+    if missed:      # po ponownym OCR kotwica mogła się przesunąć: wpis przestaje działać po cichu, a zły punkt wraca
+        log.warning("load_qc_spots: %d wpis(ów) kz.spot_position_reject nie pasuje do żadnego punktu OCR (<= %s px, ta sama ocr_z): %s",
+                    len(missed), QC_MATCH_PX, "; ".join(f"({e['px']}, {e['py']}, {e['ocr_z']}) {e.get('reason', '')}" for e in missed))
     if qc is not None and len(qc):
-        matched, _ = match_qc(qc, out)
+        matched, n_unmatched = match_qc(qc, out)
+        if n_unmatched:
+            log.warning("load_qc_spots: %d wierszy kontroli ręcznej (kz_spot_qc.csv) bez punktu OCR (<= %s px, ta sama ocr_z) - pominięte",
+                        n_unmatched, QC_MATCH_PX)
         judged = matched[matched["qc"].isin(["ok", "corrected", "rejected"])].drop_duplicates("id", keep="last")
         verdict = judged.set_index("id")["qc"]
         zq = pd.to_numeric(judged.set_index("id")["z_qc"], errors="coerce")
@@ -821,7 +831,7 @@ def load_qc_spots(ocr: "gpd.GeoDataFrame", qc: pd.DataFrame | None, position_rej
         newz = out.loc[fixed, "id"].map(zq).to_numpy(float)
         bad = ~((newz >= 185.0) & (newz <= 200.0))                   # pusty, nienumeryczny albo poza zakresem 185-200 m
         if bad.any():
-            logging.getLogger(__name__).warning("load_qc_spots: %d wierszy `corrected` bez poprawnego z_qc (puste/nienumeryczne/poza 185-200 m) "
+            log.warning("load_qc_spots: %d wierszy `corrected` bez poprawnego z_qc (puste/nienumeryczne/poza 185-200 m) "
                         "- zostaje rzędna OCR", int(bad.sum()))
         newz = np.where(bad, out.loc[fixed, "z"].to_numpy(float), newz)
         out.loc[fixed, "z"] = newz

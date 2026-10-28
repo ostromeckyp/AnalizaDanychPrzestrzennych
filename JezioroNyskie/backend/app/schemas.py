@@ -238,7 +238,7 @@ class BulletinLatest(BaseModel):
     h: float | None              # rzędna z tabeli KŻ (jak /api/capacity-to-level); None poza tabelą
     in_table: bool
     v_npp: float | None
-    url: str
+    url: str | None              # tylko https://www.gov.pl/...; inny adres -> None (front nie pokazuje linku)
     fetched_at: datetime
     stale: bool
     source: Literal["govpl", "pipeline"]

@@ -1,0 +1,29 @@
+# Konfiguracja mapy KŻ (krok 09, 10). Dołączana do config.yaml przez mielizna.config.load_config (klucz `kz`).
+# Osobny plik: zależność make tylko kroków KŻ (nie łańcucha S2/klasyfikacji).
+# Mapa KŻ (krok 09)
+kz:
+  # Kolory zmierzone na data/raw/kz/kz_full.png (wycinki legendy i linii oglądane Read, średnie RGB szkieletu linii
+  # i wypełnień; patrz uzasadnienie w mielizna/kz.py, sekcja „Poziomice”). Wszystkie poziomice mają TEN SAM granat,
+  # więc poziom wynika z sąsiedniego wypełnienia: pas 192,5-195,0 m biały, głębiej błękit, ląd zielony/beżowy.
+  contour_colors:
+    line: [40, 60, 170]        # granat do średniego błękitu linii (rdzeń 15,30,140; antyaliasing i cienkie linie 60-110,70-130,170-210)
+    line_tol: 90               # Czebyszew; nie łapie błękitu wody (g >= 195) ani czerni (b < 80)
+    shallow: [248, 251, 253]   # biały pas 192,5-195,0 m (próbki 236,243,251 do 255,255,255)
+    shallow_tol: 14
+    deep: [195, 235, 250]      # błękit głębszej wody (próbki 217,248,250; 201,216,235)
+    deep_tol: 35
+    ring_px: 8                 # promień sąsiedztwa do wykrycia wypełnień obok linii
+    grow_px: 10                # ile pikseli ziarno może rosnąć po granatowej masce (zasklepia przerwy w cienkich liniach)
+  contour_min_len_px: 80       # krótsze (kreski linii „orientacyjnych”, litery) odpadają
+  # Fragmenty ewidentnie błędne po klasyfikacji: wpis = środek linii (EPSG:2180) i długość; dopasowanie do 20 m (stabilne
+  # wobec zmiany numeracji). Każdy wpis ma `reason` obejrzany na wycinku mapy.
+  contour_drop:
+    - {x: 374164, y: 287866, length_m: 176, reason: "pętla wokół wzgórka 198,7 m: druga poziomica na zewnątrz, więc to poziom > 195,0 (uwaga recenzenta + oględziny wycinka)"}
+  # Punkty rzędnych o błędnej kotwicy (kontrola ręczna ocenia rzędną i nie przesuwa kotwicy): odpadają z `load_qc_spots`.
+  # Dopasowanie jak match_qc: kotwica (px, py) w <= 3 px i ta sama `ocr_z`.
+  spot_position_reject:
+    - {px: 4819.0, py: 2890.0, ocr_z: 188.3, reason: "id QC 107: kotwica na przecinku „.195,1”; prawdziwa kropka 195,1 leży ok. 47 px na lewo, na wyspie"}
+    - {px: 4884.5, py: 2763.5, ocr_z: 188.3, reason: "id QC 98: kotwica na kropce napisu „193,6 bet.” (etykieta obiektu, nie sondaż)"}
+  side_offset_px: 8            # odległość próbkowania stron linii (klasa: woda / ląd)
+  shore_vote_min: 0.5          # 195,0: min. udział próbek „ląd z jednej strony, woda z drugiej”
+  parallel_tol_m: 12           # pary równoległych poziomic 195: zostaje ta bliżej brzegu jeziora

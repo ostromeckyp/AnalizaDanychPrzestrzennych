@@ -129,7 +129,8 @@ def _num(d, *keys) -> float | None:
 def eval_accuracy(products: Products) -> dict:
     """Pola oceny dla `Accuracy`; każde null, gdy odpowiedni plik albo klucz nie istnieje."""
     ev, period = products.eval, products.meta["period"]
-    pooled = ev.get("bottom_vs_nmt", {}).get(period)   # load_eval gwarantuje obiekt; _num toleruje dowolny blok   # blok zbiorczy modelu serwowanego okresu
+    # blok zbiorczy modelu serwowanego okresu; load_eval gwarantuje obiekt, _num toleruje dowolny blok
+    pooled = ev.get("bottom_vs_nmt", {}).get(period)
     return {"bottom_rmse_nmt": _num(pooled, "rmse"), "bottom_bias_nmt": _num(pooled, "bias"),
             "bottom_in_bounds_nmt": _num(pooled, "share_in_bounds"),
             "kz_rmse": _num(ev.get("kz_compare"), "points", "rmse"),

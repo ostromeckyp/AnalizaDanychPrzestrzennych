@@ -56,5 +56,5 @@ export function useBulletinVm(onApply: (capacity: number) => void): BulletinVm {
     d.h === null || d.h === undefined
       ? `${head} — ${fmtCapacity(d.v_current)}, poza tabelą pojemności — brak poziomu`
       : `${head} — ${fmtCapacity(d.v_current)} → ${fmtLevel(d.h)}`;
-  return { status: 'ready', fetch, summary, url: d.url, note: d.refreshing ? REFRESHING_NOTE : d.stale ? STALE_NOTE : undefined };
+  return { status: 'ready', fetch, summary, url: d.url ?? undefined, note: d.refreshing ? REFRESHING_NOTE : d.stale ? STALE_NOTE : undefined };
 }

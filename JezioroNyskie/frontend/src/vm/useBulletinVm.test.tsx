@@ -63,6 +63,15 @@ describe('useBulletinVm', () => {
     expect(result.current.error).toBeUndefined();
   });
 
+  it('url null z API (adres spoza gov.pl) daje brak linku, wartość zostaje', async () => {
+    vi.mocked(api.bulletinLatest).mockResolvedValue({ ...bulletin, url: null });
+    const { result } = renderHook(() => useBulletinVm(vi.fn()), { wrapper: wrap() });
+    act(() => result.current.fetch());
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.url).toBeUndefined();
+    expect(result.current.summary).toMatch(/41,5/);
+  });
+
   it('bez godziny odczytu pomija „odczyt”', async () => {
     vi.mocked(api.bulletinLatest).mockResolvedValue({ ...bulletin, reading_utc: null });
     const { result } = renderHook(() => useBulletinVm(vi.fn()), { wrapper: wrap() });

@@ -7,3 +7,6 @@ Mapa KŻ „Jezioro Nyskie (amatorska mapka dla wodniaków)”, W. Wróblewski (
   (albo `make kz-georef`); nie wgrywać go do repozytorium.
 - Warunki użycia i licencja: `data/reference/KZ_ZRODLO_I_WARUNKI.md` (nieodpłatnie, bez celów komercyjnych;
   każda kopia musi zawierać te warunki).
+- OCR rzędnych (`make kz-spots`, `09_kz_digitize.py spots`) wykonano programem **tesseract 5.5.2** (leptonica 1.87.0;
+  `tesseract --version`). Inna wersja może rozpoznać inne punkty i zmienić numery `id`; kontrola ręczna
+  (`data/reference/kz_spot_qc.csv`) jest dopasowywana po kotwicy, a niedopasowane wiersze są zgłaszane jako WARNING.

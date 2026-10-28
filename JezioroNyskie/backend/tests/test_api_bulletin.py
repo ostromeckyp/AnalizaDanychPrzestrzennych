@@ -224,3 +224,38 @@ def test_prunes_old_raw_pdfs_after_success(make, tmp_path):
     make(Fetch(), cache=cache).get("/api/bulletin/latest")
     left = sorted(p.name for p in raw.iterdir())
     assert len(left) == 10 and "14.pdf" in left and "00.pdf" not in left
+
+
+@pytest.mark.parametrize("url", ["https://evil.example/x.pdf", "https://www.gov.pl.evil.example/x.pdf",
+                                 "https://user@www.gov.pl/x.pdf", "https://web.archive.org/web/2020/https://www.gov.pl/a"])
+def test_live_url_outside_allow_list_rendered_as_null(make, url):
+    b = make(Fetch(result=ROW | {"url": url})).get("/api/bulletin/latest").json()
+    assert b["source"] == "govpl" and b["v_current"] == 41.5 and b["url"] is None
+
+
+def test_csv_url_outside_allow_list_rendered_as_null(make, dataset):
+    c = make(Fetch(exc=OSError("x")))
+    (dataset / "processed" / "bulletins.csv").write_text(
+        CSV + "2026-10-28,2026-10-28,wayback,42.0,65.7,121.7,06:00,https://web.archive.org/web/1/https://www.gov.pl/x\n",
+        encoding="utf-8")
+    b = c.get("/api/bulletin/latest").json()
+    assert b["bulletin_date"] == "2026-10-28" and b["url"] is None
+
+
+def test_gov_pl_url_kept(make):
+    assert make(Fetch()).get("/api/bulletin/latest").json()["url"] == "https://www.gov.pl/attachment/new"
+
+
+def test_thread_start_failure_releases_refresh_lock(make, monkeypatch):
+    from types import SimpleNamespace
+
+    from app import bulletin as bmod
+
+    class NoStart(threading.Thread):
+        def start(self):
+            raise RuntimeError("can't start new thread")
+    c = make(Fetch(), bg=True)
+    monkeypatch.setattr(bmod, "threading", SimpleNamespace(Thread=NoStart, Lock=threading.Lock))
+    r = c.get("/api/bulletin/latest")
+    assert r.status_code == 200 and r.json()["source"] == "pipeline"      # bieżący stan zamiast 404/500
+    assert c.app.state.bulletin.refreshing() is False                      # blokada zwolniona: kolejna próba możliwa

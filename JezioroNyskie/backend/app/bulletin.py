@@ -13,7 +13,8 @@ Dlaczego tak: serwer Wód Polskich nie może dostawać zapytań przy każdym kli
   (sprawdzany też w trakcie strumieniowania; parsowanie PDF-a jest ograniczone tylko limitem rozmiaru,
   ale działa w tle). UX: pierwsze kliknięcie może pokazać wynik zapasowy z adnotacją „trwa pobieranie”,
   kolejne kliknięcie (po kilku sekundach) dostaje świeży komunikat. Dane z sieci są zdalnym wejściem: pobierania mają limity
-  rozmiaru (lista 2 MB, PDF 10 MB) i krótkie timeouty, URL musi być `https://`, a `pypdf` parsuje
+  rozmiaru (lista 2 MB, PDF 10 MB) i krótkie timeouty, URL musi być `https://` (a link w odpowiedzi tylko z hosta
+  www.gov.pl, inaczej `url=None`), a `pypdf` parsuje
   nieufny PDF (ryzyko zasobowe ograniczone limitem rozmiaru i odpornością na wyjątki).
   Gdy użyto starszego komunikatu niż najnowszy z listy (`fallback_older`), wynik ma `stale=true`.
   Po udanym odświeżeniu w `bulletin_raw/govpl` zostaje 10 najnowszych PDF-ów. Pobranie z sieci tylko przy `live`; bez niego i przy błędzie wynik jest
@@ -32,6 +33,7 @@ import threading
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +43,9 @@ RAW_SUBDIR = "bulletin_raw"          # lista gov.pl i PDF-y (zapisywalny katalog
 DEADLINE_S = 40.0                    # łączny budżet czasu odświeżenia (lista + PDF-y)
 KEEP_PDFS = 10
 MAX_V = 200.0                        # jak limit `/api/capacity-to-level`
+# Link do PDF-u, który front renderuje jako <a href>: tylko serwis gov.pl Wód Polskich (wody.gov.pl nie występuje w danych).
+# Adres spoza listy (np. kopia web.archive.org w starszych wierszach CSV albo podmieniony wynik) -> url = None, wartość zostaje.
+URL_HOSTS = frozenset({"www.gov.pl"})
 
 
 def default_fetch(cache_dir: Path) -> dict | None:
@@ -61,6 +66,16 @@ def _valid(row) -> bool:
                 and row["url"].startswith("https://"))
     except (TypeError, ValueError, KeyError):
         return False
+
+
+def safe_url(url) -> str | None:
+    """`url`, jeśli to https bez loginu/portu na hoście z `URL_HOSTS`; inaczej None (link nie jest pokazywany)."""
+    try:
+        u = urlsplit(url) if isinstance(url, str) else None
+        ok = u is not None and u.scheme == "https" and u.hostname in URL_HOSTS and not u.username and u.port is None
+    except ValueError:
+        return None
+    return url if ok else None
 
 
 def _num(x) -> float | None:
@@ -142,7 +157,7 @@ class BulletinService:
         except (OSError, ValueError, KeyError, csv.Error):
             return None
         return {"bulletin_date": r["bulletin_date"], "reading_utc": (r.get("reading_utc") or "").strip() or None,
-                "v_current": float(r["v_current"]), "v_npp": _num(r.get("v_npp")), "url": r["url"],
+                "v_current": float(r["v_current"]), "v_npp": _num(r.get("v_npp")), "url": safe_url(r["url"]),
                 "fetched_at": _iso(mtime), "stale": True, "source": "pipeline"}
 
     def _current(self) -> dict | None:
@@ -151,6 +166,7 @@ class BulletinService:
             st = self._state
             if self.live and st.get("bulletin"):
                 b = {k: v for k, v in st["bulletin"].items() if k != "older"}
+                b["url"] = safe_url(b.get("url"))
                 return {**b, "fetched_at": _iso(st["fetched_at"] or st["attempt_at"]),
                         "stale": (not st.get("ok", False)) or bool(st["bulletin"].get("older"))
                          or self._refresh_lock.locked(), "source": "govpl"}
@@ -184,8 +200,13 @@ class BulletinService:
                 due = self.live and self.clock() - self._state.get("attempt_at", -math.inf) >= self.ttl_s
             if due and self._refresh_lock.acquire(blocking=False):
                 if self.background:
-                    self._thread = threading.Thread(target=self._run_refresh, name="bulletin-refresh", daemon=True)
-                    self._thread.start()
+                    try:
+                        self._thread = threading.Thread(target=self._run_refresh, name="bulletin-refresh", daemon=True)
+                        self._thread.start()
+                    except Exception:  # noqa: BLE001 - np. brak wątków: bez zwolnienia blokada wisiałaby na zawsze
+                        self._thread = None
+                        self._refresh_lock.release()
+                        log.exception("bulletin refresh thread failed to start")
                 else:
                     self._run_refresh()
             return self._current()

@@ -149,3 +149,26 @@ def test_variant_d_optional_filter_ignores_spots_below_192_5():
     with_deep = variant_d.kz_surface(sp, cont, GRID, min_spot_z=0)
     surf = variant_d.kz_surface(sp, cont, GRID, min_spot_z=variant_d.MIN_SPOT_Z)
     assert np.nanmin(variant_d.kz_surface(sp, cont, GRID)) < 192.0 and np.nanmin(with_deep) < 192.0 and np.nanmin(surf) >= 193.99
+
+
+def test_load_qc_spots_warns_about_unmatched_qc_rows_and_reject_entries(caplog):
+    import logging
+    ocr = _ocr_two()
+    qc = pd.DataFrame({"id": [0, 1, 2], "ocr_z": [188.3, 188.3, 190.0], "qc": ["ok", "ok", "ok"], "z_qc": [np.nan] * 3,
+                       "px": [100.0, 500.0, 900.0], "py": [100.0, 500.0, 900.0]})     # wiersz 3: brak punktu OCR
+    rej = [{"px": 101.0, "py": 99.0, "ocr_z": 188.3, "reason": "trafia"},
+           {"px": 700.0, "py": 700.0, "ocr_z": 188.3, "reason": "nie trafia"}]
+    with caplog.at_level(logging.WARNING, logger="mielizna.kz"):
+        kz.load_qc_spots(ocr, qc, position_reject=rej)
+    warn = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("1 wierszy kontroli" in m for m in warn), warn
+    assert any("1 wpis" in m and "spot_position_reject" in m and "nie trafia" in m for m in warn), warn
+
+
+def test_load_qc_spots_no_warning_when_everything_matches(caplog):
+    import logging
+    ocr = _ocr_two()
+    qc = pd.DataFrame({"id": [0], "ocr_z": [188.3], "qc": ["ok"], "z_qc": [np.nan], "px": [100.0], "py": [100.0]})
+    with caplog.at_level(logging.WARNING, logger="mielizna.kz"):
+        kz.load_qc_spots(ocr, qc, position_reject=[{"px": 500.0, "py": 500.0, "ocr_z": 188.3, "reason": "x"}])
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]

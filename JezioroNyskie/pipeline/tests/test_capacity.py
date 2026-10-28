@@ -25,3 +25,10 @@ def test_explicit_table_matches_default():
     assert capacity_to_level(65.69, table=t) == capacity_to_level(65.69)
     assert level_to_capacity(195.0, table=t) == level_to_capacity(195.0)
     assert np.isnan(capacity_to_level(10.0, table=t))
+
+
+def test_npp_and_max_pp_constants_live_in_capacity_and_are_shared():
+    """Jedno źródło stałych brief §4 (backend i porównanie KŻ importują je stąd)."""
+    from mielizna import capacity, kz_compare
+    assert capacity.NPP_MLN_M3 == 65.69 and capacity.MAX_PP_MLN_M3 == 121.70
+    assert kz_compare.NPP_MLN_M3 is capacity.NPP_MLN_M3

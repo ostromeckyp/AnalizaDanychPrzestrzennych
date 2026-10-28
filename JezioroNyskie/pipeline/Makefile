@@ -9,6 +9,8 @@
 #   make -W <plik> ...                          (uznaj dowolny plik za zmieniony)
 # Po zmianie config.yaml (np. exclude_dates) `make s2` ponownie uruchamia 01 (config.yaml jest zależnością
 # CSV scen), a dalsze kroki kaskadowo; sam RF nie jest od CSV zależny (retrening tylko po zmianie etykiet).
+# Sekcje LiDAR i KŻ są w config_lidar.yaml / config_kz.yaml (load_config je dołącza): zależą od nich tylko kroki LiDAR/KŻ,
+# więc ich strojenie nie unieważnia łańcucha S2 -> klasyfikacja -> model.
 # Skrypty same są też wznawialne (01: CSV + COG; 04: pomija gotowe sceny; 06a: cache PDF).
 
 UV      ?= uv run python
@@ -57,7 +59,7 @@ $(LAKE):                                   # 03: obrys jeziora, AOI, przystanie 
 	$(UV) 03_fetch_osm.py
 
 nmt: $(INVENT)
-$(INVENT): config.yaml | $(LAKE)          # 02: skorowidze GUGiK, NMT (pierścień brzegowy) i LAZ (wznawialne; --dry-run: plan)
+$(INVENT): config_lidar.yaml | $(LAKE)   # 02: skorowidze GUGiK, NMT (pierścień brzegowy) i LAZ (wznawialne; --dry-run: plan)
 	$(UV) 02_fetch_nmt.py
 
 s2: $(S2CSV)
@@ -133,8 +135,8 @@ kz-qc-ui: $(KZSPOTS)                       # ręczna kontrola min(200, liczba pu
 	$(UV) tools/label_server.py --kz
 
 kz-contours: $(KZCONT)
-# Kod (kz.py, config kz.*) celowo NIE jest zależnością; po zmianie config: rm $(KZCONT) && make kz-contours (ok. 1 min)
-$(KZCONT): $(KZMETA) $(LAKE)                       # 09 contours: poziomice 192,5 i 195,0 m z mapy KŻ + qc_contours.png
+# Kod (kz.py) celowo NIE jest zależnością (po zmianie: rm $(KZCONT) && make kz-contours, ok. 1 min); config_kz.yaml jest.
+$(KZCONT): $(KZMETA) $(LAKE) config_kz.yaml        # 09 contours: poziomice 192,5 i 195,0 m z mapy KŻ + qc_contours.png
 	$(UV) 09_kz_digitize.py contours
 
 kz-gravel: $(ZWIR)
@@ -146,18 +148,22 @@ $(ZWIR): $(KZMETA) $(LAKE) $(REF)/zwirownia_vertices.csv   # 09 gravel: obrys re
 # (kz.py/variant_d.py nie są zależnością). Wynik wchodzi do scenes.json dopiero po 06_water_levels.py;
 # `make levels` przy nieaktualnych datach uruchomi też łańcuch RF, więc bez retreningu: `uv run python 10_kz_compare.py variant-d && uv run python 06_water_levels.py`.
 variant-d: $(EVALD)
-$(EVALD): $(KZSPOTS) $(KZCONT) $(ZWIR) $(wildcard $(REF)/kz_spot_qc.csv)
+$(EVALD): $(KZSPOTS) $(KZCONT) $(ZWIR) $(wildcard $(REF)/kz_spot_qc.csv) config_kz.yaml
 	$(UV) 10_kz_compare.py variant-d
 
-# kz-compare / kz-overlay (K5): punkty, poziomice, go/no-go i nakladka. Zaleznosci TYLKO od kodu porownania i danych KŻ-referencyjnych;
-# model, spots i kz_contours maja reguly, ale ich lancuch ma nieaktualne daty (make odpalilby kz-spots/RF), wiec nie sa prerekwizytami.
+# kz-compare / kz-overlay (K5): punkty, poziomice, go/no-go i nakladka. Zaleznosci TYLKO od kodu porownania, danych KŻ-referencyjnych
+# i config_kz.yaml (spot_position_reject); model, spots i kz_contours maja reguly, ale ich lancuch ma nieaktualne daty (make odpalilby
+# kz-spots/RF), wiec nie sa prerekwizytami. compare czyta eval/bottom_vs_nmt.json (wynik `evaluate`; jego zaleznosci to sam kod, wiec
+# bez kaskady RF) i lidar/epochs.csv: ten jest order-only i TYLKO gdy go brak (filter-out), bo make odswieza nawet order-only
+# prerekwizyty, a regula epochs.csv ciagnie 02 (pobieranie z GUGiK); gdy plik istnieje, jego data i regula nie maja znaczenia.
 # Po zmianie modelu/QC: rm $(EVALKZ) && make kz-compare.  Nie dotyka variant_d.json.
 kz-compare: $(EVALKZ)
-$(EVALKZ): 10_kz_compare.py mielizna/kz_compare.py $(wildcard $(REF)/kz_spot_qc.csv) $(ZWIR)
+$(EVALKZ): 10_kz_compare.py mielizna/kz_compare.py $(wildcard $(REF)/kz_spot_qc.csv) $(ZWIR) config_kz.yaml $(EVALCH) \
+           | $(filter-out $(wildcard $(EPOCHS)),$(EPOCHS))
 	$(UV) 10_kz_compare.py compare
 
 kz-overlay: $(KZOVER)
-$(KZOVER): 10_kz_compare.py mielizna/kz_compare.py $(wildcard $(REF)/kz_spot_qc.csv)
+$(KZOVER): 10_kz_compare.py mielizna/kz_compare.py $(wildcard $(REF)/kz_spot_qc.csv) config_kz.yaml
 	$(UV) 10_kz_compare.py overlay
 
 # evaluate: ocena dokladnosci (§7). Zaleznosci TYLKO od kodu oceny: pliki wejsciowe (scenes.json, model/*, epochs.csv) maja w tym

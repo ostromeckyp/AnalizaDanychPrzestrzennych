@@ -173,6 +173,12 @@ def make_fetch(calls, list_html=None, bad=()):
     return fetch
 
 
+@pytest.fixture(autouse=True)
+def _no_throttle(monkeypatch):
+    """Sieć jest w testach podmieniona, więc nie czekamy na prawdziwy odstęp 1 s między zapytaniami (latest_govpl, _download)."""
+    monkeypatch.setattr(bulletins, "_throttle", lambda: None)
+
+
 @pytest.fixture
 def pdf_text(monkeypatch):
     """Tekst „PDF" zależny od nazwy pliku: 26.10 i 22.10 → fixture z 22.10 (v 40,2), inne → 12.03 (v 61,23)."""

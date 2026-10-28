@@ -32,7 +32,8 @@ uv sync
 uv run pytest
 ```
 
-Konfiguracja: `pipeline/config.yaml` (bbox, siatka, okresy, filtr scen, ścieżki danych).
+Konfiguracja: `pipeline/config.yaml` (bbox, siatka, okresy, filtr scen, ścieżki danych), `pipeline/config_lidar.yaml` (LiDAR/NMT)
+i `pipeline/config_kz.yaml` (mapa KŻ); `load_config` łączy je w jeden słownik, a `make` wiąże każdy plik tylko z jego krokami.
 Dane surowe (`data/raw/`) i przetworzone (`data/processed/`) nie są w git; wyjątek: `data/raw/check/`.
 
 ## Pipeline krok po kroku

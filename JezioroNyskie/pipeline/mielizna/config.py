@@ -9,10 +9,30 @@ DATA_DIR = PIPELINE_DIR.parent / "data"
 DEFAULT_CONFIG = PIPELINE_DIR / "config.yaml"
 
 
+# Części konfiguracji w osobnych plikach obok config.yaml (klucz najwyższego poziomu = nazwa części). Osobno, bo config.yaml
+# jest zależnością make łańcucha S2 -> klasyfikacja -> model; strojenie KŻ lub LiDAR nie może go unieważniać.
+PART_CONFIGS = ("config_lidar.yaml", "config_kz.yaml")
+
+
 def load_config(path: Path | None = None) -> dict:
-    """Wczytuje config.yaml (domyślnie pipeline/config.yaml) jako słownik."""
-    with open(path or DEFAULT_CONFIG, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    """Wczytuje config.yaml (domyślnie pipeline/config.yaml) i dołącza części obok niego (config_lidar.yaml, config_kz.yaml).
+
+    Wynik to jeden słownik (cfg["kz"], cfg["lidar"] jak dawniej). Brak pliku części jest dozwolony; ten sam klucz najwyższego
+    poziomu w dwóch plikach to błąd (ValueError), żeby nie było cichego nadpisania."""
+    path = Path(path or DEFAULT_CONFIG)
+    with open(path, encoding="utf-8") as f:
+        cfg = yaml.safe_load(f) or {}
+    for name in PART_CONFIGS:
+        part_path = path.parent / name
+        if not part_path.exists():
+            continue
+        with open(part_path, encoding="utf-8") as f:
+            part = yaml.safe_load(f) or {}
+        dup = sorted(set(part) & set(cfg))
+        if dup:
+            raise ValueError(f"{part_path.name}: klucze {dup} są już w {path.name}")
+        cfg.update(part)
+    return cfg
 
 
 def data_dir() -> Path:
