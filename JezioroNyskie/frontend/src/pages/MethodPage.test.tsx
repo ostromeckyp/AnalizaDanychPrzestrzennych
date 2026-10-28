@@ -40,7 +40,7 @@ describe('MethodPage', () => {
     await screen.findByRole('heading', { name: 'Jak powstaje mapa głębokości' });
     expect(tile('Zgodność maski wody (OA)')).toHaveTextContent('81,6%');
     expect(tile('Zrównoważona trafność (BA)')).toHaveTextContent('77,2%');
-    expect(tile('Liczba scen')).toHaveTextContent('3');
+    expect(tile('Liczba scen')).toHaveTextContent('3okres 12.04.2025–20.10.2026');
     expect(tile('Zakres poziomów')).toHaveTextContent('192,90–197,92');
     expect(tile('RMSE dna')).toHaveTextContent(/w przygotowaniu/);
   });

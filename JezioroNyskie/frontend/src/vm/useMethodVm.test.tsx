@@ -34,6 +34,7 @@ describe('useMethodVm', () => {
     expect(t['Zrównoważona trafność (BA)'].value).toBe('77,2%');
     expect(t['Zrównoważona trafność (BA)'].sub).toContain('75,5%');
     expect(t['Liczba scen'].value).toBe('3');
+    expect(t['Liczba scen'].sub).toBe('okres 12.04.2025–20.10.2026');
     expect(t['Zakres poziomów'].value).toBe('192,90–197,92');
     expect(t['RMSE dna'].value).toMatch(/w przygotowaniu/);
   });
@@ -76,6 +77,31 @@ describe('useMethodVm', () => {
     expect(s3).toMatch(/w przygotowaniu/);
     expect(result.current.steps[3].text).toMatch(/przedziały zalania/);
     expect(result.current.steps[3].text).not.toMatch(/interpolacj/i);
+  });
+
+  it('step 03 declension and variant R counts', async () => {
+    metaMock.mockResolvedValue({ ...meta, n_scenes: 218, n_scenes_by_method: { B: 153, C: 63, R: 2 } });
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    const s3 = result.current.steps[2].text;
+    expect(s3).toContain('153 sceny');
+    expect(s3).toContain('63 sceny');
+    expect(s3).toContain('2 sceny');
+    expect(s3).toMatch(/pomiaru wodowskazowego/);
+    expect(result.current.steps[0].text).toContain('218 scen ');
+    expect(result.current.steps[0].text).toContain('12.04.2025–20.10.2026');
+  });
+
+  it('legend labels variant R', async () => {
+    metaMock.mockResolvedValue({
+      ...meta,
+      area_level: { ...meta.area_level, points: [{ date: '2025-05-01', area_otsu_km2: 11, h_t: 197.9, h_method: 'R' }] },
+    });
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.chart!.legend).toEqual([
+      { code: 'R', label: 'znany pomiar wodowskazowy', color: 'var(--risk)' },
+    ]);
   });
 
   it('error exposes retry', async () => {

@@ -1,4 +1,4 @@
-import { fmtDate, fmtNum, fmtPct } from '../format';
+import { fmtDate, fmtNum, fmtPct, plScenes } from '../format';
 import { useMetaVm } from './useMetaVm';
 
 export type MethodTile = { label: string; value: string; sub: string };
@@ -28,6 +28,7 @@ export interface MethodVm {
 // Warianty ustalania poziomu (brief §6.3): kod -> opis i token koloru (CSS custom property).
 const METHODS: Record<string, { label: string; color: string }> = {
   A: { label: 'kalibracja NMT (LiDAR)', color: 'var(--danger)' },
+  R: { label: 'znany pomiar wodowskazowy', color: 'var(--risk)' },
   B: { label: 'komunikat RZGW', color: 'var(--accent)' },
   C: { label: 'krzywa powierzchnia–poziom', color: 'var(--safe)' },
   D: { label: 'mapa KŻ Nysa', color: 'var(--bottom-5)' },
@@ -43,12 +44,13 @@ const SOURCES: MethodSource[] = [
   {
     name: 'Wody Polskie (RZGW)',
     use: 'komunikaty o pojemności zbiornika Nysa, przeliczane na poziom wody w dniu sceny',
-    license: 'dane publiczne Wód Polskich, z podaniem źródła',
+    license: 'źródło: Wody Polskie / RZGW Wrocław (archiwum komunikatów z Wayback Machine)',
   },
   {
-    name: 'Mapa Klubu Żeglarskiego Nysa (Wiktor Wróblewski)',
-    use: 'mapa głębokości do porównania z modelem',
-    license: 'użycie niekomercyjne, za zgodą autora',
+    name: 'Mapa KŻ Nysa (Wiktor Wróblewski)',
+    use: 'tabela pojemność ↔ rzędna (wariant B); porównanie dna — plan 4',
+    license:
+      'bezpłatna, niekomercyjna; dane mogą zawierać błędy; źródło: Wiktor Wróblewski, KŻ Nysa, aktualizacja 23.05.2023',
   },
   {
     name: 'OpenStreetMap',
@@ -57,7 +59,7 @@ const SOURCES: MethodSource[] = [
   },
   {
     name: 'GUGiK',
-    use: 'ortofotomapa, NMT terenu wokół zbiornika',
+    use: 'ortofotomapa; NMT terenu wokół zbiornika — plan 4',
     license: 'otwarte dane PZGiK, z atrybucją',
   },
 ];
@@ -79,13 +81,15 @@ export function useMethodVm(): MethodVm {
   const byMethod = meta.n_scenes_by_method;
   const nB = byMethod.B ?? 0;
   const nC = byMethod.C ?? 0;
-  const [from, to] = meta.period_dates;
+  const nR = byMethod.R ?? 0;
+  const from = meta.first_scene_date ?? '';
+  const to = meta.last_scene_date ?? '';
 
   const steps: MethodStep[] = [
     {
       n: '01',
       title: 'Satelita',
-      text: `Sceny Copernicus Sentinel-2 (10 m) z niskim zachmurzeniem, z wielu lat i pór roku. W modelu: ${fmtNum(meta.n_scenes, 0)} scen z okresu ${fmtDate(from)}–${fmtDate(to)}.`,
+      text: `Sceny Copernicus Sentinel-2 (10 m) z niskim zachmurzeniem, z wielu lat i pór roku. W modelu: ${plScenes(meta.n_scenes)} z okresu ${fmtDate(from)}–${fmtDate(to)}.`,
     },
     {
       n: '02',
@@ -96,9 +100,10 @@ export function useMethodVm(): MethodVm {
       n: '03',
       title: 'Linie brzegowe',
       text:
-        `Granica maski to linia brzegowa. Poziom wody w dniu sceny przypisujemy jej z komunikatów RZGW (${fmtNum(nB, 0)} scen) ` +
-        `oraz z krzywej powierzchnia–poziom dopasowanej do scen ze znanym poziomem (${fmtNum(nC, 0)} scen). ` +
-        'Kalibracja poziomu według NMT z LiDAR jest w przygotowaniu.',
+        `Granica maski to linia brzegowa. Poziom wody w dniu sceny przypisujemy jej z komunikatów RZGW (${plScenes(nB)}) ` +
+        `oraz z krzywej powierzchnia–poziom dopasowanej do scen ze znanym poziomem (${plScenes(nC)}).` +
+        (nR > 0 ? ` Dla ${plScenes(nR)} znamy poziom z pomiaru wodowskazowego.` : '') +
+        ' Kalibracja poziomu według NMT z LiDAR jest w przygotowaniu.',
     },
     {
       n: '04',
