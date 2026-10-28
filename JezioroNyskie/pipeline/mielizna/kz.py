@@ -23,6 +23,7 @@ Rzędne punktowe (K2): OCR przez CLI `tesseract` (kafle 1200 px z zakładką, `-
 """
 import csv
 import io
+import logging
 import re
 import shutil
 import subprocess
@@ -624,7 +625,7 @@ def contour_level_masks(img: np.ndarray, colors: dict) -> dict:
     from scipy import ndimage as ndi
 
     ring = int(colors.get("ring_px", 6))
-    line = color_mask(img, tuple(colors["line"]), colors["line_tol"])
+    line = color_mask(img, tuple(colors["line"]), colors["line_tol"]) & (_blueness(img) >= 40)   # szara siatka i drogi odpadają
     shallow = color_mask(img, tuple(colors["shallow"]), colors["shallow_tol"])
     shallow = ndi.binary_opening(shallow, np.ones((5, 5), bool))      # bez cienkich linii siatki i obwódek tekstu
     deep = color_mask(img, tuple(colors["deep"]), colors["deep_tol"]) & ~shallow
@@ -653,6 +654,102 @@ def contour_level_masks(img: np.ndarray, colors: dict) -> dict:
     return out
 
 
+def _side_class(rgb) -> str:
+    """Klasa piksela obok linii: water (biel albo błękit wody), ink (granat linii, tekst, czerń) lub land (reszta:
+    ciemna zieleń, piasek, beż, szarość). Poziom wody poznajemy po b >> r, więc beżowy symbol drogi nie jest wodą."""
+    r, g, b = (int(v) for v in rgb)
+    if r >= 232 and g >= 232 and b >= 232:
+        return "water"
+    if b >= 215 and b - r >= 20:
+        return "water"
+    if b - r >= 50 and r + g + b < 450 or r + g + b < 300:
+        return "ink"
+    return "land"
+
+
+def line_side_votes(img: np.ndarray, xy_px: np.ndarray, offset_px: float = 8.0, step_px: float = 6.0):
+    """Udział próbek wzdłuż linii (piksele obrazu), dla których jedna strona to woda, a druga ląd.
+
+    Co `step_px` bierzemy normalną do linii i klasę piksela (mediana 3 x 3) po obu stronach w odległości
+    `offset_px`; próbka z tuszem (tekst, inna linia) po którejś stronie nie liczy się. Zwraca (udział, liczba
+    ważnych próbek). Brzeg 195,0 m: ląd po jednej stronie, woda po drugiej; poziomica nad brzegiem ma ląd po
+    obu stronach, a w wodzie wodę po obu."""
+    from shapely.geometry import LineString
+
+    xy = np.asarray(xy_px, float)
+    ls = LineString(xy)
+    h, w = img.shape[:2]
+    n_ok = n_shore = 0
+    for d in np.arange(step_px, ls.length - step_px, step_px):
+        a, b = ls.interpolate(d - 3), ls.interpolate(d + 3)
+        p = ls.interpolate(d)
+        tx, ty = b.x - a.x, b.y - a.y
+        nn = np.hypot(tx, ty)
+        if nn == 0:
+            continue
+        nx_, ny_ = -ty / nn, tx / nn
+        cls = []
+        for sgn in (1, -1):
+            cx, cy = int(round(p.x + sgn * nx_ * offset_px)), int(round(p.y + sgn * ny_ * offset_px))
+            if not (1 <= cx < w - 1 and 1 <= cy < h - 1):
+                break
+            med = np.median(img[cy - 1:cy + 2, cx - 1:cx + 2, :3].reshape(-1, 3), axis=0)
+            cls.append(_side_class(med))
+        if len(cls) < 2 or "ink" in cls:
+            continue
+        n_ok += 1
+        n_shore += set(cls) == {"land", "water"}
+    return (n_shore / n_ok if n_ok else 0.0), n_ok
+
+
+def is_axis_aligned(xy_px: np.ndarray, tol_px: float = 3.0) -> bool:
+    """Linia prosta wzdłuż osi obrazu (siatka mapy, ramka), nie poziomica."""
+    xy = np.asarray(xy_px, float)
+    return bool(min(np.ptp(xy[:, 0]), np.ptp(xy[:, 1])) <= tol_px)
+
+
+def is_straight(xy_px: np.ndarray, ratio: float = 0.985, min_len_px: float = 150.0) -> bool:
+    """Długa, niemal prosta linia (cięciwa / długość >= ratio): droga, wał, granica użytku, nie poziomica."""
+    from shapely.geometry import LineString
+
+    xy = np.asarray(xy_px, float)
+    length = LineString(xy).length
+    return bool(length >= min_len_px and np.hypot(*(xy[-1] - xy[0])) / length >= ratio)
+
+
+def drop_outer_parallels(lines, ref_geom, tol_m: float = 12.0, frac: float = 0.5) -> list[bool]:
+    """Maska „zostaw”: z pary równoległych poziomic (> `frac` długości w odległości <= `tol_m` od drugiej)
+    zostaje ta bliżej `ref_geom` (obrys jeziora): niższa poziomica przy wodzie to 195,0, zewnętrzna jest wyżej."""
+    from shapely.geometry import MultiPoint
+
+    keep = [True] * len(lines)
+    pts = [MultiPoint([lines[i].interpolate(d) for d in np.arange(0, lines[i].length, 5.0)] or [lines[i].interpolate(0)])
+           for i in range(len(lines))]
+    dist_ref = [float(np.mean([ref_geom.distance(q) for q in pts[i].geoms])) for i in range(len(lines))]
+    for i, li in enumerate(lines):
+        for j, lj in enumerate(lines):
+            if i == j or not keep[j]:
+                continue
+            near = np.mean([lj.distance(q) <= tol_m for q in pts[i].geoms])
+            if near > frac and dist_ref[i] > dist_ref[j]:
+                keep[i] = False
+                break
+    return keep
+
+
+def match_drops(lines, drops: list[dict], tol_m: float = 20.0) -> list[bool]:
+    """Które linie wskazują wpisy `contour_drop` (środek w EPSG:2180 `x`,`y` w granicy `tol_m` i długość +-25 %);
+    stabilne wobec zmiany numeracji po ponownym uruchomieniu."""
+    from shapely.geometry import Point
+
+    out = []
+    for g in lines:
+        c = g.interpolate(0.5, normalized=True)
+        out.append(any(Point(d["x"], d["y"]).distance(c) <= tol_m and abs(g.length - d["length_m"]) <= 0.25 * d["length_m"]
+                       for d in drops))
+    return out
+
+
 def lines_to_2180(lines, t: "KzTransform") -> list:
     """Linie w pikselach obrazu -> EPSG:2180 przez transformację z GCP."""
     from shapely.geometry import LineString
@@ -676,6 +773,8 @@ def vertices_to_polygon(verts, t: "KzTransform"):
     x, y = t.px_to_2180(v[:, 0], v[:, 1])
     poly = Polygon(np.column_stack([x, y]))
     if not poly.is_valid:
+        logging.getLogger(__name__).warning("vertices_to_polygon: naprawiono nieprawidłowy pierścień (samoprzecięcie), "
+                                            "sprawdź kolejność wierzchołków")
         poly = make_valid(poly)
         if poly.geom_type != "Polygon":
             poly = max((g for g in getattr(poly, "geoms", [poly]) if g.geom_type == "Polygon"), key=lambda g: g.area)

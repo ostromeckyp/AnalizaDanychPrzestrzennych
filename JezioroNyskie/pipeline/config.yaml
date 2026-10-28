@@ -76,6 +76,10 @@ kz:
     ring_px: 8                 # promień sąsiedztwa do wykrycia wypełnień obok linii
     grow_px: 10                # ile pikseli ziarno może rosnąć po granatowej masce (zasklepia przerwy w cienkich liniach)
   contour_min_len_px: 80       # krótsze (kreski linii „orientacyjnych”, litery) odpadają
-  # id = numer w kz_contours.gpkg (poziom rosnąco, w poziomie długość malejąco; stabilne dla tych samych masek).
-  # 165: odcinek 97 m wzdłuż krawędzi korony zapory (czarna droga), nie poziomica (oglądane na wycinku mapy).
-  contour_drop_ids: [165]
+  # Fragmenty ewidentnie błędne po klasyfikacji: wpis = środek linii (EPSG:2180) i długość; dopasowanie do 20 m (stabilne
+  # wobec zmiany numeracji). Każdy wpis ma `reason` obejrzany na wycinku mapy.
+  contour_drop:
+    - {x: 374164, y: 287866, length_m: 176, reason: "pętla wokół wzgórka 198,7 m: druga poziomica na zewnątrz, więc to poziom > 195,0 (uwaga recenzenta + oględziny wycinka)"}
+  side_offset_px: 8            # odległość próbkowania stron linii (klasa: woda / ląd)
+  shore_vote_min: 0.5          # 195,0: min. udział próbek „ląd z jednej strony, woda z drugiej”
+  parallel_tol_m: 12           # pary równoległych poziomic 195: zostaje ta bliżej brzegu jeziora

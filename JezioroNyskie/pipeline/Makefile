@@ -129,11 +129,11 @@ kz-qc-ui: $(KZSPOTS)                       # ręczna kontrola min(200, liczba pu
 
 kz-contours: $(KZCONT)
 # Kod (kz.py, config kz.*) celowo NIE jest zależnością; po zmianie config: rm $(KZCONT) && make kz-contours (ok. 1 min)
-$(KZCONT): $(KZMETA)                       # 09 contours: poziomice 192,5 i 195,0 m z mapy KŻ + qc_contours.png
+$(KZCONT): $(KZMETA) $(LAKE)                       # 09 contours: poziomice 192,5 i 195,0 m z mapy KŻ + qc_contours.png
 	$(UV) 09_kz_digitize.py contours
 
 kz-gravel: $(ZWIR)
-$(ZWIR): $(KZMETA) $(REF)/zwirownia_vertices.csv   # 09 gravel: obrys rejonu eksploatacji kruszywa (wierzchołki ręczne) -> zwirownia.gpkg
+$(ZWIR): $(KZMETA) $(LAKE) $(REF)/zwirownia_vertices.csv   # 09 gravel: obrys rejonu eksploatacji kruszywa (wierzchołki ręczne) -> zwirownia.gpkg
 	$(UV) 09_kz_digitize.py gravel
 
 test:

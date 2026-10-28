@@ -24,7 +24,8 @@ Co robi (`spots`): OCR rzędnych punktowych z pełnej mapy (kafle 1200 px, tesse
 
 Co robi (`contours`): poziomice 192,5 i 195,0 m z pełnej mapy: maska koloru linii, poziom z sąsiedniego wypełnienia
   (config `kz.contour_colors`), szkielet -> linie, odrzucenie krótkich (kreski „orientacyjne”), transformacja
-  do EPSG:2180, `kz.contour_drop_ids` usuwa fragmenty ewidentnie błędne. Wejście → wyjście: kz_full.png →
+  do EPSG:2180, poziom 195,0 weryfikowany większością próbek (ląd | woda) wzdłuż linii, zewnętrzna z pary równoległych odpada,
+  `kz.contour_drop` (środek+długość) usuwa fragmenty ewidentnie błędne. Wejście → wyjście: kz_full.png →
   data/processed/kz/kz_contours.gpkg (id, level, length_m; EPSG:2180) + qc_contours.png.
 Co robi (`gravel`): obrys rejonu eksploatacji kruszywa (różowa linia przerywana na mapie) z wierzchołków
   data/reference/zwirownia_vertices.csv (piksele mapy, wskazane ręcznie) -> data/reference/zwirownia.gpkg
@@ -245,25 +246,49 @@ def contours() -> int:
     masks = kz.contour_level_masks(img, cfg["contour_colors"])
     lake = gpd.read_file(data_path("processed", "lake.gpkg"), layer="lake").geometry.union_all()
     rows, geoms = [], []
+    shore = lake.boundary
     for level in (192.5, 195.0):
         px_lines = kz.mask_to_lines(masks[level], cfg["contour_min_len_px"])
-        for g in kz.lines_to_2180(px_lines, t):
-            xy = np.asarray(g.coords)
-            if kz.in_lake_zone(xy[:, 0], xy[:, 1], lake, LAKE_ZONE_BUFFER_M).mean() < 0.9:
-                continue                                   # legenda, ramka, opisy poza zbiornikiem
+        votes = {"checked": len(px_lines), "not_shore": 0}
+        kept_px = []
+        for g in px_lines:
+            if kz.is_axis_aligned(np.asarray(g.coords)):      # linie siatki wzdłuż osi obrazu
+                votes["axis_aligned"] = votes.get("axis_aligned", 0) + 1
+                continue
+            if kz.is_straight(np.asarray(g.coords)):          # drogi, wały, granice użytków (cięciwa/długość >= 0,985)
+                votes["straight"] = votes.get("straight", 0) + 1
+                continue
+            if level == 195.0:      # poziom z ziaren pikselowych bywa błędny: ostatecznie decyduje większość próbek wzdłuż linii
+                frac, n_ok = kz.line_side_votes(img, np.asarray(g.coords), cfg.get("side_offset_px", 8))
+                if n_ok < 3 or frac < cfg.get("shore_vote_min", 0.5):
+                    votes["not_shore"] += 1
+                    continue
+            kept_px.append(g)
+        lines2180 = [g for g in kz.lines_to_2180(kept_px, t)
+                     if kz.in_lake_zone(*np.asarray(g.coords).T, lake, LAKE_ZONE_BUFFER_M).mean() >= 0.9]   # legenda, ramka, opisy
+        if level == 195.0:
+            keep = kz.drop_outer_parallels(lines2180, shore, cfg.get("parallel_tol_m", 12))
+            votes["outer_parallel_dropped"] = int(len(keep) - sum(keep))
+            lines2180 = [g for g, k in zip(lines2180, keep) if k]
+        for g in lines2180:
             rows.append({"level": level, "length_m": round(g.length, 1)})
             geoms.append(g)
-        log.info("poziom %.1f: linie po filtrze strefy: %d", level, sum(r["level"] == level for r in rows))
+        log.info("poziom %.1f: %s, po filtrach: %d", level, votes, len(lines2180))
     gdf = gpd.GeoDataFrame(rows, geometry=geoms, crs="EPSG:2180")
     gdf = gdf.sort_values(["level", "length_m"], ascending=[True, False], kind="stable").reset_index(drop=True)
-    gdf.insert(0, "id", np.arange(len(gdf)))              # id stabilne: poziom, potem malejąca długość
-    drop = set(cfg.get("contour_drop_ids") or [])
-    gdf = gdf[~gdf.id.isin(drop)].reset_index(drop=True)
+    gdf.insert(0, "id", np.arange(len(gdf)))              # id tylko do podglądu (numery na qc_contours.png)
+    drops = cfg.get("contour_drop") or []
+    hit = np.array(kz.match_drops(list(gdf.geometry), drops, tol_m=20.0), bool)   # po środku i długości, nie po numerze
+    unmatched = [d for d in drops if not any(kz.match_drops([g], [d], 20.0)[0] for g in gdf.geometry)]
+    if unmatched:
+        log.warning("contour_drop: %d wpisów bez pasującej linii (mapa lub maski się zmieniły): %s", len(unmatched), unmatched)
+    gdf = gdf[~hit].reset_index(drop=True)
+    gdf["id"] = np.arange(len(gdf))
     gdf.to_file(outdir / "kz_contours.gpkg", driver="GPKG", layer="contours",
                 metadata={"source": "data/reference/KZ_ZRODLO_I_WARUNKI.md (mapa KŻ Nysa, W. Wróblewski 2023)"})
     stats = {str(l): {"n": int((gdf.level == l).sum()), "length_km": round(float(gdf[gdf.level == l].length.sum()) / 1000, 2)}
              for l in (192.5, 195.0)}
-    stats["dropped_ids"] = sorted(int(i) for i in drop)
+    stats["dropped_by_centroid"] = int(hit.sum())
     (outdir / "kz_contours_stats.json").write_text(json.dumps(stats, indent=2))
     log.info("contours: %s", stats)
     contours_qc(img, t, gdf, outdir / "qc_contours.png")
