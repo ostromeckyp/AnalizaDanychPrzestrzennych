@@ -177,3 +177,54 @@ def test_error_rate_is_stratum_weighted():
 def test_stratum_rule():
     d = pd.DataFrame({"color_ok": [True, False, True, True], "conf": [95, 95, 70, 80]})
     assert list(kz.is_suspect(d)) == [False, True, True, False]
+
+
+def test_comma_tail_below_box_is_not_an_anchor():
+    img = _canvas2()
+    box = _number(img)                       # ramka (32, 18, 26, 16): dół ramki y = 34
+    _dot(img, 46, 36)                        # ogonek przecinka wystaje 0-4 px pod ramkę, nad drugą cyfrą
+    assert kz.spot_anchors(img, [box]) == [None]
+
+
+def test_dot_below_beyond_comma_tail_is_still_an_anchor():
+    img = _canvas2()
+    box = _number(img)
+    cx, cy = _dot(img, 46, 44)               # 10 px pod ramką > 0,3 x wysokość
+    (x, y, sd), = kz.spot_anchors(img, [box])
+    assert sd == "below" and (x, y) == pytest.approx((cx, cy), abs=0.6)
+
+
+def test_shared_blob_clipped_by_different_windows_is_still_one_dot():
+    """Kropka przecięta oknem poszukiwań jednej liczby ma dla drugiej inny środek; kluczem jest cała kropka."""
+    img = _canvas2(120)
+    a = _number(img, 32, 20)                 # ramka (32,18,26,16), okno kończy się na y = 58
+    b = _number(img, 32, 76)                 # ramka (32,74,26,16), bliżej kropki
+    img[55:61, 20:26] = (0, 0, 150)          # kropka 6x6 przecięta oknem A
+    ra, rb = kz.spot_anchors(img, [a, b])
+    assert ra is None and rb is not None
+
+
+def test_lake_zone_filter_fills_island_holes_and_buffers():
+    from shapely.geometry import Polygon
+
+    lake = Polygon([(0, 0), (1000, 0), (1000, 1000), (0, 1000)], holes=[[(400, 400), (600, 400), (600, 600), (400, 600)]])
+    x = np.array([500.0, 1050.0, 1200.0, -50.0])
+    y = np.array([500.0, 500.0, 500.0, 500.0])
+    assert list(kz.in_lake_zone(x, y, lake, buffer_m=100)) == [True, True, False, True]   # wyspa w środku zostaje
+
+
+def test_match_qc_survives_renumbering():
+    spots = pd.DataFrame({"id": [0, 1, 2], "z": [188.0, 189.0, 190.0], "px": [10.0, 50.0, 90.0], "py": [5.0, 5.0, 5.0]})
+    qc = pd.DataFrame({"id": [7, 8, 9], "ocr_z": [189.0, 190.0, 188.0], "qc": ["ok", "rejected", "ok"], "z_qc": [np.nan] * 3,
+                       "px": [51.0, 90.5, 300.0], "py": [5.5, 4.0, 5.0]})        # trzeci: brak punktu w pobliżu
+    out, dropped = kz.match_qc(qc, spots)
+    assert dict(zip(out.id, out.qc)) == {1: "ok", 2: "rejected"} and dropped == 1
+    qc2 = qc.assign(ocr_z=[189.0, 191.0, 188.0])                                  # ten sam punkt, inna rzędna -> odrzucony
+    assert kz.match_qc(qc2, spots)[1] == 2
+
+
+def test_red_marker_is_not_a_dot():
+    img = _canvas2()
+    box = _number(img)
+    img[31:35, 22:26] = (220, 30, 30)       # czerwony krzyżyk komunikatu w miejscu kropki
+    assert kz.spot_anchors(img, [box]) == [None]

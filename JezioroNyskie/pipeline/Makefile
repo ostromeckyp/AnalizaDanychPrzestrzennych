@@ -117,7 +117,9 @@ $(KZMETA): ../docs/JN_2023_05_23__KZ.pdf $(REF)/kz_gcp.csv $(LAKE)      # 09 geo
 	$(UV) 09_kz_digitize.py georef
 
 kz-spots: $(KZSPOTS)
-$(KZSPOTS): $(KZMETA) mielizna/kz.py       # 09 spots: OCR rzędnych (tesseract) -> kz_spot_ocr.gpkg (kafle, ok. minuty)
+# Kod OCR (kz.py) celowo NIE jest zależnością: ponowny OCR zmienia numery `id`, a QC trzyma się kotwic (px, py);
+# wymuszenie: rm $(KZSPOTS) && make kz-spots
+$(KZSPOTS): $(KZMETA)                      # 09 spots: OCR rzędnych (tesseract, 2 przebiegi) -> kz_spot_ocr.gpkg (ok. 2 min)
 	$(UV) 09_kz_digitize.py spots
 
 kz-qc-ui: $(KZSPOTS)                       # ręczna kontrola min(200, liczba punktów): http://localhost:8765/kz -> data/reference/kz_spot_qc.csv

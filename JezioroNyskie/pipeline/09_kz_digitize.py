@@ -16,7 +16,7 @@ Jak to obronić: werdykt z progów briefu (5/10 m); porównanie dwóch rodzajów
   punktach wstrzymanych; nakładka oglądana wzrokowo; zapora jako kontrola niezależna od GCP.
 
 Co robi (`spots`): OCR rzędnych punktowych z pełnej mapy (kafle 1200 px, tesseract), parsowanie wzorca
-  `.?ddd,d` w zakresie 185-200 m, kotwica = najbliższa izolowana kropka z dowolnej strony liczby, jeden do jednego (brak albo niejednoznaczna = odrzucenie), kolor
+  `.?ddd,d` w zakresie 185-200 m, kotwica = najbliższa izolowana kropka z dowolnej strony liczby, jeden do jednego (brak albo niejednoznaczna = odrzucenie), punkty poza obrysem jeziora + 100 m (legenda) odpadają, kolor
   tekstu i reguła niebieski <=> z < 195,0; georeferencja kotwicy transformacją odtworzoną z GCP i `kind` z
   kz_meta.json. Wejście → wyjście: data/raw/kz/kz_full.png → data/processed/kz/kz_spot_ocr.gpkg
   (id, z, color, conf, color_ok, px, py, anchor_side + tekst i ramka OCR; EPSG:2180) oraz kz_spot_ocr_raw.csv (wszystkie słowa).
@@ -55,6 +55,7 @@ DAM_SEARCH_M = 30.0
 DAM_PROFILE_M = 100.0
 DAM_LAKE_DIST_M = 50.0
 DAM_BAND_WIDTH_M = 46.0
+LAKE_ZONE_BUFFER_M = 100.0   # punkty dalej niż 100 m od obrysu jeziora (legenda, opisy) odpadają
 OCR_SCALES = (1.0, 2.0)   # przebieg 1x + przebieg na kaflach powiększonych 2x (R15)
 
 
@@ -200,9 +201,17 @@ def spots() -> int:
     df = pd.DataFrame(rows).sort_values(["py", "px"]).reset_index(drop=True)
     df.insert(0, "id", np.arange(len(df)))
     x, y = t.px_to_2180(df["px"].to_numpy(), df["py"].to_numpy())
+    lake = gpd.read_file(data_path("processed", "lake.gpkg"), layer="lake").geometry.union_all()
+    in_zone = kz.in_lake_zone(x, y, lake, LAKE_ZONE_BUFFER_M)     # bez legendy i opisów poza zbiornikiem
+    n_outside = int((~in_zone).sum())
+    df, x, y = df[in_zone].reset_index(drop=True), x[in_zone], y[in_zone]
+    df["id"] = np.arange(len(df))
     gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(x, y), crs="EPSG:2180")
-    gdf.to_file(outdir / "kz_spot_ocr.gpkg", driver="GPKG", layer="spots")
-    stats = {"words": len(words), "matched": len(cand), "no_dot_rejected": no_dot, "accepted": len(df),
+    gdf.to_file(outdir / "kz_spot_ocr.gpkg", driver="GPKG", layer="spots",
+                metadata={"source": "data/reference/KZ_ZRODLO_I_WARUNKI.md (mapa KŻ Nysa, W. Wróblewski 2023; "
+                                    "nieodpłatnie, bez celów komercyjnych, kopia musi zawierać warunki)"})
+    stats = {"words": len(words), "matched": len(cand), "no_dot_rejected": no_dot, "outside_lake_zone_dropped": n_outside,
+             "accepted": len(df),
              "color_ok_share": round(float(df.color_ok.mean()), 3),
              "conf_quantiles": {q: round(float(df.conf.quantile(q)), 1) for q in (0.05, 0.25, 0.5, 0.75)},
              "conf_below_80": int((df.conf < kz.LOW_CONF).sum()), "colors": df.color.value_counts().to_dict(),

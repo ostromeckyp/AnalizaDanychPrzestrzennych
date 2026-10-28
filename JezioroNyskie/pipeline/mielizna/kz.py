@@ -16,7 +16,8 @@ Jak to obronić: progi z briefu (<= 5 m dobry, <= 10 m akceptowalny, wyżej tylk
 Licencja: pochodne z mapki mają odwołanie do data/reference/KZ_ZRODLO_I_WARUNKI.md.
 
 Rzędne punktowe (K2): OCR przez CLI `tesseract` (kafle 1200 px z zakładką, `--psm 11`), wzorzec `.?ddd,d` (opcjonalna kropka, 3 cyfry, przecinek, cyfra),
-  zakres wiarygodny 185-200 m, kotwica = kropka po LEWEJ stronie liczby (brak kropki = wartość odrzucona),
+  zakres wiarygodny 185-200 m, kotwica = najbliższa izolowana kropka z dowolnej strony liczby, jeden do jednego
+  (brak albo niejednoznaczna kropka = wartość odrzucona; ogonek własnego przecinka nie jest kropką),
   reguła koloru: niebieski <=> z < 195,0 (czarne to rzędne lądu/wysp). Błąd OCR szacujemy z próby kontrolnej
   (`ocr_error_rate`) z wagami warstw, bo próba nadreprezentuje punkty podejrzane.
 """
@@ -271,41 +272,76 @@ ANCHOR_RADIUS_FACTOR = 1.5   # promień szukania kropki = 1,5 x wysokość ramki
 ANCHOR_AMBIGUITY = 1.3       # dwie kropki o stosunku odległości < 1,3 = niejednoznaczne, liczba odrzucona
 
 
-def _dot_candidates(img: np.ndarray, box, others) -> list[tuple[float, float, str, float]]:
-    """Izolowane kropki (ciemne bloby 2-12 px) w promieniu 1,5 x wysokość od ramki: (x, y, strona, odległość).
+COMMA_TAIL_FACTOR = 0.3      # blob pod ramką nie dalej niż 0,3 x wysokość, nad zakresem cyfr = ogonek własnego przecinka
 
-    Cyfry to składowe o wysokości 0,5-1,25 wysokości ramki wewnątrz ramki; kropka wewnątrz ramki liczy się tylko
-    na lewo od pierwszej cyfry (przecinek i cyfry dziesiętne są pomijane). Kropka musi mieć 2 px czystego tła
-    wokół (koniec izobaty nie jest kropką) i nie może leżeć w ramce innego słowa z cyfrą (przecinek sąsiada)."""
-    from scipy.ndimage import find_objects, label
 
+def _dark_mask_chunked(img: np.ndarray, rows: int = 512) -> np.ndarray:
+    """Maska ciemnych pikseli całego obrazu, liczona pasami (pełna mapa ma 47 Mpx, bez kopii float na całość)."""
+    out = np.zeros(img.shape[:2], bool)
+    for y in range(0, img.shape[0], rows):
+        out[y:y + rows] = _dark_mask(img[y:y + rows])
+    return out
+
+
+class _Blobs:
+    """Składowe spójne całego obrazu (jednorazowo): wspólne dla wszystkich liczb, więc ta sama kropka ma ten sam
+    identyfikator i środek niezależnie od okna szukania (rozwiązanie konfliktu „jedna kropka - jedna liczba”)."""
+
+    def __init__(self, img: np.ndarray):
+        from scipy.ndimage import find_objects, label
+
+        self.img = img
+        self.lab, _ = label(_dark_mask_chunked(img), structure=np.ones((3, 3)))
+        rows = []
+        for i, sl in enumerate(find_objects(self.lab), start=1):
+            if sl is None:
+                continue
+            rows.append((i, sl[1].start, sl[1].stop, sl[0].start, sl[0].stop, int((self.lab[sl] == i).sum())))
+        self.a = np.array(rows, dtype=float).reshape(-1, 6)    # id, x0, x1, y0, y1, area (x1/y1 wyłącznie)
+
+    def is_dot(self, row) -> bool:
+        i, x0, x1, y0, y1, area = row
+        w, h = x1 - x0, y1 - y0
+        if not (DOT_MIN_PX <= w <= DOT_MAX_PX and DOT_MIN_PX <= h <= DOT_MAX_PX) or area < 0.5 * w * h:
+            return False
+        ring = self.lab[max(int(y0) - 2, 0):int(y1) + 2, max(int(x0) - 2, 0):int(x1) + 2]
+        if np.any((ring != 0) & (ring != i)):               # 2 px czystego tła: koniec izobaty nie jest kropką
+            return False
+        ys, xs = np.nonzero(self.lab[int(y0):int(y1), int(x0):int(x1)] == i)
+        px = self.img[int(y0) + ys, int(x0) + xs, :3].astype(float)
+        # kolor kropki jak tekstu rzędnej (niebieski albo czarny); czerwone/różowe krzyżyki komunikatów to nie kropki
+        return _classify_rgb(*np.median(px, axis=0)) != "other"
+
+
+def _dot_candidates(blobs: _Blobs, box, others) -> list[tuple[int, float, float, str, float]]:
+    """Izolowane kropki w promieniu 1,5 x wysokość od ramki: (id blobu, x, y, strona, odległość).
+
+    Cyfry to składowe o wysokości 0,5-1,25 wysokości ramki wewnątrz ramki. Pomijamy: kropki wewnątrz ramki (poza
+    lewą od pierwszej cyfry: przecinek, cyfry dziesiętne), ogonek własnego przecinka wystający pod ramkę (blob nad
+    zakresem cyfr, nie dalej niż 0,3 x wysokość pod dolną krawędzią) oraz kropki w ramkach innych słów z cyframi."""
     left, top, width, height = (int(round(v)) for v in box)
-    r = int(np.ceil(ANCHOR_RADIUS_FACTOR * height))
-    x0, x1 = max(left - r, 0), min(left + width + r, img.shape[1])
-    y0, y1 = max(top - r, 0), min(top + height + r, img.shape[0])
-    if x1 <= x0 or y1 <= y0:
+    r = ANCHOR_RADIUS_FACTOR * height
+    A = blobs.a
+    if len(A) == 0:
         return []
-    lab, _ = label(_dark_mask(img[y0:y1, x0:x1]), structure=np.ones((3, 3)))
-    comps = []
-    for i, sl in enumerate(find_objects(lab), start=1):
-        if sl is not None:
-            comps.append((i, sl, sl[0].stop - sl[0].start, sl[1].stop - sl[1].start, int((lab[sl] == i).sum())))
-    digits = [c for c in comps if 0.5 * height <= c[2] <= 1.25 * height and 3 <= c[3] <= 0.8 * height
-              and x0 + c[1][1].start >= left - 3 and x0 + c[1][1].stop <= left + width + 3]
-    if not digits:
+    near = A[(A[:, 2] > left - r) & (A[:, 1] < left + width + r) & (A[:, 4] > top - r) & (A[:, 3] < top + height + r)]
+    w, h = near[:, 2] - near[:, 1], near[:, 4] - near[:, 3]
+    dig = near[(h >= 0.5 * height) & (h <= 1.25 * height) & (w >= 3) & (w <= 0.8 * height)
+               & (near[:, 1] >= left - 3) & (near[:, 2] <= left + width + 3)]
+    if len(dig) == 0:
         return []
-    first_left = x0 + min(c[1][1].start for c in digits)
+    first_left = dig[:, 1].min()
     out = []
-    for i, sl, ch, cw, area in comps:
-        if not (DOT_MIN_PX <= ch <= DOT_MAX_PX and DOT_MIN_PX <= cw <= DOT_MAX_PX) or area < 0.5 * ch * cw:
+    for row in near:
+        i, x0, x1, y0, y1, _ = row
+        if not blobs.is_dot(row):
             continue
-        ring = lab[max(sl[0].start - 2, 0):sl[0].stop + 2, max(sl[1].start - 2, 0):sl[1].stop + 2]
-        if np.any((ring != 0) & (ring != i)):
-            continue
-        cx, cy = x0 + (sl[1].start + sl[1].stop) / 2, y0 + (sl[0].start + sl[0].stop) / 2
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         inside = left <= cx <= left + width and top <= cy <= top + height
-        if inside and x0 + sl[1].stop > first_left + 1:
+        if inside and x1 > first_left + 1:
             continue                      # przecinek albo cyfra dziesiętna własnej liczby
+        if first_left <= cx <= left + width + 3 and top + height < cy <= top + height * (1 + COMMA_TAIL_FACTOR):
+            continue                      # ogonek własnego przecinka wystający pod ramkę
         if any(ox - 1 <= cx <= ox + ow + 1 and oy - 1 <= cy <= oy + oh + 1 for ox, oy, ow, oh in others):
             continue                      # kropka (przecinek) innego słowa
         dx = max(left - cx, 0, cx - (left + width))
@@ -317,7 +353,7 @@ def _dot_candidates(img: np.ndarray, box, others) -> list[tuple[float, float, st
             side = "left" if cx < left + width / 2 else "right"
         else:
             side = "above" if cy < top else "below"
-        out.append((float(cx), float(cy), side, dist))
+        out.append((int(i), float(cx), float(cy), side, dist))
     return out
 
 
@@ -327,26 +363,28 @@ def spot_anchors(img: np.ndarray, boxes, others=None) -> list[tuple[float, float
     Zasady (R14): (1) każda liczba proponuje najbliższą kropkę w promieniu 1,5 x wysokość ramki; (2) dwie kropki
     o stosunku odległości < 1,3 = niejednoznaczne, liczba odrzucona; (3) kropka kotwiczy tylko jedną liczbę:
     gdy chcą jej dwie, wygrywa bliższa (o ile stosunek odległości >= 1,3, inaczej odpadają obie), a przegrana
-    liczba jest odrzucona. `others` = ramki słów z cyframi (domyślnie same `boxes`); ramka własna jest pomijana."""
+    liczba jest odrzucona. Kropki to składowe całego obrazu (jeden identyfikator niezależnie od okna szukania).
+    `others` = ramki słów z cyframi (domyślnie same `boxes`); ramka własna jest pomijana."""
     boxes = [tuple(b) for b in boxes]
     pool = [tuple(int(round(v)) for v in o) for o in (others if others is not None else boxes)]
+    blobs = _Blobs(img)
     res: list = [None] * len(boxes)
-    proposals: dict[tuple[int, int], list[tuple[float, int, tuple]]] = {}
+    proposals: dict[int, list[tuple[float, int, tuple]]] = {}
     for n, box in enumerate(boxes):
         own = tuple(int(round(v)) for v in box)
-        cands = sorted(_dot_candidates(img, box, [o for o in pool if o != own]), key=lambda c: c[3])
+        cands = sorted(_dot_candidates(blobs, box, [o for o in pool if o != own]), key=lambda c: c[4])
         if not cands:
             continue
-        if len(cands) > 1 and (cands[1][3] + 1) / (cands[0][3] + 1) < ANCHOR_AMBIGUITY:
+        if len(cands) > 1 and (cands[1][4] + 1) / (cands[0][4] + 1) < ANCHOR_AMBIGUITY:
             continue
         c = cands[0]
-        proposals.setdefault((int(round(c[0] * 2)), int(round(c[1] * 2))), []).append((c[3], n, c))
+        proposals.setdefault(c[0], []).append((c[4], n, c))
     for props in proposals.values():
         props.sort(key=lambda p: p[0])
         if len(props) > 1 and (props[1][0] + 1) / (props[0][0] + 1) < ANCHOR_AMBIGUITY:
             continue
         _, n, c = props[0]
-        res[n] = (c[0], c[1], c[2])
+        res[n] = (c[1], c[2], c[3])
     return res
 
 
@@ -367,7 +405,10 @@ def text_color(img: np.ndarray, box) -> Literal["blue", "black", "other"]:
     dark = patch[lum < 120]
     if len(dark) < 8:
         return "other"
-    r, g, b = np.median(dark, axis=0)
+    return _classify_rgb(*np.median(dark, axis=0))
+
+
+def _classify_rgb(r: float, g: float, b: float) -> Literal["blue", "black", "other"]:
     if b > r + 40 and b > g + 40:
         return "blue"
     if max(r, g, b) < 100 and b - r < 40 and abs(g - r) < 40:
@@ -410,3 +451,40 @@ def ocr_error_rate(qc: pd.DataFrame, population: pd.DataFrame) -> tuple[float, i
     w = s.map(lambda h: pop_share.get(h, 0.0) / samp_share[h])
     err = ev["qc"].isin(["corrected", "rejected"]).astype(float)
     return float((w * err).sum() / w.sum()), int(len(ev))
+
+
+def in_lake_zone(x, y, lake_geom, buffer_m: float = 100.0) -> np.ndarray:
+    """Maska punktów (EPSG:2180) w obrysie jeziora z wyspami (dziury wypełnione) powiększonym o `buffer_m`.
+
+    Odcina legendę i opisy poza zbiornikiem (tabela pojemność-rzędna ma liczby w zakresie 185-200 m); wyspy
+    zostają, bo czarne rzędne wysp to prawdziwe punkty mapy."""
+    from shapely import contains_xy
+    from shapely.geometry import MultiPolygon, Polygon
+
+    parts = lake_geom.geoms if lake_geom.geom_type == "MultiPolygon" else [lake_geom]
+    filled = MultiPolygon([Polygon(p.exterior) for p in parts]).buffer(buffer_m)
+    return np.asarray(contains_xy(filled, np.asarray(x, float), np.asarray(y, float)))
+
+
+QC_MATCH_PX = 3.0
+QC_MATCH_DZ = 0.05
+
+
+def match_qc(qc: pd.DataFrame, spots: pd.DataFrame, tol_px: float = QC_MATCH_PX) -> tuple[pd.DataFrame, int]:
+    """Przypisuje wiersze kontroli ręcznej do bieżących punktów OCR po położeniu, nie po numerze `id`.
+
+    `id` w kz_spot_ocr.gpkg to numer w kolejności sortowania, więc zmienia się po każdym ponownym OCR (nowa wersja
+    tesseract, zmiana kodu). Wiersz QC (`px, py, ocr_z`) pasuje do punktu o tej samej rzędnej (|dz| < 0,05) i
+    kotwicy w promieniu `tol_px`; wybierany jest najbliższy. Zwraca (QC z nadpisanym `id`, liczba odrzuconych
+    niedopasowanych wierszy)."""
+    keep, ids = [], []
+    sp = spots[["id", "z", "px", "py"]].to_numpy(float)
+    for i, r in qc.iterrows():
+        d = np.hypot(sp[:, 2] - float(r["px"]), sp[:, 3] - float(r["py"]))
+        ok = (d <= tol_px) & (np.abs(sp[:, 1] - float(r["ocr_z"])) < QC_MATCH_DZ)
+        if ok.any():
+            keep.append(i)
+            ids.append(int(sp[np.where(ok, d, np.inf).argmin(), 0]))
+    out = qc.loc[keep].copy()
+    out["id"] = ids
+    return out.reset_index(drop=True), len(qc) - len(keep)

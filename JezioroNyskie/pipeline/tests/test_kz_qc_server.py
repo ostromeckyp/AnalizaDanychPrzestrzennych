@@ -64,7 +64,7 @@ def test_kz_mode_end_to_end(tmp_path):
         assert _post(base + "/api/kz/qc", {"id": 999, "qc": "ok"}) == 404
         assert _post(base + "/api/kz/undo", {"id": k}) == 200
         rows = list(csv.DictReader(open(tmp_path / "qc.csv")))
-        assert list(rows[0]) == ["id", "ocr_z", "qc", "z_qc"] and len(rows) == 8
+        assert list(rows[0]) == ["id", "ocr_z", "qc", "z_qc", "px", "py"] and len(rows) == 8
         assert {r["id"]: r["qc"] for r in rows}[str(c)] == "corrected" and str(k) not in {r["id"] for r in rows}
         # stan odtwarzany z pliku po restarcie
         st = label_server._KzState(tmp_path / "ocr.gpkg", tmp_path / "qc.csv", tmp_path / "map.png")
@@ -77,3 +77,19 @@ def test_kz_mode_end_to_end(tmp_path):
             assert e.code == 404
     finally:
         srv.shutdown()
+
+
+def test_qc_rows_follow_spots_after_renumbering(tmp_path):
+    srv, base = _setup(tmp_path)
+    try:
+        assert _post(base + "/api/kz/qc", {"id": 5, "qc": "rejected"}) == 200
+        assert _post(base + "/api/kz/qc", {"id": 6, "qc": "corrected", "z_qc": 190.1}) == 200
+    finally:
+        srv.shutdown()
+    row = {r["id"]: r for r in csv.DictReader(open(tmp_path / "qc.csv"))}
+    assert set(row["5"]) == {"id", "ocr_z", "qc", "z_qc", "px", "py"} and float(row["5"]["px"]) == 125.0
+    g = gpd.read_file(tmp_path / "ocr.gpkg")
+    g["id"] = 100 + (11 - g["id"])                     # odwrócona numeracja po ponownym uruchomieniu OCR
+    g.to_file(tmp_path / "ocr.gpkg", driver="GPKG")
+    st = label_server._KzState(tmp_path / "ocr.gpkg", tmp_path / "qc.csv", tmp_path / "map.png")
+    assert {i: r["qc"] for i, r in st.rows.items()} == {106: "rejected", 105: "corrected"}   # 11-5=6 -> 106, 11-6=5 -> 105

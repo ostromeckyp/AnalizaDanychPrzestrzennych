@@ -15,7 +15,8 @@ Tryb /kz (K2): kontrola ręczna rzędnych odczytanych OCR-em z mapy KŻ (http://
   Enter = poprawne, liczba + Enter = korekta, X = to nie jest rzędna, ? = pomiń, Backspace = cofnij.
   Kolejka: losowa (ziarno stałe), naprzemiennie z warstwy „podejrzane” (color_ok == False lub conf < 80)
   i „zwykłe”, więc próba jest warstwowa; wynik w data/reference/kz_spot_qc.csv (id, ocr_z, qc, z_qc),
-  zapisywany po każdym kliknięciu. Mapa KŻ: warunki w data/reference/KZ_ZRODLO_I_WARUNKI.md.
+  zapisywany po każdym kliknięciu; klucz trwały to kotwica (px, py) + ocr_z (`kz.match_qc`), bo `id` zmienia się
+  po ponownym OCR. Mapa KŻ: warunki w data/reference/KZ_ZRODLO_I_WARUNKI.md.
   Uruchomienie: `python tools/label_server.py --kz` (cel `make kz-qc-ui`); bez flagi działa etykietowanie brzegu.
 """
 import argparse
@@ -31,10 +32,12 @@ from pathlib import Path
 
 import matplotlib.image
 import numpy as np
+import pandas as pd
 import rasterio
 from pyproj import Transformer
 from rasterio.windows import Window
 
+from mielizna import kz as KZ
 from mielizna import labels as L
 from mielizna.config import data_path
 
@@ -154,7 +157,7 @@ def render_kz_crop(img, px: float, py: float) -> bytes:
 class _KzState:
     """Stan trybu /kz: punkty OCR (gpkg), plik QC (csv) i obraz mapy; zapis atomowy po każdej ocenie."""
 
-    COLUMNS = ["id", "ocr_z", "qc", "z_qc"]
+    COLUMNS = ["id", "ocr_z", "qc", "z_qc", "px", "py"]   # px, py = klucz trwały (id zmienia się przy ponownym OCR)
 
     def __init__(self, ocr_path: Path, qc_path: Path, image_path: Path, seed: int = 0):
         import geopandas as gpd
@@ -164,15 +167,23 @@ class _KzState:
         self.qc_path = Path(qc_path)
         self.lock = threading.Lock()
         self.ocr = gpd.read_file(ocr_path).drop(columns="geometry").set_index("id", drop=False)
-        self.suspect = (~self.ocr.color_ok.astype(bool)) | (self.ocr.conf < 80)
+        self.suspect = KZ.is_suspect(self.ocr)
         order = np.random.default_rng(seed).permutation(self.ocr.index.to_numpy())
         self.order = {True: [i for i in order if self.suspect[i]], False: [i for i in order if not self.suspect[i]]}
         self.image = Image.open(image_path).convert("RGB")
         self.rows: dict[int, dict] = {}
         if self.qc_path.exists():
-            with open(self.qc_path, newline="") as f:
-                for r in csv.DictReader(f):
-                    self.rows[int(r["id"])] = r
+            old = pd.read_csv(self.qc_path)
+            if len(old):
+                if not {"px", "py"} <= set(old.columns):
+                    raise SystemExit(f"{self.qc_path}: brak kolumn px, py (klucz trwały); nie da się dopasować ocen do punktów")
+                matched, dropped = KZ.match_qc(old, self.ocr)
+                if dropped:
+                    print(f"UWAGA: {dropped} ocen z {self.qc_path.name} nie pasuje do żadnego punktu OCR "
+                          f"(kotwica <= {KZ.QC_MATCH_PX:g} px i ta sama rzędna); pominięte", file=sys.stderr)
+                for r in matched.to_dict("records"):
+                    r["z_qc"] = "" if pd.isna(r["z_qc"]) else r["z_qc"]
+                    self.rows[int(r["id"])] = {k: r[k] for k in self.COLUMNS}
 
     def _save(self, rows: dict):
         self.qc_path.parent.mkdir(parents=True, exist_ok=True)
@@ -202,8 +213,9 @@ class _KzState:
             if pid not in self.ocr.index:
                 return False
             rows = dict(self.rows)
-            rows[pid] = {"id": pid, "ocr_z": float(self.ocr.loc[pid, "z"]), "qc": qc,
-                         "z_qc": "" if z_qc is None else z_qc}
+            p = self.ocr.loc[pid]
+            rows[pid] = {"id": pid, "ocr_z": float(p.z), "qc": qc, "z_qc": "" if z_qc is None else z_qc,
+                         "px": float(p.px), "py": float(p.py)}
             self._save(rows)
             self.rows = rows
             return True
