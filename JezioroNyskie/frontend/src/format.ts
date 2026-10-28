@@ -37,7 +37,7 @@ export const fmtLevel = (h: number) => withUnit(h, 2, 'm n.p.m.');
 export const fmtM = (x: number, digits = 2) => withUnit(x, digits, 'm');
 export const fmtCapacity = (v: number) => withUnit(v, 1, 'mln m³');
 export const fmtKm2 = (a: number) => withUnit(a, 1, 'km²');
-export const fmtPct = (p: number) => (Number.isFinite(p) ? `${nf(0).format(p)}%` : DASH);
+export const fmtPct = (p: number, digits = 0) => (Number.isFinite(p) ? `${nf(digits).format(p)}%` : DASH);
 export const levelValueText = (h: number) => withUnit(h, 2, 'metra nad poziomem morza');
 
 /** `RRRR-MM-DD…` → `DD.MM.RRRR` (bez parsowania strefą czasową). */

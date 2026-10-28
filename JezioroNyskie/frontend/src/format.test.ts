@@ -31,6 +31,7 @@ describe('formatery', () => {
     expect(fmtCapacity(45.62)).toBe(`45,6${NB}mln m³`);
     expect(fmtKm2(12.94)).toBe(`12,9${NB}km²`);
     expect(fmtPct(62)).toBe('62%');
+    expect(fmtPct(81.62, 1)).toBe('81,6%');
     expect(levelValueText(195.2)).toBe(`195,20${NB}metra nad poziomem morza`);
   });
   it('fmtNum: przecinek dziesiętny, grupowanie od 5 cyfr', () => {
