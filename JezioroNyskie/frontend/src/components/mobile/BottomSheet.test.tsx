@@ -176,3 +176,26 @@ describe('touch targets >= 44 px', () => {
     expect(rule(mobileCss, 'sheet--expanded')).toMatch(/height:\s*min\(760px,/);
   });
 });
+
+describe('collapsed mini legend', () => {
+  it('shows zone names only; descriptions appear in the expanded legend', async () => {
+    setup();
+    const legend = screen.getByRole('region', { name: 'Legenda' });
+    expect(within(legend).getByText('Ryzykowna')).toBeInTheDocument();
+    expect(legend.querySelector('.legend__desc')).toBeNull();
+    expect(legend.textContent).not.toContain(': ');
+    await userEvent.click(screen.getByRole('button', { name: /Poziom wody/ }));
+    const full = screen.getByRole('region', { name: 'Legenda' });
+    expect(within(full).getByText('w zapasie / niepewności')).toBeInTheDocument();
+  });
+});
+
+describe('layering above the loading skeleton', () => {
+  const z = (css: string, cls: string) => Number(/z-index:\s*(\d+)/.exec(rule(css, cls))?.[1]);
+  const statesCss = readFileSync('src/components/states/states.css', 'utf8');
+  it.each(['sheet', 'mheader'])('.%s (disclaimer, header) is stacked above .skeleton', (cls) => {
+    expect(z(statesCss, 'skeleton')).toBeGreaterThan(0);
+    expect(z(mobileCss, cls)).toBeGreaterThan(z(statesCss, 'skeleton'));
+  });
+});
+

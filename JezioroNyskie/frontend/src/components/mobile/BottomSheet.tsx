@@ -79,7 +79,7 @@ function Collapsed({ panel, legend, onExpand }: { panel: ParameterPanelProps; le
           <span className="sheet__num">{fmtLevel(panel.level.h)}</span>
         </button>
       </div>
-      {legend && <Legend {...legend} compact />}
+      {legend && <Legend {...legend} compact namesOnly />}
     </div>
   );
 }

@@ -7,9 +7,11 @@ export type LegendProps = {
   /** Gotowe podsumowanie z VM (zawsze dla pokazywanych stref). */
   summary?: string;
   compact?: boolean;
+  /** Tylko nazwy stref (zwinięty arkusz mobilny). */
+  namesOnly?: boolean;
 };
 
-export function Legend({ draft, margin, summary, compact }: LegendProps) {
+export function Legend({ draft, margin, summary, compact, namesOnly }: LegendProps) {
   // Zaokrąglenie usuwa szum typu 1,4999999.
   const need = Math.round((draft + margin) * 100) / 100;
   // Tryb mobilny: krótkie opisy z Mobile.dc.html; strefa „Zbyt płytka” bez opisu, więc bez separatora dla czytników.
@@ -33,7 +35,7 @@ export function Legend({ draft, margin, summary, compact }: LegendProps) {
           <span className={`swatch swatch--${key}`} aria-hidden="true" />
           <div className="legend__text">
             <span className="legend__name">{name}</span>
-            {desc[key] && (
+            {!namesOnly && desc[key] && (
               <>
                 <span className="sr-only">: </span>
                 <span className="legend__desc">{desc[key]}</span>

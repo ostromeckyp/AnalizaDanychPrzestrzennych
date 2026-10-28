@@ -105,7 +105,7 @@ describe('MapPage mobile (< 768 px)', () => {
     expect(screen.getByTestId('map')).toBeInTheDocument();
   });
 
-  it('skeleton state still shows the disclaimer', () => {
+  it('disclaimer is rendered in the skeleton state (stacking is checked in BottomSheet.test via CSS)', () => {
     renderPage();
     expect(screen.getByRole('status')).toHaveTextContent('Wczytuję model dna i strefy…');
     expect(screen.getByText(/Nie służy do nawigacji/)).toBeInTheDocument();

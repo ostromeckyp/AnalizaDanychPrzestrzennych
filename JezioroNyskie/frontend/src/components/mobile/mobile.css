@@ -14,7 +14,7 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   box-shadow: 0 4px 14px rgba(14, 36, 51, 0.14);
-  z-index: 2;
+  z-index: 5; /* ponad .skeleton (z 4), by disclaimer i nagłówek były widoczne od pierwszego ładowania */
 }
 .mheader__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .mheader__text h1 { margin: 0; font-size: 16px; font-weight: 600; }
@@ -34,7 +34,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 3;
+  z-index: 5;
   display: flex;
   flex-direction: column;
   background: var(--panel);
