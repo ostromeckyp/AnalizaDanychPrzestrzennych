@@ -1,8 +1,9 @@
 """Rzędna zwierciadła wody `h_t` dla każdej sceny: warianty R, B i C oraz zapis scenes.json.
 
-Co robi: przypisuje scenie rzędną z najlepszego dostępnego źródła, w kolejności A > R > B > C:
-  A - rzędna z NMT wzdłuż brzegu (`variant_a`, plan 4; gdy wygrywa nad B, obok zostaje `h_t_b` i
-  `h_diff_ab = h_t - h_t_b`, bez uzgadniania), R - znany pomiar wodowskazowy z
+Co robi: przypisuje scenie rzędną z najlepszego dostępnego źródła, w kolejności R > B > A > C:
+  A - rzędna z NMT wzdłuż brzegu (`variant_a`, plan 4) UZUPEŁNIA LUKI B (spec §7) i nie nadpisuje B/R;
+  gdy A i B istnieją tego samego dnia, h_t = B, a obok zostają `h_t_a`, `h_t_b` i `h_diff_ab = h_t_a - h_t_b`
+  (dzień tylko z A: h_t = h_t_a, a h_t_b i h_diff_ab puste), R - znany pomiar wodowskazowy z
   `known_levels.csv`, B - pojemność z komunikatu RZGW zamieniona tabelą KŻ na rzędną,
   C - rzędna odczytana z krzywej powierzchnia -> rzędna dopasowanej do scen B/R.
 Dlaczego tak: komunikaty istnieją tylko od 2019-11, a pojemność z tabeli jest bezpośrednim
@@ -34,7 +35,7 @@ C_EXTRAP_EXTRA = 0.1  # [m] dodatek do niepewności przy ekstrapolacji krzywej
 BIN_WIDTH_KM2 = 0.5  # szerokość przedziału powierzchni, w którym bierzemy medianę h
 MIN_OBS = 3  # minimum scen do dopasowania krzywej (LOO wymaga >= 2 punktów po usunięciu jednej)
 H_DATUM = "unknown (RZGW, prawdopodobnie KRON86)"
-PRECEDENCE = {"A": 0, "R": 1, "B": 2, "C": 3}
+PRECEDENCE = {"R": 0, "B": 1, "A": 2, "C": 3}  # spec §7: A uzupełnia luki B, nie nadpisuje B
 A_DATUM = "PL-EVRF2007-NH"  # wariant A: NMT sprowadzony do EVRF2007 (variant_a, epochs.csv)
 AREA_SOURCE = "area_otsu_km2 (Otsu, classify_stats.csv)"
 log = logging.getLogger(__name__)
@@ -266,7 +267,7 @@ def variant_c(scenes: pd.DataFrame, curve: AreaLevelCurve) -> pd.DataFrame:
 def assign_levels(scene_dates: list[date], bulletins: pd.DataFrame, overrides: pd.DataFrame,
                   areas: dict[date, float] | None = None, qc_ok: dict[date, bool] | None = None,
                   nodata_pct: dict[date, float] | None = None, max_nodata_pct: float = 1.0) -> pd.DataFrame:
-    """Przypisuje rzędną każdej scenie: overrides (A > R), potem B, potem C.
+    """Przypisuje rzędną każdej scenie: R (overrides), potem B, potem A (luki B), potem C.
 
     Co robi: dla każdej daty bierze najlepsze źródło. Gdy podano `areas`, dopasowuje krzywą na
       scenach B/R z qc_ok i lake_nodata_pct <= max_nodata_pct (grupy LOYO = rok sceny; `areas` to
@@ -285,17 +286,24 @@ def assign_levels(scene_dates: list[date], bulletins: pd.DataFrame, overrides: p
     for d in sorted(scene_dates):
         row = {"date": d, "h_t": np.nan, "h_method": None, "h_source": "", "h_sigma": np.nan,
                "capacity_curve_note": "", "extrapolated": False, "area_biased": False,
-               "h_t_b": np.nan, "h_diff_ab": np.nan}
+               "h_t_b": np.nan, "h_t_a": np.nan, "h_diff_ab": np.nan}
         hit = overrides[(overrides.start <= d) & (overrides.end >= d)]
+        hit_a = hit[hit.method == "A"]
+        if len(hit_a):  # A zapisujemy zawsze (diagnostyka), ale wygrywa tylko tam, gdzie nie ma R ani B
+            row["h_t_a"] = float(hit_a.iloc[0].h)
+        hit = hit[hit.method != "A"]
         if len(hit):
             o = hit.assign(rank=hit.method.map(PRECEDENCE)).sort_values("rank").iloc[0]
             row.update(h_t=float(o.h), h_method=o.method, h_source=str(o.source), h_sigma=float(o.sigma))
-            if o.method == "A" and d in b.index:  # A wygrywa, ale B zostaje obok (różnica = możliwy przesunięty układ RZGW)
-                row.update(h_t_b=float(b.loc[d].h_t), h_diff_ab=float(o.h) - float(b.loc[d].h_t))
         elif d in b.index:
             r = b.loc[d]
             row.update(h_t=float(r.h_t), h_method="B", h_source=r.h_source, h_sigma=float(r.h_sigma),
                        capacity_curve_note=r.capacity_curve_note)
+        elif len(hit_a):
+            o = hit_a.iloc[0]
+            row.update(h_t=float(o.h), h_method="A", h_source=str(o.source), h_sigma=float(o.sigma))
+        if len(hit_a) and d in b.index:  # A i B tego samego dnia: B wygrywa, różnica A - B to diagnostyka układu/metody
+            row.update(h_t_b=float(b.loc[d].h_t), h_diff_ab=row["h_t_a"] - float(b.loc[d].h_t))
         rows.append(row)
     df = pd.DataFrame(rows)
     ok = pd.Series([bool(qc_ok.get(d, True)) if qc_ok else True for d in df.date], index=df.index)
@@ -338,7 +346,8 @@ def write_scenes_json(df: pd.DataFrame, path: Path) -> None:
         out.append({"date": str(r.date), "tiles": r.tiles, "h_t": h, "h_method": r.h_method,
                     "h_source": r.h_source, "h_sigma": num(r.h_sigma, 2),
                     "h_datum": None if h is None else r.h_datum,
-                    "h_t_b": num(getattr(r, "h_t_b", None), 2), "h_diff_ab": num(getattr(r, "h_diff_ab", None), 2),
+                    "h_t_b": num(getattr(r, "h_t_b", None), 2), "h_t_a": num(getattr(r, "h_t_a", None), 2),
+                    "h_diff_ab": num(getattr(r, "h_diff_ab", None), 2),
                     "area_km2": num(r.area_km2, 3),
                     "area_otsu_km2": num(r.area_otsu_km2, 3),
                     "lake_nodata_pct": num(r.lake_nodata_pct, 3), "otsu_threshold": num(r.otsu_threshold, 3),

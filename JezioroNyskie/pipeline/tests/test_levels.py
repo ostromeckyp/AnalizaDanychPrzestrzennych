@@ -105,7 +105,7 @@ def test_scenes_json_schema(tmp_path):
     write_scenes_json(sample_df(), tmp_path / "s.json")
     rows = json.loads((tmp_path / "s.json").read_text())
     s = rows[1]
-    assert set(s) == {"date", "tiles", "h_t", "h_method", "h_source", "h_sigma", "h_datum", "h_t_b", "h_diff_ab", "area_km2",
+    assert set(s) == {"date", "tiles", "h_t", "h_method", "h_source", "h_sigma", "h_datum", "h_t_b", "h_t_a", "h_diff_ab", "area_km2",
                       "area_otsu_km2", "lake_nodata_pct", "otsu_threshold", "local_cloud_pct", "capacity_mln_m3",
                       "qc_ok", "qc_reason"}
     assert [r["date"] for r in rows] == ["2019-01-01", "2020-01-08"]  # posortowane
@@ -170,28 +170,38 @@ def _a_override(d, h, method="A"):
     return pd.DataFrame([{"start": d, "end": d, "h": h, "sigma": 0.1, "method": method, "source": "LiDAR 2024 NMT, n=500"}])
 
 
-def test_assign_levels_keeps_b_when_a_wins():
+def test_b_wins_over_a_and_a_is_kept_in_h_t_a():
     d = date(2020, 1, 8)
     b = bulletin("2020-01-08", 34.84)
     b_only = assign_levels([d], pd.DataFrame([b]), _a_override(date(2001, 1, 1), 1.0)).iloc[0]
-    assert b_only.h_method == "B" and np.isnan(b_only.h_t_b) and np.isnan(b_only.h_diff_ab)
+    assert b_only.h_method == "B" and np.isnan(b_only.h_t_a) and np.isnan(b_only.h_diff_ab)
     hb = float(b_only.h_t)
-    df = assign_levels([d], pd.DataFrame([b]), _a_override(d, hb + 0.35))
-    row = df[df.date == d].iloc[0]
-    assert row.h_method == "A" and row.h_t_b == pytest.approx(hb) and row.h_diff_ab == pytest.approx(0.35)
-    assert row.h_datum == "PL-EVRF2007-NH"
+    row = assign_levels([d], pd.DataFrame([b]), _a_override(d, hb + 0.35)).iloc[0]
+    assert row.h_method == "B" and row.h_t == pytest.approx(hb) and row.h_datum != "PL-EVRF2007-NH"
+    assert row.h_t_b == pytest.approx(hb) and row.h_t_a == pytest.approx(hb + 0.35)
+    assert row.h_diff_ab == pytest.approx(0.35)
+
+
+def test_r_beats_b_and_a_and_a_beats_c():
+    from mielizna.levels import PRECEDENCE
+    assert PRECEDENCE == {"R": 0, "B": 1, "A": 2, "C": 3}
+    d = date(2025, 4, 28)
+    ov = pd.concat([load_overrides(KNOWN_CSV), _a_override(d, 195.0)], ignore_index=True)
+    assert assign_levels([d], pd.DataFrame([bulletin("2025-04-28", 90.0)]), ov).iloc[0].h_method == "R"
 
 
 def test_assign_levels_a_without_bulletin_has_no_b_fields():
     d = date(2020, 2, 1)
     row = assign_levels([d], pd.DataFrame([bulletin("2020-01-08", 34.84)]), _a_override(d, 195.0)).iloc[0]
-    assert row.h_method == "A" and np.isnan(row.h_t_b) and np.isnan(row.h_diff_ab)
+    assert row.h_method == "A" and row.h_t == 195.0 and row.h_t_a == 195.0
+    assert np.isnan(row.h_t_b) and np.isnan(row.h_diff_ab) and row.h_datum == "PL-EVRF2007-NH"
 
 
 def test_scenes_json_writes_b_fields(tmp_path):
     df = sample_df()
     df["h_t_b"] = [193.0, np.nan]
+    df["h_t_a"] = [193.123, np.nan]
     df["h_diff_ab"] = [0.123, np.nan]
     write_scenes_json(df, tmp_path / "s.json")
     rows = json.loads((tmp_path / "s.json").read_text())
-    assert rows[1]["h_t_b"] == 193.0 and rows[1]["h_diff_ab"] == 0.12 and rows[0]["h_t_b"] is None
+    assert rows[1]["h_t_b"] == 193.0 and rows[1]["h_t_a"] == 193.12 and rows[1]["h_diff_ab"] == 0.12 and rows[0]["h_t_b"] is None

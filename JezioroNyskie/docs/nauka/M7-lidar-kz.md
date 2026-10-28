@@ -24,10 +24,22 @@ Po ludzku: brzeg widoczny na zdjęciu satelitarnym leży dokładnie na poziomie 
 
 Jak liczone: linia brzegowa sceny co 5 m, bez bloków „valid” (szachownica 500 m), bez bufora 150 m wokół zapory (OSM, warstwa `dam` w `lake.gpkg`; dopisane do `03_fetch_osm.py`) i bez pikseli bez danych NMT; epoka = ta z wodą co najmniej 0,2 m niższą niż szacunek sceny z B/R/C, najbliższa w czasie (remis: mniejszy rozstęp dat); do mediany tylko punkty > poziom wody nalotu + 0,10 m; bramki: n ≥ 50, ≥ 3 z 8 sektorów wokół środka jeziora, h_sigma < 0,3 m (kryterium M3). Układ: NMT z KRON86 (2011, 2017) dostaje stałą +0,199 m z `epochs.csv` (jedna poprawka w środku jeziora; zmienność ~1 cm), poziom wody nalotu to `h_water_evrf`; wynik w PL-EVRF2007-NH.
 
+Pierwszeństwo (spec §7): **R > B > A > C**. Wariant A uzupełnia luki B i nie nadpisuje B ani R. Gdy A i B istnieją tego samego dnia, `h_t` = B, a w `scenes.json` zostają `h_t_a`, `h_t_b` i `h_diff_ab = h_t_a − h_t_b` (diagnostyka). Dla dnia tylko z A: `h_t` = `h_t_a`, a `h_t_b` i `h_diff_ab` są puste.
+
+Bramka `h_sigma` < 0,3 m to kryterium M3 (`MAX_SIGMA` w `06b_lidar_levels.py`, opis w jego docstringu): bez niej 54 sceny z rozrzutem brzegu do 0,73 m dostałyby „poziom" A.
+
 Wyniki (221 scen):
-- **Wariant A dostało 129 scen** (2017: 90, 2022: 13, 2024: 26; epoka 2011 nie została wybrana ani razu). Odpadło 92: 56 przez h_sigma ≥ 0,3 m, 17 przez pokrycie < 3 sektorów, 20 bez epoki z niższą wodą (szacunek sceny < ok. 193,8 m, a najniższa epoka to 2017: 193,59 m), 1 bez szacunku (qc_excluded).
-- **h_sigma** (1,4826·MAD) przyjętych scen: mediana 0,22 m, 90. percentyl 0,27 m, maks. 0,30 m (po zaokrągleniu; 125 z 129 ma ściśle < 0,3). Bez bramki: 183 sceny, mediana 0,24 m, maks. 0,73 m — w ok. 1/3 przypadków rozrzut rzędnych wzdłuż brzegu jest zbyt duży (nachylony brzeg + błąd położenia linii ~10 m), więc taki „poziom” nie jest wiarygodny.
-- **Pokrycie NMT:** epoki 2017 i 2022 mają NMT tylko dla 2 arkuszy (wschodni brzeg, zapora), więc przechodzą bramkę sektorów ledwo (3 z 8) albo wcale (2 sektory: 2017: 7, 2022: 10 scen odpadło przed bramką sigma).
-- **A vs B** (92 sceny z oboma): `h_diff_ab = A − B` ma medianę −0,16 m, rozrzut (odch. std.) 0,57 m, zakres −1,45…+0,76 m; |różnica| > 0,2 m w 70 z 92. Wg epok: 2017 mediana −0,28 m (n=54, std 0,48), 2022 −0,26 m (n=12, std 0,26), 2024 +0,63 m (n=26, std 0,17). To tylko raport. Znak różnicy zależy od epoki (2024 powyżej B, 2017 i 2022 poniżej), więc nie wygląda na jedno stałe przesunięcie układu RZGW; skłania raczej ku błędowi samej metody (mało pokrywających NMT arkuszy, nasyp zapory o stromym profilu, położenie linii brzegowej ±10 m) niż ku datum. Do rozstrzygnięcia przy ocenie (Task 8).
-- **M3 (2024-09-06, cel 194,70 ± 0,3):** A = 194,41 m (epoka 2017, n=659), B = 194,61 m; różnica do celu −0,29 m, czyli na granicy.
-- Skutek uboczny: A zastąpiło B w 92 scenach i wchodzi do dopasowania krzywej powierzchnia–rzędna (stare zachowanie `assign_levels`); RMSE LOO krzywej wynosi teraz 0,64 m (Otsu; przed A ok. 0,47 m wg opisu w `levels.py`, nie mierzone ponownie), co jest sygnałem ostrzegawczym dla jakości A.
+- **A ma 129 scen** (2017: 90, 2022: 13, 2024: 26). Odpadło 92: 56 przez h_sigma ≥ 0,3 m, 17 przez pokrycie < 3 sektorów (2 przez oba), 20 bez epoki z niższą wodą (szacunek sceny < ok. 193,8 m, najniższa epoka to 2017: 193,59 m), 1 bez szacunku (qc_excluded).
+- **Realnie uzupełnia luki w 37 scenach** (2017: 36, 2022: 1) z 63 scen bez B/R; w `scenes.json`: B 155, A 37, C 26, R 2, qc_excluded 1. h_sigma tych 37: mediana 0,22, maks. 0,30 m. Pozostałe 92 sceny z A mają B, więc A jest tylko diagnostyką.
+- **Krzywa powierzchnia–rzędna, błąd LOO (pomiar, Otsu):** bez A 0,466 m (LOYO 0,488, n_obs=131); z A w dopasowaniu 0,508 m (LOYO 0,583, n_obs=164). A pogarsza krzywą, ale dotyczy tylko scen C; zostawione bez zmian (do decyzji).
+- **Obciążenie zależne od epoki (A − B, 92 dni z oboma):** mediana −0,16 m, std 0,57, |różnica| > 0,2 m w 70 z 92.
+
+| epoka NMT | n | mediana A−B [m] | std | min | maks |
+|---|---|---|---|---|---|
+| 2017 | 54 | −0,28 | 0,48 | −1,45 | +0,58 |
+| 2022 | 12 | −0,26 | 0,26 | −0,95 | −0,04 |
+| 2024 | 26 | +0,62 | 0,17 | +0,02 | +0,76 |
+
+  Znak różnicy zależy od epoki (2024 powyżej B, 2017 i 2022 poniżej), więc to raczej obciążenie metody/pokrycia NMT (2017 i 2022: tylko wschodni nasyp, ≥ 3 z 8 sektorów; stromy profil; położenie linii brzegowej ±10 m) niż jedno stałe przesunięcie układu RZGW. Wniosek do Task 8: A traktować jako uzupełnienie z niepewnością większą niż deklarowane `h_sigma`.
+- **Pokrycie NMT:** epoki 2017 i 2022 mają NMT tylko dla 2 arkuszy; 7 (2017) i 10 (2022) scen odpadło na sektorach.
+- **M3 (2024-09-06, cel 194,70 ± 0,3):** h_t = B = 194,61 m (A = 194,41 m, epoka 2017).

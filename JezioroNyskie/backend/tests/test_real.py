@@ -47,7 +47,7 @@ def test_zones_under_one_second_cold(real_client):
 def test_real_meta_numbers(real_client):
     m = real_client.get("/api/meta").json()
     assert m["n_scenes"] == 218 and m["h_min_obs"] == 192.9 and m["z_max_floor"] == pytest.approx(193.05)
-    assert m["model_version"].endswith("311e18c951a8")
+    assert m["model_version"].endswith("45a102652c33")
 
 
 def test_safe_area_matches_plan1(real_client):
@@ -55,10 +55,10 @@ def test_safe_area_matches_plan1(real_client):
     q = {"h": 195.5, "draft": 1.0}
     s = real_client.get("/api/zones", params={**q, "margin": 0.3}).json()["stats"]
     print(f"\nsafe_km2 m=0.3: {s['safe_km2']}")
-    assert 12.70 <= s["safe_km2"] <= 12.891
+    assert 12.70 <= s["safe_km2"] <= 12.90  # górna granica 12.891 -> 12.90: wariant A (plan 4) zmienił dane
     s0 = real_client.get("/api/zones", params={**q, "margin": 0.0}).json()["stats"]
     print(f"safe_km2 m=0.0: {s0['safe_km2']}")
-    assert s0["safe_km2"] == pytest.approx(12.988, abs=0.001)    # 129 880 px (ledger planu 1: bez zapasu)
+    assert s0["safe_km2"] == pytest.approx(13.0442, abs=0.001)    # było 12.988 (129 880 px, ledger planu 1); po wariancie A (plan 4)
 
 
 def test_scene_context_builds_on_real_data(real_products):
