@@ -783,7 +783,7 @@ def vertices_to_polygon(verts, t: "KzTransform"):
     return poly
 
 
-def load_qc_spots(ocr: "gpd.GeoDataFrame", qc: pd.DataFrame | None) -> "gpd.GeoDataFrame":
+def load_qc_spots(ocr: "gpd.GeoDataFrame", qc: pd.DataFrame | None, position_reject: list[dict] | None = None) -> "gpd.GeoDataFrame":
     """Punkty rzędnych mapy KŻ nadające się do użycia (wariant D, K5): po kontroli ręcznej, a bez niej po filtrze.
 
     Co robi: wiersze QC przypisuje do punktów OCR po kotwicy (`match_qc`: ≤ 3 px i ta sama `ocr_z`). Punkt z
@@ -794,9 +794,22 @@ def load_qc_spots(ocr: "gpd.GeoDataFrame", qc: pd.DataFrame | None) -> "gpd.GeoD
       nieocenionych, więc oceny ręczne zawsze wygrywają z filtrem.
     Wejście → wyjście: GeoDataFrame OCR (id, z, px, py, conf, color_ok, geometry) i QC (ocr_z, qc, z_qc, px, py)
       lub None -> GeoDataFrame tych punktów z kolumną `z` (po korekcie) i `z_source` in {ocr_ok, qc_ok, qc_corrected}.
+      `position_reject` (domyślnie `kz.spot_position_reject` z config.yaml): lista wpisów {px, py, ocr_z, reason} punktów, których
+      KOTWICA stoi w złym miejscu (np. na przecinku/kropce innej liczby). Kontrola ręczna ocenia rzędną, nie może przesunąć
+      kotwicy, więc takie punkty (nawet `ok`/`corrected`) odpadają, dopasowane jak `match_qc` (≤ 3 px i ta sama `ocr_z`).
     Jak to obronić: testy obu ścieżek; kolor i pewność to te same progi co warstwa „podejrzane” w kontroli."""
     out = ocr.copy()
     out["z_source"] = "unchecked"
+    if position_reject is None:
+        from mielizna.config import load_config
+        position_reject = load_config().get("kz", {}).get("spot_position_reject") or []
+    pos_hit = np.zeros(len(out), bool)
+    for e in position_reject:
+        d = np.hypot(out["px"].to_numpy(float) - float(e["px"]), out["py"].to_numpy(float) - float(e["py"]))
+        hit = (d <= QC_MATCH_PX) & (np.abs(out["z"].to_numpy(float) - float(e["ocr_z"])) < QC_MATCH_DZ)
+        if hit.any():
+            logging.getLogger(__name__).info("load_qc_spots: odrzucono %d punkt(ów) o błędnej kotwicy (%s)", int(hit.sum()), e.get("reason", ""))
+            pos_hit |= hit
     if qc is not None and len(qc):
         matched, _ = match_qc(qc, out)
         judged = matched[matched["qc"].isin(["ok", "corrected", "rejected"])].drop_duplicates("id", keep="last")
@@ -814,6 +827,7 @@ def load_qc_spots(ocr: "gpd.GeoDataFrame", qc: pd.DataFrame | None) -> "gpd.GeoD
         out.loc[fixed, "z"] = newz
         out.loc[fixed, "z_source"] = np.where(bad, "qc_corrected_fallback", "qc_corrected")
         out.loc[v == "rejected", "z_source"] = "qc_rejected"
+    out.loc[pos_hit, "z_source"] = "position_rejected"                  # po QC: kontrola nie przesuwa kotwicy
     unchecked = out["z_source"] == "unchecked"
     keep_unchecked = unchecked & ~is_suspect(out)
     out.loc[keep_unchecked, "z_source"] = "ocr_ok"

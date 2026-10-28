@@ -164,7 +164,7 @@ def compare_contours(kz_geom, model_geom, clip_m: float = CLIP_M) -> dict:
         return {**out, "mean_distance_m": float("nan"), "hausdorff_m": float("nan"),
                 "kz_to_model_mean_m": float("nan"), "kz_to_model_p90_m": float("nan")}
     d = _dists(kz_geom, model_geom)
-    out.update({"mean_distance_m": mean_distance(kz_geom, clipped), "hausdorff_m": float(shapely.hausdorff_distance(kz_geom, clipped)),
+    out.update({"mean_distance_m": mean_distance(kz_geom, clipped), "hausdorff_m": float(max(_dists(kz_geom, clipped).max(), _dists(clipped, kz_geom).max())),
                 "kz_to_model_mean_m": float(d.mean()), "kz_to_model_p90_m": float(np.percentile(d, 90)),
                 "clip_m": float(clip_m)})
     return out
@@ -174,13 +174,13 @@ def go_no_go(bias: float, datum_offset: float, other_biases: dict) -> dict:
     """|bias| > 0,5 m -> „investigate” z listą sprawdzonych przyczyn; inaczej „go”. Same fakty, bez korekt.
 
     `datum_offset`: przesunięcie KRON86 -> EVRF2007 [m]; `other_biases`: biasy z oceny LiDAR (Task 8) do zestawienia."""
-    notes = [f"Układ wysokości: układ rzędnych mapy KŻ jest nieznany (prawdopodobnie wodowskaz lokalny/RZGW). Bias względem KŻ "
+    notes = [f"Układ wysokości: układ rzędnych mapy KŻ jest nieznany (nie ustalono). Bias względem KŻ "
              f"{bias:+.2f} m, przesunięcie KRON86->EVRF2007 {datum_offset:+.3f} m: różnica bias - offset = {bias - datum_offset:+.2f} m."]
     for name, b in other_biases.items():
         notes.append(f"Bias dna względem LiDAR ({name}): {b:+.2f} m; różnica bias_KŻ - bias_LiDAR = {bias - b:+.2f} m.")
     notes.append("Dno z 2023: mapa KŻ (aktualizacja 23.05.2023) opisuje dno sprzed powodzi z września 2024, model pre_flood obejmuje "
                  "sceny do 31.08.2024, więc zmiany dna po 2023 nie są przyczyną różnic przed powodzią, ale różnica dat zostaje.")
-    notes.append("Sposób pomiaru: dane KŻ pozyskano sposobem amatorskim (echosonda/odczyty, bez opisu niepewności); "
-                 "poniżej 192,5 m dno jest orientacyjne.")
+    notes.append("Sposób pomiaru: mapa KŻ deklaruje, że dane pozyskano sposobem amatorskim, bez podanej niepewności; "
+                 "dno poniżej 192,5 m mapa opisuje jako orientacyjne.")
     decision = "investigate" if abs(bias) > BIAS_LIMIT else "go"
     return {"decision": decision, "bias": float(bias), "limit": BIAS_LIMIT, "datum_offset": float(datum_offset), "notes": notes}

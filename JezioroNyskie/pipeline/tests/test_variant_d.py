@@ -58,14 +58,14 @@ def _inputs():
 def test_surface_nan_in_gravel_and_outside_hull():
     spots, cont = _inputs()
     gravel = Polygon([(2000, 2000), (2400, 2000), (2400, 2400), (2000, 2400)])
-    surf = variant_d.kz_surface(spots, cont, GRID, gravel=gravel)
+    surf = variant_d.kz_surface(spots, cont, GRID, gravel=gravel, min_spot_z=0.0)   # fixture ma punkty < 192,5 m
     r, c = GRID.rowcol(2200, 2200)
     assert np.isnan(surf[r, c])
     r, c = GRID.rowcol(300, 300)                # poza otoczką punktów
     assert np.isnan(surf[r, c])
     r, c = GRID.rowcol(3000, 3500)
     assert surf[r, c] == pytest.approx(191.0, abs=0.1)
-    no_gravel = variant_d.kz_surface(spots, cont, GRID)
+    no_gravel = variant_d.kz_surface(spots, cont, GRID, min_spot_z=0.0)
     r, c = GRID.rowcol(2200, 2200)
     assert np.isfinite(no_gravel[r, c])
 

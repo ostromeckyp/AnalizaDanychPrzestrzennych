@@ -80,6 +80,11 @@ kz:
   # wobec zmiany numeracji). Każdy wpis ma `reason` obejrzany na wycinku mapy.
   contour_drop:
     - {x: 374164, y: 287866, length_m: 176, reason: "pętla wokół wzgórka 198,7 m: druga poziomica na zewnątrz, więc to poziom > 195,0 (uwaga recenzenta + oględziny wycinka)"}
+  # Punkty rzędnych o błędnej kotwicy (kontrola ręczna ocenia rzędną i nie przesuwa kotwicy): odpadają z `load_qc_spots`.
+  # Dopasowanie jak match_qc: kotwica (px, py) w <= 3 px i ta sama `ocr_z`.
+  spot_position_reject:
+    - {px: 4819.0, py: 2890.0, ocr_z: 188.3, reason: "id QC 107: kotwica na przecinku „.195,1”; prawdziwa kropka 195,1 leży ok. 47 px na lewo, na wyspie"}
+    - {px: 4884.5, py: 2763.5, ocr_z: 188.3, reason: "id QC 98: kotwica na kropce napisu „193,6 bet.” (etykieta obiektu, nie sondaż)"}
   side_offset_px: 8            # odległość próbkowania stron linii (klasa: woda / ląd)
   shore_vote_min: 0.5          # 195,0: min. udział próbek „ląd z jednej strony, woda z drugiej”
   parallel_tol_m: 12           # pary równoległych poziomic 195: zostaje ta bliżej brzegu jeziora

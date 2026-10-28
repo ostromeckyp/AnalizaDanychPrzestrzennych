@@ -118,3 +118,34 @@ def test_go_no_go_investigate_when_bias_large():
 
 def test_npp_matches_backend_value():
     assert kz_compare.npp_level() == pytest.approx(195.91, abs=0.01)
+
+
+def _ocr_two():
+    return gpd.GeoDataFrame({"id": [0, 1], "z": [188.3, 188.3], "px": [100.0, 500.0], "py": [100.0, 500.0], "conf": [95.0, 95.0],
+                             "color_ok": [True, True]}, geometry=[Point(0, 0), Point(10, 10)], crs="EPSG:2180")
+
+
+def test_position_reject_drops_even_qc_judged_spot():
+    ocr = _ocr_two()
+    qc = pd.DataFrame({"id": [0, 1], "ocr_z": [188.3, 188.3], "qc": ["corrected", "ok"], "z_qc": [195.1, np.nan],
+                       "px": [100.0, 500.0], "py": [100.0, 500.0]})
+    rej = [{"px": 101.0, "py": 99.0, "ocr_z": 188.3, "reason": "test"}]
+    assert kz.load_qc_spots(ocr, qc, position_reject=rej).id.tolist() == [1]
+    assert kz.load_qc_spots(ocr, qc, position_reject=[]).id.tolist() == [0, 1]
+    far = [{"px": 110.0, "py": 100.0, "ocr_z": 188.3, "reason": "za daleko"}]
+    assert len(kz.load_qc_spots(ocr, qc, position_reject=far)) == 2
+
+
+def test_config_position_reject_entries_have_reasons():
+    from mielizna.config import load_config
+    ent = load_config()["kz"]["spot_position_reject"]
+    assert len(ent) == 2 and all(e["reason"] and {"px", "py", "ocr_z"} <= set(e) for e in ent)
+
+
+def test_variant_d_surface_ignores_spots_below_192_5():
+    from mielizna import variant_d
+    sp = spots([(105, 105, 190.0), (905, 105, 194.0), (505, 905, 194.0)])
+    cont = gpd.GeoDataFrame({"level": [195.0]}, geometry=[LineString([(0, 500), (990, 500)])], crs="EPSG:2180")
+    with_deep = variant_d.kz_surface(sp, cont, GRID, min_spot_z=0)
+    surf = variant_d.kz_surface(sp, cont, GRID)
+    assert np.nanmin(with_deep) < 192.0 and np.nanmin(surf) >= 193.99

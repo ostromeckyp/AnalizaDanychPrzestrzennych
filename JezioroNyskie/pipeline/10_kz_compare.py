@@ -41,7 +41,10 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import textwrap
 from matplotlib.colors import ListedColormap
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 from pathlib import Path
 
 from mielizna import bottom, kz, kz_compare, variant_d
@@ -59,6 +62,7 @@ UWAGA = ("UWAGA: 1. Dane zawarte w obrysie zbiornika pozyskano i odwzorowano spo
          "Z POWODU NIEWYSTARCZAJĄCEJ ILOŚCI DANYCH.")
 SOURCE = ("Tło: Wiktor Wróblewski, KŻ Nysa, „Jezioro Nyskie (amatorska mapka dla wodniaków)”, aktualizacja 23.05.2023; "
           "dane otoczenia: OpenStreetMap.org. Źródło i warunki: data/reference/KZ_ZRODLO_I_WARUNKI.md")
+SOURCE_REF = "data/reference/KZ_ZRODLO_I_WARUNKI.md"
 DRAFT, MARGIN = 0.5, 0.3      # parametry ilustracyjne stref nakładki (zanurzenie, zapas); to nie jest wynik oceny
 
 
@@ -105,7 +109,7 @@ def run_points() -> dict:
                 "n_spots_used": int(len(spots)), "n_spots_checked": int(spots.checked.sum()),
                 "spots_source": spots.z_source.value_counts().to_dict(),
                 "gravel_excluded": int(shapely.contains_xy(gravel, spots.geometry.x, spots.geometry.y).sum()),
-                "bias_definition": "bias = średnia(model z - KŻ z)", "indicative": True})
+                "bias_definition": "bias = średnia(model z - KŻ z)", "indicative": True, "source": SOURCE_REF})
     if qc is not None and len(qc):
         matched, n_unmatched = kz.match_qc(qc, ocr)                          # QC z kotwicą -> id punktu OCR
         matched = matched.merge(ocr[["id", "color_ok", "conf"]], on="id", how="left")
@@ -125,7 +129,7 @@ def run_contours() -> dict:
     grid = reference_grid()
     model, _ = bottom.read_model(proc / "model" / "pre_flood")
     kzc = gpd.read_file(proc / "kz" / "kz_contours.gpkg")
-    res = {"model": "pre_flood", "indicative": True,
+    res = {"model": "pre_flood", "indicative": True, "source": SOURCE_REF,
            "note": "poziomice KŻ to próbka precision-first (nie cała poziomica); wynik orientacyjny"}
     for level in (192.5, 195.0):
         kz_geom = shapely.union_all(kzc[kzc.level == level].geometry.to_numpy())
@@ -151,7 +155,7 @@ def run_compare() -> int:
            "go_no_go": gng, "ocr_error_rate": pts.get("ocr_error_rate"), "bands": {k: pts[k] for k in kz_compare.BAND_KEYS},
            "contours": {k: v for k, v in con.items() if k[0].isdigit()}, "georef_verdict": pts["georef_verdict"],
            "unit": pts["unit"], "npp": pts["npp"], "indicative": True,
-           "source": "data/reference/KZ_ZRODLO_I_WARUNKI.md"}
+           "source": SOURCE_REF}
     _write("kz_compare.json", out)
     log.info("go/no-go: %s (bias %+.2f)", gng["decision"], p["bias"])
     return 0
@@ -163,14 +167,15 @@ def run_overlay() -> int:
     model, _ = bottom.read_model(proc / "model" / "pre_flood")
     npp = kz_compare.npp_level(pd.read_csv(data_path("reference", "kz_pojemnosc_rzedna.csv")))
     zl, zh, z = model["z_min"], model["z_max"], model["z"]
-    in_model = np.isfinite(z)
-    lo = np.where(np.isnan(zl), -np.inf, zl)
-    hi = np.where(np.isnan(zh), np.inf, zh)
+    obs, flags = model["obs_count"], model["flags"]
+    in_model = ~((obs == 0) | (obs == 65535) | (flags == 255))     # jak backend/app/data.py
+    lo = np.where(in_model, np.where(np.isnan(zl), -np.inf, zl), np.nan)   # NaN w z_min = zawsze woda, w z_max = zawsze ląd
+    hi = np.where(in_model, np.where(np.isnan(zh), np.inf, zh), np.nan)
     with np.errstate(invalid="ignore"):
         cls = np.full(z.shape, 2, int)                          # 2 = ryzyko
         cls[npp - hi >= DRAFT + MARGIN] = 1                     # 1 = bezpiecznie (jak backend/app/zones.py)
         cls[npp - lo < DRAFT] = 3                               # 3 = zbyt płytko
-    cls = np.where(in_model & (npp > z), cls, 0)
+    cls = np.where(in_model & (npp > lo), cls, 0)                # tylko woda przy NPP (jak zone_stats: h > z_lo)
     cmap = ListedColormap([(0, 0, 0, 0), (0.1, 0.65, 0.25, 0.5), (0.95, 0.75, 0.1, 0.5), (0.85, 0.15, 0.15, 0.5)])
     with rasterio.open(proc / "kz" / "kz_map_2180.tif") as ds:
         img = np.moveaxis(ds.read(), 0, -1)
@@ -181,9 +186,8 @@ def run_overlay() -> int:
     ax.imshow(rgba, extent=(b.left, b.right, b.bottom, b.top), interpolation="bilinear")
     xmin, ymin, xmax, ymax = grid.bounds()
     ax.imshow(cls, extent=(xmin, xmax, ymin, ymax), cmap=cmap, vmin=0, vmax=3, interpolation="nearest")
-    for level, col in ((192.5, "#7b3294"), (195.0, "#d7301f")):
-        line = kz_compare.model_contour(z, grid, level)
-        for g in line.geoms:
+    for level, col in ((192.5, "#7b3294"), (195.0, "#d7301f")):        # 192,5 m: model go nie ma (z_min = 192,94), pętla nic nie rysuje
+        for g in kz_compare.model_contour(z, grid, level).geoms:
             ax.plot(*g.xy, color=col, lw=1.0)
     kzc = gpd.read_file(proc / "kz" / "kz_contours.gpkg")
     for level, col in ((192.5, "#7b3294"), (195.0, "#d7301f")):
@@ -192,21 +196,28 @@ def run_overlay() -> int:
     _, _, spots = _qc_spots()
     ax.scatter(spots.geometry.x, spots.geometry.y, s=3, c="k", alpha=0.6, zorder=5)
     ax.set_xlim(b.left, b.right); ax.set_ylim(b.bottom, b.top); ax.set_aspect("equal"); ax.axis("off")
-    from matplotlib.lines import Line2D
-    from matplotlib.patches import Patch
     ax.legend(handles=[Patch(color=(0.1, 0.65, 0.25, 0.6), label=f"strefa bezpieczna (zanurzenie {DRAFT} m + zapas {MARGIN} m)"),
                        Patch(color=(0.95, 0.75, 0.1, 0.6), label="strefa ryzyka"), Patch(color=(0.85, 0.15, 0.15, 0.6), label="zbyt płytko"),
-                       Line2D([], [], color="#7b3294", label="poziomica 192,5 m: model (ciągła) / KŻ (kropkowana)"),
+                       Line2D([], [], color="#7b3294", ls=":", label="poziomica 192,5 m: KŻ (model nie ma tej poziomicy)"),
                        Line2D([], [], color="#d7301f", label="poziomica 195,0 m: model (ciągła) / KŻ (kropkowana)"),
                        Line2D([], [], marker="o", color="k", ls="", ms=3, label="rzędne punktowe KŻ użyte w ocenie")],
               loc="upper left", fontsize=7.5, framealpha=0.9)
     ax.set_title(f"Model dna (pre_flood) na tle mapy KŻ Nysa; strefy przy NPP = {npp:.2f} m n.p.m. (ilustracja, nie ocena)", fontsize=10)
-    import textwrap
     fig.text(0.01, 0.01, "\n".join(textwrap.wrap(SOURCE, 190) + textwrap.wrap(UWAGA, 190)), fontsize=6, va="bottom", ha="left")
     fig.subplots_adjust(left=0.01, right=0.99, top=0.95, bottom=0.14)
     IMG.mkdir(parents=True, exist_ok=True)
     fig.savefig(IMG / "kz-overlay.png", dpi=130)
     log.info("zapisano %s", IMG / "kz-overlay.png")
+    return 0
+
+
+def run_points_cmd() -> int:
+    run_points()
+    return 0
+
+
+def run_contours_cmd() -> int:
+    run_contours()
     return 0
 
 
@@ -284,7 +295,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("cmd", choices=["variant-d", "points", "contours", "overlay", "compare"])
     args = ap.parse_args(argv)
-    return {"variant-d": run_variant_d, "points": lambda: (run_points(), 0)[1], "contours": lambda: (run_contours(), 0)[1],
+    return {"variant-d": run_variant_d, "points": run_points_cmd, "contours": run_contours_cmd,
             "overlay": run_overlay, "compare": run_compare}[args.cmd]()
 
 
