@@ -488,3 +488,197 @@ def match_qc(qc: pd.DataFrame, spots: pd.DataFrame, tol_px: float = QC_MATCH_PX)
     out = qc.loc[keep].copy()
     out["id"] = ids
     return out.reset_index(drop=True), len(qc) - len(keep)
+
+
+# --- Poziomice 192,5 i 195,0 m (K3) oraz obrys żwirowni -------------------------------------------------------
+# Co robi: maska koloru -> poziom linii z sąsiedniego wypełnienia -> szkielet -> linie -> EPSG:2180.
+# Dlaczego tak: wszystkie poziomice mapy mają ten sam granat (zmierzone: ok. RGB 15,30,140, grubość 2-3 px),
+#   więc kolor linii nie wskazuje poziomu. Poziom wskazuje wypełnienie wody: pas 192,5-195,0 m jest biały,
+#   głębiej jest błękit. Linia 195,0 (brzeg) graniczy z lądem; linia 192,5 z białym pasem i błękitem;
+#   inne poziomice (np. 193,0 wewnątrz pasa) nie graniczą ani z lądem, ani z błękitem i odpadają.
+#   Linie przerywane („orientacyjne”, dno poniżej 192,5) rozpadają się na kreski krótsze niż `min_len_px`.
+# Jak to obronić: oglądany `qc_contours.png`; długości i liczby linii w M7; lista `contour_drop_ids` jawna.
+
+
+def color_mask(img: np.ndarray, rgb: tuple[int, int, int], tol: int) -> np.ndarray:
+    """Maska pikseli bliskich `rgb` (odległość Czebyszewa w RGB <= tol); liczy porcjami, bez kopii całego obrazu."""
+    out = np.zeros(img.shape[:2], bool)
+    ref = np.asarray(rgb, np.int16)
+    for r0 in range(0, img.shape[0], 512):
+        blk = img[r0:r0 + 512, :, :3].astype(np.int16)
+        out[r0:r0 + 512] = (np.abs(blk - ref) <= tol).all(-1)
+    return out
+
+
+def _prune_spurs(adj: dict, spur_px: int) -> None:
+    """Usuwa gałązki (od końcówki do rozwidlenia) krótsze niż `spur_px`: litery i ogonki przy linii."""
+    ends = [p for p, n in adj.items() if len(n) == 1]
+    for e in ends:
+        if e not in adj or len(adj[e]) != 1:
+            continue
+        path, prev, cur = [e], None, e
+        while True:
+            nxt = [q for q in adj[cur] if q != prev]
+            if len(nxt) != 1:
+                break
+            prev, cur = cur, nxt[0]
+            if len(adj[cur]) >= 3:
+                break
+            path.append(cur)
+            if len(path) > spur_px:
+                break
+        if len(path) <= spur_px and len(adj.get(cur, ())) >= 3:
+            for p in path:
+                for q in adj.pop(p):
+                    if q in adj:
+                        adj[q].remove(p)
+
+
+def _merge_at_pair_nodes(paths: list) -> list:
+    """Skleja ścieżki, które spotykają się w węźle z dokładnie dwiema ścieżkami (pozostałość po ucięciu ogonka)."""
+    changed = True
+    while changed:
+        changed = False
+        ends: dict = {}
+        for i, p in enumerate(paths):
+            for e in {p[0], p[-1]}:
+                ends.setdefault(e, []).append(i)
+        for e, idx in sorted(ends.items()):
+            if len(idx) != 2 or idx[0] == idx[1]:
+                continue
+            a, b = paths[idx[0]], paths[idx[1]]
+            a = a if a[-1] == e else a[::-1]
+            b = b if b[0] == e else b[::-1]
+            merged = a + b[1:]
+            paths = [q for j, q in enumerate(paths) if j not in idx] + [merged]
+            changed = True
+            break
+    return paths
+
+
+def mask_to_lines(mask: np.ndarray, min_len_px: int = 80, spur_px: int = 12) -> list:
+    """Szkielet maski -> linie (x=kolumna, y=wiersz); dzieli w rozwidleniach, ucina ogonki < `spur_px`
+    i odrzuca linie krótsze niż `min_len_px` (długość euklidesowa)."""
+    from shapely.geometry import LineString
+    from skimage.morphology import skeletonize
+
+    sk = skeletonize(mask)
+    pts = np.argwhere(sk)
+    pset = {(int(y), int(x)) for y, x in pts}
+    adj = {p: [(p[0] + dy, p[1] + dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1)
+               if (dy or dx) and (p[0] + dy, p[1] + dx) in pset] for p in pset}
+    _prune_spurs(adj, spur_px)
+    keep = np.zeros(mask.shape, bool)             # po ucięciu zostaje „guzek” przy rozwidleniu: ponowne ścienienie
+    ky, kx = zip(*adj) if adj else ((), ())
+    keep[list(ky), list(kx)] = True
+    pset = {(int(y), int(x)) for y, x in np.argwhere(skeletonize(keep))}
+    adj = {p: [(p[0] + dy, p[1] + dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1)
+               if (dy or dx) and (p[0] + dy, p[1] + dx) in pset] for p in pset}
+    node = {p for p, n in adj.items() if len(n) != 2}
+    seen: set = set()          # krawędzie (para pikseli) już przejęte
+    lines = []
+
+    def walk(start, first):
+        path, prev, cur = [start, first], start, first
+        seen.add((start, first)); seen.add((first, start))
+        while cur not in node:
+            nxt = [q for q in adj[cur] if q != prev]
+            if not nxt:
+                break
+            prev, cur = cur, nxt[0]
+            if (prev, cur) in seen:
+                break
+            seen.add((prev, cur)); seen.add((cur, prev))
+            path.append(cur)
+        return path
+
+    for s in sorted(node):
+        for q in sorted(adj[s]):
+            if (s, q) not in seen:
+                lines.append(walk(s, q))
+    for s in sorted(p for p in adj if p not in node):          # pętle bez węzłów (zamknięte poziomice)
+        for q in sorted(adj[s]):
+            if (s, q) not in seen:
+                lines.append(walk(s, q))
+    lines = _merge_at_pair_nodes([l for l in lines if len(l) >= 2])
+    out = []
+    for path in lines:
+        ls = LineString([(x, y) for y, x in path]).simplify(0.7)
+        if ls.length >= min_len_px:
+            out.append(ls)
+    out.sort(key=lambda g: (round(g.coords[0][1]), round(g.coords[0][0]), -g.length))   # stabilne id
+    return out
+
+
+def _blueness(img: np.ndarray) -> np.ndarray:
+    """b - r piksela (granat/błękit linii ma b >> r; szara siatka nie)."""
+    out = np.zeros(img.shape[:2], np.int16)
+    for r0 in range(0, img.shape[0], 512):
+        blk = img[r0:r0 + 512, :, :3].astype(np.int16)
+        out[r0:r0 + 512] = blk[..., 2] - blk[..., 0]
+    return out
+
+
+def contour_level_masks(img: np.ndarray, colors: dict) -> dict:
+    """Maski pikseli linii dla poziomów 192,5 i 195,0 (patrz komentarz modułu); `colors` jak `kz.contour_colors`."""
+    from scipy import ndimage as ndi
+
+    ring = int(colors.get("ring_px", 6))
+    line = color_mask(img, tuple(colors["line"]), colors["line_tol"])
+    shallow = color_mask(img, tuple(colors["shallow"]), colors["shallow_tol"])
+    shallow = ndi.binary_opening(shallow, np.ones((5, 5), bool))      # bez cienkich linii siatki i obwódek tekstu
+    deep = color_mask(img, tuple(colors["deep"]), colors["deep_tol"]) & ~shallow
+    deep = ndi.binary_opening(deep, np.ones((5, 5), bool))            # odrzuca antyaliasing na krawędzi pasa
+    land = np.zeros(line.shape, bool)
+    for r0 in range(0, img.shape[0], 512):
+        blk = img[r0:r0 + 512, :, :3].astype(np.int16)
+        land[r0:r0 + 512] = blk[..., 1] - blk[..., 2] >= 12   # zieleń/beż: b wyraźnie < g (woda i biel mają b >= g)
+    k = np.ones((2 * ring + 1, 2 * ring + 1), bool)
+    near_shallow = ndi.binary_dilation(shallow, k)
+    near_deep = ndi.binary_dilation(deep, k)
+    near_land = ndi.uniform_filter(land.astype(np.float32), 2 * ring + 1) >= 0.1
+    seeds = {195.0: line & near_land & ~(near_shallow & near_deep),
+             192.5: line & near_shallow & near_deep & ~near_land}
+    # Cienka linia blednie (antyaliasing, 1 px) i ma przerwy: ziarna rosną po szerszej masce granatu (do `grow_px`
+    # kroków), więc łączą się w ciągłe linie, ale nie uciekają daleko na inne poziomice.
+    wide = color_mask(img, tuple(colors["line"]), colors["line_tol"] + 25)
+    wide &= _blueness(img) >= 50
+    grow = int(colors.get("grow_px", 10))
+    out = {}
+    for lv, seed in seeds.items():
+        cur = seed.copy()
+        for _ in range(grow):
+            cur |= ndi.binary_dilation(cur) & wide
+        out[lv] = cur
+    return out
+
+
+def lines_to_2180(lines, t: "KzTransform") -> list:
+    """Linie w pikselach obrazu -> EPSG:2180 przez transformację z GCP."""
+    from shapely.geometry import LineString
+
+    out = []
+    for g in lines:
+        xy = np.asarray(g.coords)
+        x, y = t.px_to_2180(xy[:, 0], xy[:, 1])
+        out.append(LineString(np.column_stack([x, y])))
+    return out
+
+
+def vertices_to_polygon(verts, t: "KzTransform"):
+    """Wierzchołki obrysu (piksele obrazu) -> poprawny Polygon w EPSG:2180 (samoprzecięcia naprawione)."""
+    from shapely.geometry import Polygon
+    from shapely.validation import make_valid
+
+    v = np.asarray(verts, float)
+    if len(v) < 3:
+        raise ValueError("obrys wymaga co najmniej 3 wierzchołków")
+    x, y = t.px_to_2180(v[:, 0], v[:, 1])
+    poly = Polygon(np.column_stack([x, y]))
+    if not poly.is_valid:
+        poly = make_valid(poly)
+        if poly.geom_type != "Polygon":
+            poly = max((g for g in getattr(poly, "geoms", [poly]) if g.geom_type == "Polygon"), key=lambda g: g.area)
+    if poly.area <= 0:
+        raise ValueError("obrys o zerowym polu")
+    return poly

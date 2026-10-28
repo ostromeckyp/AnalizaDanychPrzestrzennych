@@ -28,10 +28,12 @@ SCENES  := $(PROC)/scenes.json
 BOTTOM  := $(PROC)/model/all/model_meta.json
 KZMETA  := $(PROC)/kz/kz_meta.json
 KZSPOTS := $(PROC)/kz/kz_spot_ocr.gpkg
+KZCONT  := $(PROC)/kz/kz_contours.gpkg
+ZWIR    := $(REF)/zwirownia.gpkg
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui test clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel test clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -124,6 +126,15 @@ $(KZSPOTS): $(KZMETA)                      # 09 spots: OCR rzędnych (tesseract,
 
 kz-qc-ui: $(KZSPOTS)                       # ręczna kontrola min(200, liczba punktów): http://localhost:8765/kz -> data/reference/kz_spot_qc.csv
 	$(UV) tools/label_server.py --kz
+
+kz-contours: $(KZCONT)
+# Kod (kz.py, config kz.*) celowo NIE jest zależnością; po zmianie config: rm $(KZCONT) && make kz-contours (ok. 1 min)
+$(KZCONT): $(KZMETA)                       # 09 contours: poziomice 192,5 i 195,0 m z mapy KŻ + qc_contours.png
+	$(UV) 09_kz_digitize.py contours
+
+kz-gravel: $(ZWIR)
+$(ZWIR): $(KZMETA) $(REF)/zwirownia_vertices.csv   # 09 gravel: obrys rejonu eksploatacji kruszywa (wierzchołki ręczne) -> zwirownia.gpkg
+	$(UV) 09_kz_digitize.py gravel
 
 test:
 	uv run pytest -q

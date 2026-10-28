@@ -60,3 +60,22 @@ lidar:
   shore_band_m: 300          # NMT: pierścień lake.boundary.buffer(shore_band_m)
   laz_sheets_per_epoch: 4    # LAZ: tyle arkuszy na epokę (najwięcej wody, po jednym na ćwiartkę)
   max_download_gb: 15        # powyżej: skrypt zatrzymuje się po dry-run
+
+# Mapa KŻ (krok 09)
+kz:
+  # Kolory zmierzone na data/raw/kz/kz_full.png (wycinki legendy i linii oglądane Read, średnie RGB szkieletu linii
+  # i wypełnień; patrz uzasadnienie w mielizna/kz.py, sekcja „Poziomice”). Wszystkie poziomice mają TEN SAM granat,
+  # więc poziom wynika z sąsiedniego wypełnienia: pas 192,5-195,0 m biały, głębiej błękit, ląd zielony/beżowy.
+  contour_colors:
+    line: [40, 60, 170]        # granat do średniego błękitu linii (rdzeń 15,30,140; antyaliasing i cienkie linie 60-110,70-130,170-210)
+    line_tol: 90               # Czebyszew; nie łapie błękitu wody (g >= 195) ani czerni (b < 80)
+    shallow: [248, 251, 253]   # biały pas 192,5-195,0 m (próbki 236,243,251 do 255,255,255)
+    shallow_tol: 14
+    deep: [195, 235, 250]      # błękit głębszej wody (próbki 217,248,250; 201,216,235)
+    deep_tol: 35
+    ring_px: 8                 # promień sąsiedztwa do wykrycia wypełnień obok linii
+    grow_px: 10                # ile pikseli ziarno może rosnąć po granatowej masce (zasklepia przerwy w cienkich liniach)
+  contour_min_len_px: 80       # krótsze (kreski linii „orientacyjnych”, litery) odpadają
+  # id = numer w kz_contours.gpkg (poziom rosnąco, w poziomie długość malejąco; stabilne dla tych samych masek).
+  # 165: odcinek 97 m wzdłuż krawędzi korony zapory (czarna droga), nie poziomica (oglądane na wycinku mapy).
+  contour_drop_ids: [165]

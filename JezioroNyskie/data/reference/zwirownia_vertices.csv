@@ -1,0 +1,10 @@
+# Wierzchołki obrysu „REJON EKSPLOATACJI KRUSZYWA (2023)” (różowa linia przerywana) na mapie KŻ Nysa, W. Wróblewski 2023.
+# px, py: piksele obrazu 9867 x 4791 (kz_full.png, jak w kz_gcp.csv), wskazane ręcznie z wycinków mapy (dokładność kilka-kilkanaście px, tj. ok. 5-15 m).
+# Kolejność: lewy górny, prawy górny, prawy dolny, załamanie przekątnej, lewy dolny. Źródło i warunki: data/reference/KZ_ZRODLO_I_WARUNKI.md
+# Lewa krawędź (x = 5420-5460) NIE jest narysowana na mapie (rejon otwarty od strony cieśniny Seszelskiej): zamknięta prostą łączącą narożniki.
+px,py
+5420,2130
+6736,2130
+6736,3722
+6044,3204
+5460,3204

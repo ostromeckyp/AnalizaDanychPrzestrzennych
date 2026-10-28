@@ -22,7 +22,15 @@ Co robi (`spots`): OCR rzędnych punktowych z pełnej mapy (kafle 1200 px, tesse
   (id, z, color, conf, color_ok, px, py, anchor_side + tekst i ramka OCR; EPSG:2180) oraz kz_spot_ocr_raw.csv (wszystkie słowa).
   Jak to obronić: błędy OCR nie wchodzą do metryk bez kontroli (`ocr_error_rate` z próby ręcznej, `make kz-qc-ui`).
 
-Użycie: uv run python 09_kz_digitize.py georef | spots
+Co robi (`contours`): poziomice 192,5 i 195,0 m z pełnej mapy: maska koloru linii, poziom z sąsiedniego wypełnienia
+  (config `kz.contour_colors`), szkielet -> linie, odrzucenie krótkich (kreski „orientacyjne”), transformacja
+  do EPSG:2180, `kz.contour_drop_ids` usuwa fragmenty ewidentnie błędne. Wejście → wyjście: kz_full.png →
+  data/processed/kz/kz_contours.gpkg (id, level, length_m; EPSG:2180) + qc_contours.png.
+Co robi (`gravel`): obrys rejonu eksploatacji kruszywa (różowa linia przerywana na mapie) z wierzchołków
+  data/reference/zwirownia_vertices.csv (piksele mapy, wskazane ręcznie) -> data/reference/zwirownia.gpkg
+  (Polygon EPSG:2180, `source`, `licence_ref`). Wierzchołki są punktami z oglądu mapy: dokładność rzędu kilku metrów.
+
+Użycie: uv run python 09_kz_digitize.py georef | spots | contours | gravel
 """
 import argparse
 import json
@@ -224,13 +232,88 @@ def spots() -> int:
     return 0
 
 
+def contours() -> int:
+    """Poziomice 192,5 / 195,0: maski poziomów -> linie -> EPSG:2180 -> GPKG + obrazek kontrolny."""
+    from mielizna.config import load_config
+
+    cfg = load_config()["kz"]
+    outdir = data_path("processed", "kz")
+    meta = json.loads((outdir / "kz_meta.json").read_text())
+    t = kz.fit_transform(load_gcp(), meta["kind"])
+    Image.MAX_IMAGE_PIXELS = None
+    img = np.asarray(Image.open(data_path("raw", "kz") / "kz_full.png").convert("RGB"))
+    masks = kz.contour_level_masks(img, cfg["contour_colors"])
+    lake = gpd.read_file(data_path("processed", "lake.gpkg"), layer="lake").geometry.union_all()
+    rows, geoms = [], []
+    for level in (192.5, 195.0):
+        px_lines = kz.mask_to_lines(masks[level], cfg["contour_min_len_px"])
+        for g in kz.lines_to_2180(px_lines, t):
+            xy = np.asarray(g.coords)
+            if kz.in_lake_zone(xy[:, 0], xy[:, 1], lake, LAKE_ZONE_BUFFER_M).mean() < 0.9:
+                continue                                   # legenda, ramka, opisy poza zbiornikiem
+            rows.append({"level": level, "length_m": round(g.length, 1)})
+            geoms.append(g)
+        log.info("poziom %.1f: linie po filtrze strefy: %d", level, sum(r["level"] == level for r in rows))
+    gdf = gpd.GeoDataFrame(rows, geometry=geoms, crs="EPSG:2180")
+    gdf = gdf.sort_values(["level", "length_m"], ascending=[True, False], kind="stable").reset_index(drop=True)
+    gdf.insert(0, "id", np.arange(len(gdf)))              # id stabilne: poziom, potem malejąca długość
+    drop = set(cfg.get("contour_drop_ids") or [])
+    gdf = gdf[~gdf.id.isin(drop)].reset_index(drop=True)
+    gdf.to_file(outdir / "kz_contours.gpkg", driver="GPKG", layer="contours",
+                metadata={"source": "data/reference/KZ_ZRODLO_I_WARUNKI.md (mapa KŻ Nysa, W. Wróblewski 2023)"})
+    stats = {str(l): {"n": int((gdf.level == l).sum()), "length_km": round(float(gdf[gdf.level == l].length.sum()) / 1000, 2)}
+             for l in (192.5, 195.0)}
+    stats["dropped_ids"] = sorted(int(i) for i in drop)
+    (outdir / "kz_contours_stats.json").write_text(json.dumps(stats, indent=2))
+    log.info("contours: %s", stats)
+    contours_qc(img, t, gdf, outdir / "qc_contours.png")
+    return 0
+
+
+def contours_qc(img, t, gdf, out: Path):
+    """Linie na mapie KŻ w pikselach (odwrotna transformacja), z numerami id."""
+    fig, ax = plt.subplots(figsize=(24, 12), dpi=100)
+    ax.imshow(img[::2, ::2], extent=(0, img.shape[1], img.shape[0], 0))
+    for r in gdf.itertuples():
+        xy = np.asarray(r.geometry.coords)
+        px, py = t.inverse_2180(xy[:, 0], xy[:, 1])
+        ax.plot(px, py, color="red" if r.level == 195.0 else "magenta", lw=1.0)
+        m = len(px) // 2
+        ax.text(px[m], py[m], str(r.id), fontsize=6, color="black", bbox=dict(fc="yellow", ec="none", pad=0.3, alpha=0.7))
+    ax.set_title("QC poziomic KŻ: czerwone = 195,0 m, różowe = 192,5 m (numery = id). Źródło: data/reference/KZ_ZRODLO_I_WARUNKI.md")
+    ax.set_xlim(2600, img.shape[1])
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+
+
+def gravel() -> int:
+    """Obrys rejonu eksploatacji kruszywa z ręcznie wskazanych wierzchołków (piksele mapy)."""
+    outdir = data_path("processed", "kz")
+    meta = json.loads((outdir / "kz_meta.json").read_text())
+    t = kz.fit_transform(load_gcp(), meta["kind"])
+    verts = pd.read_csv(data_path("reference", "zwirownia_vertices.csv"), comment="#")
+    poly = kz.vertices_to_polygon(verts[["px", "py"]].to_numpy(), t)
+    lake = gpd.read_file(data_path("processed", "lake.gpkg"), layer="lake").geometry.union_all()
+    inside = poly.intersection(lake).area / poly.area
+    gdf = gpd.GeoDataFrame({"name": ["rejon eksploatacji kruszywa (2023)"], "source": ["mapa KŻ Nysa, W. Wróblewski 2023"],
+                            "licence_ref": ["data/reference/KZ_ZRODLO_I_WARUNKI.md"]}, geometry=[poly], crs="EPSG:2180")
+    out = data_path("reference", "zwirownia.gpkg")
+    out.unlink(missing_ok=True)
+    gdf.to_file(out, driver="GPKG", layer="zwirownia",
+                metadata={"licence_ref": "data/reference/KZ_ZRODLO_I_WARUNKI.md"})
+    log.info("żwirownia: %d wierzchołków, pole %.0f ha, %.0f%% w obrysie jeziora", len(verts), poly.area / 1e4, 100 * inside)
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("georef")
     sub.add_parser("spots")
+    sub.add_parser("contours")
+    sub.add_parser("gravel")
     args = ap.parse_args(argv)
-    return georef() if args.cmd == "georef" else spots()
+    return {"georef": georef, "spots": spots, "contours": contours, "gravel": gravel}[args.cmd]()
 
 
 if __name__ == "__main__":
