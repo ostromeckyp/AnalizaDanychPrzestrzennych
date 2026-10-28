@@ -82,14 +82,17 @@ export function useMethodVm(): MethodVm {
   const nB = byMethod.B ?? 0;
   const nC = byMethod.C ?? 0;
   const nR = byMethod.R ?? 0;
-  const from = meta.first_scene_date ?? '';
-  const to = meta.last_scene_date ?? '';
+  // Brak dat: pomijamy opis okresu zamiast pokazywać „—–—”.
+  const period =
+    meta.first_scene_date && meta.last_scene_date
+      ? `${fmtDate(meta.first_scene_date)}–${fmtDate(meta.last_scene_date)}`
+      : '';
 
   const steps: MethodStep[] = [
     {
       n: '01',
       title: 'Satelita',
-      text: `Sceny Copernicus Sentinel-2 (10 m) z niskim zachmurzeniem, z wielu lat i pór roku. W modelu: ${plScenes(meta.n_scenes)} z okresu ${fmtDate(from)}–${fmtDate(to)}.`,
+      text: `Sceny Copernicus Sentinel-2 (10 m) z niskim zachmurzeniem, z wielu lat i pór roku. W modelu: ${plScenes(meta.n_scenes)}${period ? ` z okresu ${period}` : ''}.`,
     },
     {
       n: '02',
@@ -102,7 +105,7 @@ export function useMethodVm(): MethodVm {
       text:
         `Granica maski to linia brzegowa. Poziom wody w dniu sceny przypisujemy jej z komunikatów RZGW (${plScenes(nB)}) ` +
         `oraz z krzywej powierzchnia–poziom dopasowanej do scen ze znanym poziomem (${plScenes(nC)}).` +
-        (nR > 0 ? ` Dla ${plScenes(nR)} znamy poziom z pomiaru wodowskazowego.` : '') +
+        (nR > 0 ? ` Pomiar wodowskazowy (wariant R): ${plScenes(nR)}.` : '') +
         ' Kalibracja poziomu według NMT z LiDAR jest w przygotowaniu.',
     },
     {
@@ -135,7 +138,7 @@ export function useMethodVm(): MethodVm {
     {
       label: 'Liczba scen',
       value: fmtNum(meta.n_scenes, 0),
-      sub: `okres ${fmtDate(from)}–${fmtDate(to)}`,
+      sub: period ? `okres ${period}` : 'okres niedostępny',
     },
     {
       label: 'Zakres poziomów',

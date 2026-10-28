@@ -86,10 +86,18 @@ describe('useMethodVm', () => {
     const s3 = result.current.steps[2].text;
     expect(s3).toContain('153 sceny');
     expect(s3).toContain('63 sceny');
-    expect(s3).toContain('2 sceny');
-    expect(s3).toMatch(/pomiaru wodowskazowego/);
+    expect(s3).toContain('Pomiar wodowskazowy (wariant R): 2 sceny.');
     expect(result.current.steps[0].text).toContain('218 scen ');
     expect(result.current.steps[0].text).toContain('12.04.2025–20.10.2026');
+  });
+
+  it('missing scene dates omit the period text', async () => {
+    metaMock.mockResolvedValue({ ...meta, first_scene_date: null, last_scene_date: null });
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.steps[0].text).toMatch(/W modelu: 3 sceny\.$/);
+    expect(result.current.steps[0].text).not.toContain('—');
+    expect(result.current.tiles.find((t) => t.label === 'Liczba scen')!.sub).toBe('okres niedostępny');
   });
 
   it('legend labels variant R', async () => {
