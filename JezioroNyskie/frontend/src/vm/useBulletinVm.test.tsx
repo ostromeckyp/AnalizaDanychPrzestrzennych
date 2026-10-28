@@ -85,7 +85,7 @@ describe('useBulletinVm', () => {
     act(() => result.current.fetch());
     await waitFor(() => expect(result.current.status).toBe('ready'));
     expect(result.current.summary).toBe(
-      `Komunikat RZGW z 27.10.2026, odczyt 06:00 UTC — 150,0${NB}mln m³, pojemność poza tabelą pojemności (brak poziomu)`,
+      `Komunikat RZGW z 27.10.2026, odczyt 06:00 UTC — 150,0${NB}mln m³, poza tabelą pojemności — brak poziomu`,
     );
     expect(onApply).toHaveBeenCalledWith(150);
   });
@@ -110,5 +110,17 @@ describe('useBulletinVm', () => {
     act(() => result.current.fetch());
     await waitFor(() => expect(result.current.status).toBe('ready'));
     expect(api.bulletinLatest).toHaveBeenCalledTimes(2);
+  });
+
+  it('nieudane ponowne pobranie nie stosuje ponownie poprzedniego wyniku', async () => {
+    const onApply = vi.fn();
+    const { result } = renderHook(() => useBulletinVm(onApply), { wrapper: wrap() });
+    act(() => result.current.fetch());
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(onApply).toHaveBeenCalledTimes(1);
+    vi.mocked(api.bulletinLatest).mockRejectedValueOnce(new ApiError(404, 'Brak komunikatu'));
+    act(() => result.current.fetch());
+    await waitFor(() => expect(result.current.status).toBe('error'));
+    expect(onApply).toHaveBeenCalledTimes(1);
   });
 });

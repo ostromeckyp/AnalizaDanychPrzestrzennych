@@ -38,7 +38,7 @@ export function useBulletinVm(onApply: (capacity: number) => void): BulletinVm {
   const fetch = () => {
     if (q.isFetching) return;
     void q.refetch().then((r) => {
-      if (r.data) apply.current(r.data.v_current);
+      if (r.isSuccess && r.data) apply.current(r.data.v_current);
     });
   };
 
@@ -53,7 +53,7 @@ export function useBulletinVm(onApply: (capacity: number) => void): BulletinVm {
   const head = `Komunikat RZGW z ${fmtDate(d.bulletin_date)}${d.reading_utc ? `, odczyt ${d.reading_utc} UTC` : ''}`;
   const summary =
     d.h === null || d.h === undefined
-      ? `${head} — ${fmtCapacity(d.v_current)}, pojemność poza tabelą pojemności (brak poziomu)`
+      ? `${head} — ${fmtCapacity(d.v_current)}, poza tabelą pojemności — brak poziomu`
       : `${head} — ${fmtCapacity(d.v_current)} → ${fmtLevel(d.h)}`;
   return { status: 'ready', fetch, summary, url: d.url, note: d.stale ? STALE_NOTE : undefined };
 }

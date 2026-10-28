@@ -268,7 +268,21 @@ class DownloadError(RuntimeError):
     """Trwała awaria sieci (nie 404): przerywamy przebieg, żeby nie zgubić scen po cichu."""
 
 
-def _download(url: str, dest: Path, retries: int = 5, backoff_s: float = 30.0, fetch=None) -> bool:
+def _read_capped(r, max_bytes: int | None) -> bytes | None:
+    """Treść odpowiedzi albo None, gdy przekracza `max_bytes` (czytanie strumieniowe, bez wczytywania całości)."""
+    if max_bytes is None or not hasattr(r, "iter_content"):
+        body = r.content
+        return body if max_bytes is None or len(body) <= max_bytes else None
+    buf = bytearray()
+    for chunk in r.iter_content(chunk_size=65536):
+        buf += chunk
+        if len(buf) > max_bytes:
+            return None
+    return bytes(buf)
+
+
+def _download(url: str, dest: Path, retries: int = 5, backoff_s: float = 30.0, fetch=None,
+              timeout=90, max_bytes: int | None = None) -> bool:
     """Pobiera PDF do cache (1 zapytanie/s) z długim odstępem po błędach.
 
     Wayback odcina połączenia („connection refused”) po kilkunastu zapytaniach w serii, więc po
@@ -282,10 +296,15 @@ def _download(url: str, dest: Path, retries: int = 5, backoff_s: float = 30.0, f
     for attempt in range(retries):
         _throttle()
         try:
-            r = (fetch or requests.get)(url, headers={"User-Agent": USER_AGENT}, timeout=90)
-            if r.status_code == 200 and r.content[:4] == b"%PDF":
+            r = (fetch or requests.get)(url, headers={"User-Agent": USER_AGENT}, timeout=timeout,
+                                        **({"stream": True} if max_bytes else {}))
+            body = _read_capped(r, max_bytes) if r.status_code == 200 else None
+            if r.status_code == 200 and body is None:
+                log.warning("odpowiedź %s przekracza limit %d B", url, max_bytes)
+                return False
+            if body is not None and body[:4] == b"%PDF":
                 tmp = dest.with_suffix(".part")
-                tmp.write_bytes(r.content)
+                tmp.write_bytes(body)
                 tmp.replace(dest)
                 return True
             log.warning("HTTP %s dla %s (próba %d)", r.status_code, url, attempt + 1)
@@ -314,42 +333,59 @@ def fetch_govpl_list(cache_dir: Path | None = None) -> list[tuple[date, str]]:
     return list_govpl(cache.read_text(encoding="utf-8"))
 
 
+LIST_MAX_BYTES = 2 * 1024 * 1024
+PDF_MAX_BYTES = 10 * 1024 * 1024
 LATEST_MAX_TRIES = 3          # tyle ostatnich komunikatów próbujemy, gdy najnowszy jest nieczytelny
 
 
-def latest_govpl(cache_dir: Path, *, max_age_s: int = 3600, fetch=requests.get) -> dict | None:
+def latest_govpl(cache_dir: Path, *, max_age_s: int = 3600, fetch=requests.get,
+                 deadline_s: float | None = None) -> dict | None:
     """Najnowszy czytelny komunikat z listy gov.pl (dla przycisku „Stan z Wód Polskich” w aplikacji).
 
     Co robi: odświeża `govpl_list.html`, gdy cache jest starszy niż `max_age_s` (albo go nie ma),
       bierze najnowszą datę, pobiera PDF do cache i parsuje go tak jak pipeline (`_load`). Gdy
-      najnowszy jest nieczytelny (404, brak wiersza, zła data w PDF), próbuje kolejne wstecz (maks. 3).
+      najnowszy jest nieczytelny (404, brak wiersza, zła data w PDF), próbuje kolejne wstecz (maks. 3);
+      wtedy wynik ma `fallback_older=True`.
     Dlaczego tak: `fetch_govpl_list` nigdy nie odświeża cache (pipeline ma być powtarzalny), a
       aplikacja potrzebuje dzisiejszego komunikatu. Błąd sieci przy liście albo PDF-ie rzuca wyjątek
-      (RequestException / DownloadError) - decyzję o awaryjnym powrocie podejmuje wołający. PDF-y mają
-      jedną próbę bez długiego odstępu (użytkownik czeka na odpowiedź). 1 zapytanie/s i User-Agent
-      modułu obowiązują jak w pipeline.
-    Wejście → wyjście: katalog cache (zapisywalny), TTL, `fetch` (wstrzykiwany w testach) →
-      {bulletin_date, v_current, v_npp, v_maxpp, reading_utc, url, source="govpl"} albo None.
+      (RequestException / DownloadError), a przekroczenie `deadline_s` rzuca TimeoutError - decyzję o
+      awaryjnym powrocie podejmuje wołający. Wejście jest zdalne, więc: timeout (połączenie 5 s, odczyt
+      15 s lub reszta budżetu), limit rozmiaru (lista 2 MB, PDF 10 MB), jedna próba na PDF bez długiego
+      odstępu. 1 zapytanie/s i User-Agent modułu obowiązują jak w pipeline.
+    Wejście → wyjście: katalog cache (zapisywalny), TTL, `fetch` (wstrzykiwany w testach), budżet czasu →
+      {bulletin_date, v_current, v_npp, v_maxpp, reading_utc, url, source="govpl", fallback_older} albo None.
     Jak to obronić: ten sam parser i ta sama walidacja daty co dla wariantu B, brak interpolacji.
     """
+    t0 = time.monotonic()
+
+    def timeout():
+        left = None if deadline_s is None else deadline_s - (time.monotonic() - t0)
+        if left is not None and left <= 0:
+            raise TimeoutError(f"przekroczono budżet czasu {deadline_s} s")
+        return (5, 15 if left is None else max(1.0, min(15.0, left)))
+
     cache_dir = Path(cache_dir)
     cache = cache_dir / "govpl_list.html"
     if not cache.exists() or time.time() - cache.stat().st_mtime > max_age_s:
         cache_dir.mkdir(parents=True, exist_ok=True)
         _throttle()
-        r = fetch(GOVPL_LIST_URL, headers={"User-Agent": USER_AGENT}, timeout=90)
+        r = fetch(GOVPL_LIST_URL, headers={"User-Agent": USER_AGENT}, timeout=timeout(), stream=True)
         r.raise_for_status()
+        body = _read_capped(r, LIST_MAX_BYTES)
+        if body is None:
+            raise ValueError("lista gov.pl przekracza limit rozmiaru")
         tmp = cache.with_suffix(".part")
-        tmp.write_text(r.text, encoding="utf-8")
+        tmp.write_bytes(body)
         tmp.replace(cache)
     newest_first = list(reversed(list_govpl(cache.read_text(encoding="utf-8"))))
-    for d, url in newest_first[:LATEST_MAX_TRIES]:
+    for i, (d, url) in enumerate(newest_first[:LATEST_MAX_TRIES]):
         entry = {"source": "govpl", "url": url, "file": f"govpl/{url.rsplit('/', 1)[-1]}.pdf"}
-        row = _load(d, entry, cache_dir, fetch=fetch, retries=1, backoff_s=0.0)
+        row = _load(d, entry, cache_dir, fetch=fetch, retries=1, backoff_s=0.0, timeout=timeout(),
+                    max_bytes=PDF_MAX_BYTES)
         if row is not None:
             return {"bulletin_date": d, "v_current": row["v_current"], "v_npp": row["v_npp"],
                     "v_maxpp": row["v_maxpp"], "reading_utc": row["reading_utc"], "url": url,
-                    "source": "govpl"}
+                    "source": "govpl", "fallback_older": i > 0}
     return None
 
 

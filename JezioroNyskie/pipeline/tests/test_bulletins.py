@@ -157,7 +157,7 @@ URL_1022 = "https://www.gov.pl/attachment/7c1bef52-5471-411c-840f-2eb94cb0be82"
 
 class FakeResp:
     def __init__(self, text="", content=b"", status=200):
-        self.text, self.content, self.status_code = text, content, status
+        self.text, self.content, self.status_code = text, content or text.encode(), status
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -188,7 +188,7 @@ def test_latest_govpl_returns_newest(tmp_path, pdf_text):
     assert r["bulletin_date"] == date(2026, 10, 26) and r["url"] == URL_1026
     assert (r["v_current"], r["v_npp"], r["v_maxpp"]) == (40.2, 65.7, 121.7)
     assert r["source"] == "govpl" and "reading_utc" in r
-    assert calls == [bulletins.GOVPL_LIST_URL, URL_1026]
+    assert calls == [bulletins.GOVPL_LIST_URL, URL_1026] and r["fallback_older"] is False
 
 
 def test_latest_govpl_list_cache_ttl(tmp_path, pdf_text):
@@ -219,7 +219,7 @@ def test_latest_govpl_refresh_picks_up_new_entry(tmp_path, pdf_text):
 def test_latest_govpl_falls_back_to_previous_when_unreadable(tmp_path, pdf_text):
     calls = []
     r = bulletins.latest_govpl(tmp_path, fetch=make_fetch(calls, bad={URL_1026}))   # 404 na najnowszym
-    assert r["bulletin_date"] == date(2026, 10, 22) and r["url"] == URL_1022
+    assert r["bulletin_date"] == date(2026, 10, 22) and r["url"] == URL_1022 and r["fallback_older"] is True
 
 
 def test_latest_govpl_tries_at_most_three(tmp_path, monkeypatch):
@@ -253,3 +253,42 @@ def test_fetch_govpl_list_still_never_refreshes(tmp_path, monkeypatch):
     (tmp_path / "govpl_list.html").write_text(read("govpl_list.html"), encoding="utf-8")
     monkeypatch.setattr(bulletins.requests, "get", lambda *a, **k: pytest.fail("sieć"))
     assert len(bulletins.fetch_govpl_list(tmp_path)) == 6
+
+
+class StreamResp(FakeResp):
+    def __init__(self, total, status=200):
+        super().__init__(content=b"%PDF" + b"x" * total, status=status)
+        self.read = 0
+
+    def iter_content(self, chunk_size=1):
+        for i in range(0, len(self.content), chunk_size):
+            self.read += chunk_size
+            yield self.content[i:i + chunk_size]
+
+
+def test_download_caps_size_while_streaming(tmp_path):
+    big = StreamResp(500_000)
+    assert bulletins._download("u", tmp_path / "a.pdf", retries=1, backoff_s=0, fetch=lambda *a, **k: big,
+                               max_bytes=100_000) is False
+    assert big.read < 300_000 and not (tmp_path / "a.pdf").exists()
+    ok = StreamResp(1000)
+    assert bulletins._download("u", tmp_path / "b.pdf", retries=1, backoff_s=0, fetch=lambda *a, **k: ok,
+                               max_bytes=100_000) is True
+
+
+def test_latest_govpl_oversized_list_raises(tmp_path):
+    big = StreamResp(bulletins.LIST_MAX_BYTES + 10)
+    with pytest.raises(ValueError):
+        bulletins.latest_govpl(tmp_path, fetch=lambda *a, **k: big)
+
+
+def test_latest_govpl_deadline_and_timeouts(tmp_path, pdf_text):
+    seen = []
+
+    def f(url, **kw):
+        seen.append(kw["timeout"])
+        return make_fetch([])(url, **kw)
+    bulletins.latest_govpl(tmp_path, fetch=f, deadline_s=40)
+    assert all(t[0] == 5 and t[1] <= 15 for t in seen)
+    with pytest.raises(TimeoutError):
+        bulletins.latest_govpl(tmp_path / "x", fetch=make_fetch([]), deadline_s=0)

@@ -135,3 +135,81 @@ def test_corrupt_cache_and_bad_value_never_500(make, tmp_path):
     cache.mkdir()
     (cache / "bulletin_latest.json").write_text("{nie json", encoding="utf-8")
     assert make(Fetch(result=ROW | {"v_current": float("nan")}), cache=cache).get("/api/bulletin/latest").status_code == 200
+
+
+def test_slow_refresh_does_not_block_second_request(make):
+    started, release = threading.Event(), threading.Event()
+
+    def slow(cache_dir):
+        started.set()
+        release.wait(10)
+        return ROW
+
+    c = make(slow)
+    first = []
+    t = threading.Thread(target=lambda: first.append(c.get("/api/bulletin/latest").json()))
+    t.start()
+    assert started.wait(5)
+    t0 = time.monotonic()
+    r = c.get("/api/bulletin/latest")                  # odświeżanie trwa: odpowiedź natychmiast z CSV
+    assert time.monotonic() - t0 < 1 and r.status_code == 200
+    assert r.json()["source"] == "pipeline" and r.json()["stale"] is True
+    release.set()
+    t.join(5)
+    assert first[0]["source"] == "govpl" and first[0]["stale"] is False
+    assert c.get("/api/bulletin/latest").json()["bulletin_date"] == "2026-10-27"   # stan zaktualizowany
+
+
+def test_slow_refresh_without_csv_serves_last_good_then_404(make):
+    started, release = threading.Event(), threading.Event()
+    calls = []
+
+    def fn(cache_dir):
+        calls.append(1)
+        if len(calls) == 2:
+            started.set()
+            release.wait(10)
+        return ROW
+
+    clock = Clock()
+    c = make(fn, csv=False, clock=clock)
+    c.get("/api/bulletin/latest")
+    clock.t += 3601
+    t = threading.Thread(target=lambda: c.get("/api/bulletin/latest"))
+    t.start()
+    assert started.wait(5)
+    b = c.get("/api/bulletin/latest").json()           # w trakcie odświeżania: ostatni dobry, oznaczony stale
+    assert b["source"] == "govpl" and b["stale"] is True
+    release.set()
+    t.join(5)
+
+
+def test_older_bulletin_marked_stale(make):
+    b = make(Fetch(result=ROW | {"fallback_older": True})).get("/api/bulletin/latest").json()
+    assert b["source"] == "govpl" and b["stale"] is True
+
+
+def test_non_https_url_rejected(make):
+    b = make(Fetch(result=ROW | {"url": "http://evil.example/x.pdf"})).get("/api/bulletin/latest").json()
+    assert b["source"] == "pipeline"
+
+
+def test_csv_non_https_rows_ignored(make, dataset):
+    c = make(Fetch(exc=OSError("x")))
+    (dataset / "processed" / "bulletins.csv").write_text(
+        CSV + "2026-10-28,2026-10-28,govpl,42.0,65.7,121.7,06:00,file:///etc/passwd\n", encoding="utf-8")
+    assert c.get("/api/bulletin/latest").json()["bulletin_date"] == "2026-10-26"
+
+
+def test_prunes_old_raw_pdfs_after_success(make, tmp_path):
+    cache = tmp_path / "prune"
+    raw = cache / "bulletin_raw" / "govpl"
+    raw.mkdir(parents=True)
+    for i in range(15):
+        p = raw / f"{i:02d}.pdf"
+        p.write_bytes(b"%PDF")
+        import os
+        os.utime(p, (1000 + i, 1000 + i))
+    make(Fetch(), cache=cache).get("/api/bulletin/latest")
+    left = sorted(p.name for p in raw.iterdir())
+    assert len(left) == 10 and "14.pdf" in left and "00.pdf" not in left

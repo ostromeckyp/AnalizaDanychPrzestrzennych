@@ -6,8 +6,14 @@ Co robi: `BulletinService.get()` zwraca najnowszy czytelny komunikat z listy gov
   (`bulletin_latest.json`, atomowo: tmp + replace), razem z czasem ostatniej próby.
 Dlaczego tak: serwer Wód Polskich nie może dostawać zapytań przy każdym kliknięciu, więc sieć jest
   pytana najwyżej raz na `ttl_s` (1 h) - także po porażce (inaczej awaria serwera zamieniłaby się w serię
-  zapytań). Jedna blokada obejmuje całe odświeżenie, więc równoległe żądania czekają na wynik pierwszego
-  zamiast pobierać drugi raz. Pobranie z sieci tylko przy `live`; bez niego i przy błędzie wynik jest
+  zapytań). Odświeżenie wykonuje jedno żądanie (blokada `_refresh_lock` brana bez czekania, czas
+  ograniczony do `DEADLINE_S` = 40 s, poniżej 60 s limitu nginx); pozostałe żądania nigdy nie czekają,
+  tylko od razu dostają bieżący stan (ostatni dobry z `stale`, inaczej CSV, inaczej 404), żeby nie zająć
+  puli wątków współdzielonej z /api/zones. Dane z sieci są zdalnym wejściem: pobierania mają limity
+  rozmiaru (lista 2 MB, PDF 10 MB) i krótkie timeouty, URL musi być `https://`, a `pypdf` parsuje
+  nieufny PDF (ryzyko zasobowe ograniczone limitem rozmiaru i odpornością na wyjątki).
+  Gdy użyto starszego komunikatu niż najnowszy z listy (`fallback_older`), wynik ma `stale=true`.
+  Po udanym odświeżeniu w `bulletin_raw/govpl` zostaje 10 najnowszych PDF-ów. Pobranie z sieci tylko przy `live`; bez niego i przy błędzie wynik jest
   oznaczony `stale` (i `source="pipeline"` dla CSV). Żaden wyjątek nie wychodzi z `get()` (API nie daje 500).
 Wejście → wyjście: `fetch_fn(cache_dir) -> dict | None` (wstrzykiwane, testy bez sieci), `clock()` →
   `get()` = słownik {bulletin_date, reading_utc, v_current, v_npp, url, fetched_at, stale, source} albo None.
@@ -29,13 +35,15 @@ log = logging.getLogger(__name__)
 TTL_S = 3600
 CACHE_FILE = "bulletin_latest.json"
 RAW_SUBDIR = "bulletin_raw"          # lista gov.pl i PDF-y (zapisywalny katalog, nie dane tylko do odczytu)
+DEADLINE_S = 40.0                    # łączny budżet czasu odświeżenia (lista + PDF-y)
+KEEP_PDFS = 10
 MAX_V = 200.0                        # jak limit `/api/capacity-to-level`
 
 
 def default_fetch(cache_dir: Path) -> dict | None:
     """`latest_govpl` z importem w środku (backend nie wymaga pypdf do importu modułu)."""
     from mielizna import bulletins
-    return bulletins.latest_govpl(Path(cache_dir) / RAW_SUBDIR, max_age_s=TTL_S)
+    return bulletins.latest_govpl(Path(cache_dir) / RAW_SUBDIR, max_age_s=TTL_S, deadline_s=DEADLINE_S)
 
 
 def _iso(ts: float) -> str:
@@ -46,7 +54,8 @@ def _valid(row) -> bool:
     try:
         v = float(row["v_current"])
         date.fromisoformat(str(row["bulletin_date"]))
-        return math.isfinite(v) and 0 < v < MAX_V and isinstance(row["url"], str)
+        return (math.isfinite(v) and 0 < v < MAX_V and isinstance(row["url"], str)
+                and row["url"].startswith("https://"))
     except (TypeError, ValueError, KeyError):
         return False
 
@@ -64,7 +73,8 @@ class BulletinService:
                  clock=time.time, ttl_s: float = TTL_S):
         self.cache_dir, self.data_dir, self.live = Path(cache_dir), Path(data_dir), live
         self.fetch_fn, self.clock, self.ttl_s = fetch_fn, clock, ttl_s
-        self._lock = threading.Lock()
+        self._lock = threading.Lock()            # krótka: stan w pamięci
+        self._refresh_lock = threading.Lock()    # długa: tylko jedno odświeżenie naraz, nigdy nie czekamy
         self._state = self._read_state()      # {"bulletin", "fetched_at", "attempt_at", "ok"} albo {}
 
     def _read_state(self) -> dict:
@@ -100,10 +110,21 @@ class BulletinService:
         if ok:
             st["bulletin"] = {"bulletin_date": str(row["bulletin_date"]), "v_current": float(row["v_current"]),
                               "v_npp": _num(row.get("v_npp")), "reading_utc": row.get("reading_utc") or None,
-                              "url": row["url"]}
+                              "url": row["url"], "older": bool(row.get("fallback_older"))}
             st["fetched_at"] = now
-        self._state = st
-        self._write_state()
+            self._prune()
+        with self._lock:
+            self._state = st
+            self._write_state()
+
+    def _prune(self) -> None:
+        """Zostawia KEEP_PDFS najnowszych PDF-ów w cache (wg czasu modyfikacji)."""
+        try:
+            pdfs = sorted((self.cache_dir / RAW_SUBDIR / "govpl").glob("*.pdf"), key=lambda p: p.stat().st_mtime)
+            for p in pdfs[:-KEEP_PDFS]:
+                p.unlink(missing_ok=True)
+        except OSError as e:
+            log.warning("bulletin prune failed: %s", e)
 
     def _from_csv(self) -> dict | None:
         path = self.data_dir / "processed" / "bulletins.csv"
@@ -120,17 +141,31 @@ class BulletinService:
                 "v_current": float(r["v_current"]), "v_npp": _num(r.get("v_npp")), "url": r["url"],
                 "fetched_at": _iso(mtime), "stale": True, "source": "pipeline"}
 
+    def _current(self) -> dict | None:
+        """Bieżący stan bez sieci: ostatni dobry wynik (live) albo ostatni wiersz CSV."""
+        with self._lock:
+            st = self._state
+            if self.live and st.get("bulletin"):
+                b = {k: v for k, v in st["bulletin"].items() if k != "older"}
+                return {**b, "fetched_at": _iso(st["fetched_at"] or st["attempt_at"]),
+                        "stale": (not st.get("ok", False)) or bool(st["bulletin"].get("older"))
+                         or self._refresh_lock.locked(), "source": "govpl"}
+        return self._from_csv()
+
     def get(self) -> dict | None:
         try:
             with self._lock:
-                now = self.clock()
-                if self.live and now - self._state.get("attempt_at", -math.inf) >= self.ttl_s:
-                    self._attempt(now)
-                st = self._state
-                if self.live and st.get("bulletin"):
-                    return {**st["bulletin"], "fetched_at": _iso(st["fetched_at"] or st["attempt_at"]),
-                            "stale": not st.get("ok", False), "source": "govpl"}
-            return self._from_csv()
+                due = self.live and self.clock() - self._state.get("attempt_at", -math.inf) >= self.ttl_s
+            if due and self._refresh_lock.acquire(blocking=False):
+                try:
+                    now = self.clock()
+                    with self._lock:
+                        still_due = now - self._state.get("attempt_at", -math.inf) >= self.ttl_s
+                    if still_due:
+                        self._attempt(now)
+                finally:
+                    self._refresh_lock.release()
+            return self._current()
         except Exception:  # noqa: BLE001 - ostatnia zapora: nigdy 500
             log.exception("bulletin service failed")
             return None
