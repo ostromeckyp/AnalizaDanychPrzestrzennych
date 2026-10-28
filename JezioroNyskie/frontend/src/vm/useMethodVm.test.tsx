@@ -39,6 +39,40 @@ describe('useMethodVm', () => {
     expect(t['RMSE dna'].value).toMatch(/w przygotowaniu/);
   });
 
+  it('RMSE tile shows the NMT value when present, pending otherwise', async () => {
+    metaMock.mockResolvedValue({ ...meta, accuracy: { ...meta.accuracy, bottom_rmse_nmt: 1.508 } });
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    const t = result.current.tiles.find((x) => x.label === 'RMSE dna')!;
+    expect(t.value).toBe('1,51\u00a0m');
+    expect(t.sub).toBe('vs NMT LiDAR, bloki walidacyjne');
+  });
+
+  it('KŻ agreement tile: bias and RMSE when present, pending otherwise', async () => {
+    metaMock.mockResolvedValue(meta);
+    const pending = setup();
+    await waitFor(() => expect(pending.result.current.status).toBe('ready'));
+    expect(pending.result.current.tiles.find((x) => x.label === 'Zgodność z mapą KŻ')!.value).toMatch(/w przygotowaniu/);
+    metaMock.mockResolvedValue({ ...meta, accuracy: { ...meta.accuracy, kz_rmse: 0.62, kz_bias: -0.2 } });
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    const t = result.current.tiles.find((x) => x.label === 'Zgodność z mapą KŻ')!;
+    expect(t.value).toBe('RMSE 0,62\u00a0m');
+    expect(t.sub).toContain('obciążenie -0,20\u00a0m');
+    expect(t.sub).toMatch(/sprzed powodzi/);
+  });
+
+  it('step 03 describes variant A as working with its scene count; step 04 states the model period', async () => {
+    metaMock.mockResolvedValue({ ...meta, n_scenes_by_method: { A: 36, B: 61, C: 10 }, model_period: 'post_flood', model_period_reason: 'Powód z API.' });
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    const s3 = result.current.steps[2].text;
+    expect(s3).toContain('Kalibracja poziomu według NMT z LiDAR (wariant A): 36 scen.');
+    expect(s3).not.toMatch(/w przygotowaniu/);
+    expect(result.current.steps[3].text).toContain('po powodzi');
+    expect(result.current.steps[3].text).toContain('Powód z API.');
+  });
+
   it('chart data: numbers from meta, legend only for present methods, null levels skipped', async () => {
     metaMock.mockResolvedValue({
       ...meta,
@@ -74,7 +108,6 @@ describe('useMethodVm', () => {
     const s3 = result.current.steps[2].text;
     expect(s3).toMatch(/RZGW/);
     expect(s3).toMatch(/krzywej powierzchnia–poziom/);
-    expect(s3).toMatch(/w przygotowaniu/);
     expect(result.current.steps[3].text).toMatch(/przedziały zalania/);
     expect(result.current.steps[3].text).not.toMatch(/interpolacj/i);
   });

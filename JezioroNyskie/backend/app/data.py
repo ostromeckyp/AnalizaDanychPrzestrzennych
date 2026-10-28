@@ -12,7 +12,7 @@ Jak to obronić: „poza modelem" = obs_count 0 lub 65535 lub flags 255; bit 8 f
   nie wpływa na nic. Pojemności 65,69 i 121,70 mln m³ to stałe z briefu §4 (tabela KŻ Nysa).
 """
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import geopandas as gpd
@@ -50,6 +50,9 @@ class Products:
     npp: float
     max_pp: float
     capacity_table: pd.DataFrame   # tabela KŻ pojemność↔rzędna, wczytana raz (bez zmiany środowiska procesu)
+    eval: dict = field(default_factory=dict)          # pliki oceny `processed/eval/*.json` (klucz = nazwa pliku bez .json); brak plików → {}
+    gravel: gpd.GeoDataFrame | None = None            # obrys żwirowni (EPSG:2180) albo None, gdy brak pliku
+    gravel_geom: object | None = None                 # suma obrysów jako przygotowana geometria do testu „punkt w obrysie"
 
 
 def capacity_to_level(p: Products, v: float) -> float:
@@ -60,6 +63,26 @@ def capacity_to_level(p: Products, v: float) -> float:
 def level_to_capacity(p: Products, h: float) -> float:
     """Rzędna [m n.p.m.] → pojemność [mln m³] z tabeli KŻ; poza tabelą NaN."""
     return float(capacity.level_to_capacity(h, table=p.capacity_table))
+
+
+EVAL_FILES = ("bottom_vs_nmt", "levels", "bottom_change", "model_choice", "variant_d", "kz_compare")
+
+
+def load_eval(data_dir: Path) -> dict:
+    """Wczytuje istniejące `processed/eval/<nazwa>.json`; brakujący lub uszkodzony plik jest pomijany."""
+    out = {}
+    for name in EVAL_FILES:
+        try:
+            out[name] = json.loads((Path(data_dir) / "processed" / "eval" / f"{name}.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+    return out
+
+
+def load_gravel(data_dir: Path) -> gpd.GeoDataFrame | None:
+    """Obrys żwirowni z `reference/zwirownia.gpkg` (EPSG:2180) albo None, gdy plik nie istnieje."""
+    f = Path(data_dir) / "reference" / "zwirownia.gpkg"
+    return gpd.read_file(f).to_crs(CRS) if f.exists() else None
 
 
 def load_products(data_dir: Path, period: str = "all") -> Products:
@@ -97,10 +120,16 @@ def load_products(data_dir: Path, period: str = "all") -> Products:
     npp = float(capacity.capacity_to_level(NPP_MLN_M3, table=capacity_table))
     max_pp = float(capacity.capacity_to_level(MAX_PP_MLN_M3, table=capacity_table))
 
+    gravel = load_gravel(data_dir)
+    gravel_geom = None
+    if gravel is not None and len(gravel):
+        from shapely.prepared import prep
+        gravel_geom = prep(gravel.geometry.union_all())
+
     return Products(
         transform=transform, crs=crs, shape=obs.shape, z_lo=z_lo, z_hi=z_hi, z=arrays["z"],
         unc=arrays["unc"], obs_count=obs, in_model=in_model, meta=meta,
         version=f"{period}-{meta['version']}", scenes=scenes, shorelines=shorelines, marinas=marinas,
         curve=curve, rf_metrics=rf_metrics, z_max_floor=float(finite_max.min()), npp=npp, max_pp=max_pp,
-        capacity_table=capacity_table,
+        capacity_table=capacity_table, eval=load_eval(data_dir), gravel=gravel, gravel_geom=gravel_geom,
     )

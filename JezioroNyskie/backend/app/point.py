@@ -40,11 +40,21 @@ def _pixel(products: Products, lon: float, lat: float) -> tuple[int, int] | None
     return (int(row), int(col)) if 0 <= row < h_px and 0 <= col < w_px else None
 
 
+def in_gravel(products: Products, lon: float, lat: float) -> bool:
+    """Czy punkt leży w obrysie żwirowni (dno zmienne, model może być nieaktualny); False, gdy brak pliku obrysu."""
+    if products.gravel_geom is None:
+        return False
+    from shapely.geometry import Point
+    x, y = Transformer.from_crs(4326, products.crs, always_xy=True).transform(lon, lat)
+    return bool(math.isfinite(x) and math.isfinite(y) and products.gravel_geom.contains(Point(x, y)))
+
+
 def point_info(products: Products, lon: float, lat: float, h: float, draft: float, margin: float) -> dict:
     out = {"kind": "outside", "lon": lon, "lat": lat, "h": h, "draft": draft, "margin": margin,
            "zone": None, "depth_min": None, "depth_max": None, "clearance_min": None,
            "clearance_max": None, "z_min": None, "z_max": None, "z": None, "unc": None,
-           "bottom_above_water_min": None, "bottom_above_water_max": None, "obs_count": None}
+           "bottom_above_water_min": None, "bottom_above_water_max": None, "obs_count": None,
+           "gravel": in_gravel(products, lon, lat)}
     px = _pixel(products, lon, lat)
     if px is None:
         return out

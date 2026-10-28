@@ -71,7 +71,8 @@ def test_meta(client):
     assert m["first_scene_date"] == "2026-09-30" and m["last_scene_date"] == "2026-10-20"
     assert m["crs"] == "EPSG:2180" and m["presets_provisional"] is True
     assert [p["draft"] for p in m["draft_presets"]] == [0.9, 0.4, 1.25]
-    assert m["accuracy"] == {"rf_oa": 0.8, "rf_ba": 0.77, "rf_kappa": 0.37, "otsu_ba": 0.77, "n_labels": 185}
+    assert {k: m["accuracy"][k] for k in ("rf_oa", "rf_ba", "rf_kappa", "otsu_ba", "n_labels")} == {
+        "rf_oa": 0.8, "rf_ba": 0.77, "rf_kappa": 0.37, "otsu_ba": 0.77, "n_labels": 185}
     lon0, lat0, lon1, lat1 = m["bbox_wgs84"]
     assert lon0 < lon1 and lat0 < lat1 and 14 < lon0 < 25 and 49 < lat0 < 55
     assert [p["date"] for p in m["area_level"]["points"]] == ["2026-09-30", "2026-10-20"]

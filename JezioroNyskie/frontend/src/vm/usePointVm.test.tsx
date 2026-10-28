@@ -29,6 +29,14 @@ describe('toPopupModel', () => {
     expect(JSON.stringify(m)).not.toMatch(/null|NaN|Infinity|undefined|—/);
   });
 
+  it('popup adds gravel warning row only when gravel is true', () => {
+    expect(toPopupModel(pointModel, meta).rows.some((r) => /Dno zmienne/.test(r.term))).toBe(false);
+    const row = toPopupModel({ ...pointModel, gravel: true }, meta).rows.at(-1)!;
+    expect(row.term).toMatch(/Dno zmienne \(eksploatacja kruszywa\)/);
+    expect(row.desc).toBe('model może być nieaktualny.');
+    expect(row.warning).toBe(true);
+  });
+
   it('A: clearance, margin, bottom height, scenes, location; zone from API', () => {
     const m = toPopupModel(
       { ...pointModel, depth_min: 1.4, depth_max: 1.9, clearance_min: 0.2, clearance_max: 0.7, z: 193.55, unc: 0.25, obs_count: 14, zone: 'risk' },

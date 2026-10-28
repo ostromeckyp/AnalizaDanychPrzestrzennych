@@ -25,6 +25,17 @@ const D: PopupModel = {
 };
 
 describe('PointPopup', () => {
+  it('renders a warning row as role=note outside the definition list', () => {
+    const model: PopupModel = {
+      ...A,
+      rows: [...A.rows, { term: 'Dno zmienne (eksploatacja kruszywa)', desc: 'model może być nieaktualny.', warning: true }],
+    };
+    render(<PointPopup model={model} onClose={vi.fn()} />);
+    const note = screen.getByRole('note');
+    expect(note).toHaveTextContent('Dno zmienne (eksploatacja kruszywa) — model może być nieaktualny.');
+    expect(within(screen.getByRole('dialog')).getAllByRole('term')).toHaveLength(2);
+  });
+
   it('variant A: dialog with value, zone bar, rows and a labelled close button', async () => {
     const onClose = vi.fn();
     render(<PointPopup model={A} onClose={onClose} />);

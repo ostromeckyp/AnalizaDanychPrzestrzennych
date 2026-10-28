@@ -14,7 +14,7 @@ import geopandas as gpd
 import numpy as np
 import pytest
 from affine import Affine
-from shapely.geometry import MultiLineString, Point
+from shapely.geometry import MultiLineString, Point, box
 
 from mielizna.bottom import write_model
 from mielizna.grid import Grid
@@ -37,7 +37,34 @@ def _scenes() -> list[dict]:
             scene("2026-09-30", 193.2, "B", True)]
 
 
-def make_dataset(root: Path) -> Path:
+GRAVEL_BOX = (375020, 289920, 375070, 289980)   # E0, N0, E1, N1 (EPSG:2180): kolumny 2-6, wiersze 2-8 siatki testowej
+
+
+def write_eval(root: Path, period: str = "all") -> None:
+    """Pliki oceny w kształcie produkowanym przez `pipeline/08_evaluate.py` (wartości testowe)."""
+    ev = Path(root) / "processed" / "eval"
+    ev.mkdir(parents=True, exist_ok=True)
+    files = {
+        "bottom_vs_nmt": {"by_epoch": {}, "all": {"n": 100, "mae": 1.0, "rmse": 1.5, "bias": 1.1, "note": "x"},
+                          "pre_flood": {"n": 50, "mae": 0.9, "rmse": 1.2, "bias": 0.7, "share_in_bounds": 0.25}},
+        "levels": {"a_vs_b": {"n": 92, "mae": 0.47, "rmse": 0.58, "bias": -0.08}},
+        "bottom_change": {"share_significant": 0.015},
+        "model_choice": {"period": period, "reason": f"powód {period}", "share_significant": 0.015},
+        "variant_d": {"n_scenes": 107, "share_within_0_2": 0.47, "population": "h_t < h_max_valid and d_valid"},
+    }
+    for name, body in files.items():
+        (ev / f"{name}.json").write_text(json.dumps(body), encoding="utf-8")
+
+
+def write_gravel(root: Path) -> None:
+    ref = Path(root) / "reference"
+    ref.mkdir(parents=True, exist_ok=True)
+    gpd.GeoDataFrame({"name": ["rejon"], "source": ["mapa KŻ Nysa, W. Wróblewski 2023"],
+                      "licence_ref": ["data/reference/KZ_ZRODLO_I_WARUNKI.md"]},
+                     geometry=[box(*GRAVEL_BOX)], crs="EPSG:2180").to_file(ref / "zwirownia.gpkg", driver="GPKG")
+
+
+def make_dataset(root: Path, with_eval: bool = True) -> Path:
     root = Path(root)
     proc = root / "processed"
     model = proc / "model"
@@ -85,6 +112,9 @@ def make_dataset(root: Path) -> Path:
     ref = root / "reference"
     ref.mkdir(parents=True, exist_ok=True)
     shutil.copy(REPO_REFERENCE, ref / REPO_REFERENCE.name)
+    if with_eval:
+        write_eval(root)
+        write_gravel(root)
     return root
 
 
@@ -114,3 +144,16 @@ def app(dataset, products):
 def client(app):
     from fastapi.testclient import TestClient
     return TestClient(app)
+
+
+@pytest.fixture
+def dataset_no_eval(tmp_path) -> Path:
+    return make_dataset(tmp_path / "no_eval", with_eval=False)
+
+
+@pytest.fixture
+def client_no_eval(dataset_no_eval):
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.settings import Settings
+    return TestClient(create_app(Settings(data_dir=dataset_no_eval, live=False), load_products(dataset_no_eval, "all")))

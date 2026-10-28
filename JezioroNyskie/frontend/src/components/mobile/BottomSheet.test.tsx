@@ -34,7 +34,7 @@ function panelProps(over: Partial<ParameterPanelProps['draft']> = {}) {
       onCapacityChange: vi.fn(),
     },
     layers: {
-      visible: { zones: true, bottom: false, uncertainty: false, shorelines: false, marinas: true },
+      visible: { zones: true, bottom: false, uncertainty: false, shorelines: false, marinas: true, gravel: true },
       basemap: 'map',
       variant: 'list',
       onToggle: vi.fn(),

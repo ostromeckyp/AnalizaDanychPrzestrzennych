@@ -1,5 +1,5 @@
 // Wspólne dane testowe zgodne ze schematem API (wartości punktów jak w fixture backendu).
-import type { CurrentLevel, Meta, Point, Scene, Zones, ZoneFeature } from '../api/client';
+import type { CurrentLevel, Gravel, Meta, Point, Scene, Zones, ZoneFeature } from '../api/client';
 
 const corners: [number, number][] = [
   [17.0, 50.5],
@@ -12,6 +12,8 @@ export const meta: Meta = {
   model_version: 'testver00001',
   period: 'all',
   period_dates: ['2017-01-01', '2026-12-31'],
+  model_period: 'all',
+  model_period_reason: 'Brak istotnej zmiany dna po powodzi.',
   n_scenes: 3,
   n_scenes_by_method: { B: 2, C: 1 },
   first_scene_date: '2025-04-12',
@@ -32,7 +34,20 @@ export const meta: Meta = {
   bbox_wgs84: [17.0, 50.4, 17.1, 50.5],
   crs: 'EPSG:2180',
   z_max_floor: 193.05,
-  accuracy: { rf_oa: 0.8162, rf_ba: 0.7718, rf_kappa: 0.3731, otsu_ba: 0.7554, n_labels: 185 },
+  accuracy: {
+    rf_oa: 0.8162,
+    rf_ba: 0.7718,
+    rf_kappa: 0.3731,
+    otsu_ba: 0.7554,
+    n_labels: 185,
+    bottom_rmse_nmt: null,
+    bottom_bias_nmt: null,
+    bottom_in_bounds_nmt: null,
+    kz_rmse: null,
+    kz_bias: null,
+    levels_mae_ab: null,
+    variant_d_within_0_2: null,
+  },
   area_level: {
     nodes_area_km2: [10.5, 12.0, 14.0],
     nodes_h: [192.9, 194.0, 197.0],
@@ -84,7 +99,7 @@ export function zones(h: number, draft: number, margin: number): Zones {
   };
 }
 
-const base = { lon: 17.05, lat: 50.45, h: 195.0, draft: 1.2, margin: 0.3 };
+const base = { lon: 17.05, lat: 50.45, h: 195.0, draft: 1.2, margin: 0.3, gravel: false };
 
 export const pointModel: Point = {
   ...base,
@@ -191,4 +206,15 @@ export const currentLevel: CurrentLevel = {
   refreshing: false,
   last_checked: null,
   last_error: null,
+};
+
+export const gravel: Gravel = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: square(17.03, 50.47) },
+      properties: { source: 'mapa KŻ Nysa, W. Wróblewski 2023', attribution: 'Obrys wg mapy KŻ Nysa (W. Wróblewski, 2023)' },
+    },
+  ],
 };

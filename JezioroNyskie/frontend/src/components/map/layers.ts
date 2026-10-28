@@ -15,6 +15,7 @@ export const IDS = {
   shorelinesDashed: 'shorelines-dashed',
   marinas: 'marinas',
   marinasLetters: 'marinas-letters',
+  gravel: 'gravel',
   pin: 'pin',
 } as const;
 
@@ -81,6 +82,14 @@ export const shorelineFilter = (npp: number | undefined, dashed: boolean) =>
   npp === undefined
     ? !dashed // literał logiczny to poprawny filtr-wyrażenie (['==', 1, 0] MapLibre czyta jako filtr legacy i odrzuca)
     : [dashed ? '<' : '>=', ['get', 'h_t'], npp];
+
+// Obrys żwirowni: przerywana linia w kolorze „danger" (MapLibre nie czyta zmiennych CSS, więc kolor z theme.ts).
+export const gravelLayer = (theme: ThemeName): LayerSpecification => ({
+  id: IDS.gravel,
+  type: 'line',
+  source: IDS.gravel,
+  paint: { 'line-color': ZONE_COLORS[theme].danger, 'line-width': 2.5, 'line-dasharray': [3, 2] },
+});
 
 export const marinaLayers = (theme: ThemeName): LayerSpecification[] => [
   {

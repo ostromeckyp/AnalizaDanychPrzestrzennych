@@ -94,6 +94,17 @@ class Accuracy(BaseModel):
     rf_kappa: float | None
     otsu_ba: float | None
     n_labels: int | None
+    # Ocena dna vs NMT LiDAR: zbiorczo po epokach NMT, dla okresu modelu faktycznie serwowanego
+    # (`model_period`); null, gdy brak pliku oceny albo bloku zbiorczego dla tego okresu.
+    bottom_rmse_nmt: float | None = None
+    bottom_bias_nmt: float | None = None
+    bottom_in_bounds_nmt: float | None = None
+    kz_rmse: float | None = None             # zgodność z punktami mapy KŻ (null do czasu `eval/kz_compare.json`)
+    kz_bias: float | None = None
+    levels_mae_ab: float | None = None       # średni błąd bezwzględny |A − B| poziomu wody
+    # Udział scen z |D − (A/B/R/C)| ≤ 0,2 m - TYLKO w dziedzinie wariantu D (sceny z h_t < h_max_valid),
+    # a nie dokładność całej populacji.
+    variant_d_within_0_2: float | None = None
 
 
 class AreaLevelPoint(BaseModel):
@@ -132,6 +143,8 @@ class MetaResponse(BaseModel):
     model_version: str
     period: str
     period_dates: list[str]
+    model_period: Literal["all", "pre_flood", "post_flood"]
+    model_period_reason: str
     n_scenes: int
     n_scenes_by_method: dict[str, int]
     first_scene_date: str | None
@@ -172,6 +185,21 @@ class PointResponse(BaseModel):
     bottom_above_water_min: float | None
     bottom_above_water_max: float | None
     obs_count: int | None
+    gravel: bool                    # punkt w obrysie żwirowni: dno zmienne, model może być nieaktualny
+
+
+class GravelProperties(BaseModel):
+    source: str
+    attribution: str
+
+
+class GravelFeature(GeoFeature):
+    properties: GravelProperties
+
+
+class GravelResponse(BaseModel):
+    type: Literal["FeatureCollection"]
+    features: list[GravelFeature]
 
 
 class SceneOut(BaseModel):

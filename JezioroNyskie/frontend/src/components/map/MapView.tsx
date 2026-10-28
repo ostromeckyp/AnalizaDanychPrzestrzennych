@@ -10,6 +10,7 @@ import {
   IDS,
   POI_IMAGE,
   baseStyle,
+  gravelLayer,
   marinaLayers,
   pinLayer,
   pinPaint,
@@ -28,6 +29,10 @@ export interface MapViewProps {
   uncertaintyLayer?: ImageLayerData;
   shorelines?: GeoJsonData;
   marinas?: GeoJsonData;
+  /** Obrys żwirowni; warstwa powstaje dopiero z danymi (404 = brak warstwy). */
+  gravel?: GeoJsonData;
+  /** Atrybucja obrysu (z API), dopisywana do kontrolki atrybucji przez źródło warstwy. */
+  gravelAttribution?: string;
   visible: Visible;
   basemap: 'osm' | 'orto';
   npp?: number;
@@ -142,6 +147,21 @@ export function MapView(props: MapViewProps) {
     };
   }, [ready, pin, hasOverlay]);
 
+  // Obrys żwirowni: źródło z atrybucją powstaje przy pierwszych danych, potem tylko setData.
+  const { gravel, gravelAttribution } = props;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map || !gravel) return;
+    const src = map.getSource(IDS.gravel) as GeoJSONSource | undefined;
+    if (src) {
+      src.setData(gravel as never);
+      return;
+    }
+    map.addSource(IDS.gravel, { type: 'geojson', data: gravel as never, attribution: gravelAttribution });
+    map.addLayer(gravelLayer(propsRef.current.theme), IDS.marinas);
+    setVis(map, [IDS.gravel], propsRef.current.visible.gravel);
+  }, [ready, gravel, gravelAttribution]);
+
   // Linie poniżej NPP rysujemy przerywane.
   useEffect(() => {
     const map = mapRef.current;
@@ -178,6 +198,7 @@ export function MapView(props: MapViewProps) {
     const c = ZONE_COLORS[theme];
     map.setPaintProperty(IDS.zonesSafe, 'fill-color', c.safe);
     map.setPaintProperty(IDS.zonesDanger, 'fill-color', c.danger);
+    if (map.getLayer(IDS.gravel)) map.setPaintProperty(IDS.gravel, 'line-color', c.danger);
     map.updateImage(HATCH_IMAGE, makeHatch(theme));
     const letters = poiLetters(theme);
     map.updateImage(POI_IMAGE.marina, letters.P);
@@ -195,7 +216,8 @@ export function MapView(props: MapViewProps) {
     setVis(map, [IDS.uncertainty], visible.uncertainty);
     setVis(map, [IDS.shorelines, IDS.shorelinesDashed], visible.shorelines);
     setVis(map, [IDS.marinas, IDS.marinasLetters], visible.marinas);
-  }, [ready, visible.zones, visible.bottom, visible.uncertainty, visible.shorelines, visible.marinas, props.bottomLayer, props.uncertaintyLayer]);
+    setVis(map, [IDS.gravel], visible.gravel);
+  }, [ready, visible.zones, visible.bottom, visible.uncertainty, visible.shorelines, visible.marinas, visible.gravel, props.bottomLayer, props.uncertaintyLayer, props.gravel]);
 
   useEffect(() => {
     const map = mapRef.current;

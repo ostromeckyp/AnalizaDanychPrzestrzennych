@@ -13,5 +13,6 @@ export type PopupModel = {
   zone?: { key: ZoneKey; name: string; label: string };
   /** Ramka „Bez oceny strefy” (wariant D). */
   noZone?: string;
-  rows: { term: string; desc: string }[];
+  /** `warning`: wiersz ostrzeżenia, rysowany poza listą jako `role="note"`. */
+  rows: { term: string; desc: string; warning?: boolean }[];
 };

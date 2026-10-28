@@ -36,6 +36,8 @@ export function MapPage() {
             bottomLayer={map.bottomLayer}
             uncertaintyLayer={map.uncertaintyLayer}
             marinas={map.marinas}
+            gravel={map.gravel}
+            gravelAttribution={map.gravelAttribution}
             visible={map.visible}
             basemap={map.basemap}
             npp={meta.data.npp}

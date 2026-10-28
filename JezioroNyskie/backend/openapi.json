@@ -254,6 +254,28 @@
     }
    }
   },
+  "/api/gravel": {
+   "get": {
+    "summary": "Gravel",
+    "description": "Obrys żwirowni (dno zmienne) jako GeoJSON w EPSG:4326 z atrybucją mapy KŻ.",
+    "operationId": "gravel_api_gravel_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GravelResponse"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "brak pliku z obrysem żwirowni"
+     }
+    }
+   }
+  },
   "/api/capacity-to-level": {
    "get": {
     "summary": "Capacity To Level Ep",
@@ -496,6 +518,83 @@
        }
       ],
       "title": "N Labels"
+     },
+     "bottom_rmse_nmt": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bottom Rmse Nmt"
+     },
+     "bottom_bias_nmt": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bottom Bias Nmt"
+     },
+     "bottom_in_bounds_nmt": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bottom In Bounds Nmt"
+     },
+     "kz_rmse": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kz Rmse"
+     },
+     "kz_bias": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Kz Bias"
+     },
+     "levels_mae_ab": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Levels Mae Ab"
+     },
+     "variant_d_within_0_2": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Variant D Within 0 2"
      }
     },
     "type": "object",
@@ -859,6 +958,98 @@
     ],
     "title": "DraftPreset"
    },
+   "GravelFeature": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "Feature",
+      "title": "Type"
+     },
+     "geometry": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Geometry"
+     },
+     "id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "bbox": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "number"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bbox"
+     },
+     "properties": {
+      "$ref": "#/components/schemas/GravelProperties"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "geometry",
+     "properties"
+    ],
+    "title": "GravelFeature"
+   },
+   "GravelProperties": {
+    "properties": {
+     "source": {
+      "type": "string",
+      "title": "Source"
+     },
+     "attribution": {
+      "type": "string",
+      "title": "Attribution"
+     }
+    },
+    "type": "object",
+    "required": [
+     "source",
+     "attribution"
+    ],
+    "title": "GravelProperties"
+   },
+   "GravelResponse": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "FeatureCollection",
+      "title": "Type"
+     },
+     "features": {
+      "items": {
+       "$ref": "#/components/schemas/GravelFeature"
+      },
+      "type": "array",
+      "title": "Features"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "features"
+    ],
+    "title": "GravelResponse"
+   },
    "HTTPValidationError": {
     "properties": {
      "detail": {
@@ -1091,6 +1282,19 @@
       "type": "array",
       "title": "Period Dates"
      },
+     "model_period": {
+      "type": "string",
+      "enum": [
+       "all",
+       "pre_flood",
+       "post_flood"
+      ],
+      "title": "Model Period"
+     },
+     "model_period_reason": {
+      "type": "string",
+      "title": "Model Period Reason"
+     },
      "n_scenes": {
       "type": "integer",
       "title": "N Scenes"
@@ -1203,6 +1407,8 @@
      "model_version",
      "period",
      "period_dates",
+     "model_period",
+     "model_period_reason",
      "n_scenes",
      "n_scenes_by_method",
      "first_scene_date",
@@ -1416,6 +1622,10 @@
        }
       ],
       "title": "Obs Count"
+     },
+     "gravel": {
+      "type": "boolean",
+      "title": "Gravel"
      }
     },
     "type": "object",
@@ -1437,7 +1647,8 @@
      "unc",
      "bottom_above_water_min",
      "bottom_above_water_max",
-     "obs_count"
+     "obs_count",
+     "gravel"
     ],
     "title": "PointResponse"
    },

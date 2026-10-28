@@ -48,6 +48,8 @@ export function PointPopup({ model, state, onClose }: PointPopupProps) {
     );
   }
   const { zone } = model;
+  const facts = model.rows.filter((r) => !r.warning);
+  const warnings = model.rows.filter((r) => r.warning);
   const zoneBar = zone && (
     <div className="popup__zone">
       <span className={`swatch-z swatch-z--${zone.key}`} aria-hidden="true" />
@@ -70,9 +72,9 @@ export function PointPopup({ model, state, onClose }: PointPopupProps) {
         {model.variant !== 'A' && zoneBar}
         {model.noZone && <div className="popup__zone popup__zone--none">{model.noZone}</div>}
       </div>
-      {model.rows.length > 0 && (
+      {facts.length > 0 && (
         <dl className="popup__rows">
-          {model.rows.map((r) => (
+          {facts.map((r) => (
             <div key={r.term} className="popup__row">
               <dt>{r.term}</dt>
               <dd>{r.desc}</dd>
@@ -80,6 +82,11 @@ export function PointPopup({ model, state, onClose }: PointPopupProps) {
           ))}
         </dl>
       )}
+      {warnings.map((r) => (
+        <p key={r.term} role="note" className="popup__warn">
+          {r.term} — {r.desc}
+        </p>
+      ))}
     </div>
   );
 }

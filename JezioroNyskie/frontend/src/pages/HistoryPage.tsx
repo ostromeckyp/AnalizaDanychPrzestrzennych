@@ -78,7 +78,7 @@ export function HistoryPage() {
       bbox={vm.bbox}
       shorelines={vm.shorelines}
       npp={vm.npp}
-      visible={{ zones: false, bottom: false, uncertainty: false, shorelines: true, marinas: false }}
+      visible={{ zones: false, bottom: false, uncertainty: false, shorelines: true, marinas: false, gravel: false }}
       basemap="osm"
       onMapClick={() => undefined}
     />

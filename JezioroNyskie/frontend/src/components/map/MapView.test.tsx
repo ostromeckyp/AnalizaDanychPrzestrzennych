@@ -80,7 +80,7 @@ const base: MapViewProps = {
   zones: fc(1),
   bottomLayer: { url: '/api/layers/bottom.png', coordinates: [[17, 50.5], [17.1, 50.5], [17.1, 50.4], [17, 50.4]] },
   uncertaintyLayer: { url: '/api/layers/unc.png?v=1', coordinates: [[17, 50.5], [17.1, 50.5], [17.1, 50.4], [17, 50.4]] },
-  visible: { zones: true, bottom: true, uncertainty: true, shorelines: true, marinas: true },
+  visible: { zones: true, bottom: true, uncertainty: true, shorelines: true, marinas: true, gravel: true },
   basemap: 'osm',
   npp: 195.91,
   onMapClick: vi.fn(),
@@ -145,6 +145,21 @@ describe('MapView', () => {
     mount({ onMapClick });
     h.handlers.click({ lngLat: { lng: 17.25, lat: 50.45 } });
     expect(onMapClick).toHaveBeenCalledWith(17.25, 50.45);
+  });
+
+  it('warstwa żwirowni: źródło z atrybucją, przerywany obrys, widoczność przez layout', () => {
+    const g = { type: 'FeatureCollection', features: [], n: 9 };
+    const { rerender } = mount({ gravel: g, gravelAttribution: 'Obrys wg mapy KŻ Nysa (W. Wróblewski, 2023)' });
+    expect(h.fns.addSource).toHaveBeenCalledWith(
+      'gravel',
+      expect.objectContaining({ type: 'geojson', attribution: 'Obrys wg mapy KŻ Nysa (W. Wróblewski, 2023)' }),
+    );
+    expect(h.fns.addLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'gravel', type: 'line', paint: expect.objectContaining({ 'line-dasharray': expect.any(Array) }) }),
+      'marinas',
+    );
+    rerender(<MapView {...base} gravel={g} visible={{ ...base.visible, gravel: false }} />);
+    expect(h.fns.setLayoutProperty).toHaveBeenCalledWith('gravel', 'visibility', 'none');
   });
 
   it('widoczność przez layout visibility', () => {

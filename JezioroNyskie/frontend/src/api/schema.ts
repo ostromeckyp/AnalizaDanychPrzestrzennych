@@ -106,6 +106,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gravel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gravel
+         * @description Obrys żwirowni (dno zmienne) jako GeoJSON w EPSG:4326 z atrybucją mapy KŻ.
+         */
+        get: operations["gravel_api_gravel_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/capacity-to-level": {
         parameters: {
             query?: never;
@@ -222,6 +242,20 @@ export interface components {
             otsu_ba: number | null;
             /** N Labels */
             n_labels: number | null;
+            /** Bottom Rmse Nmt */
+            bottom_rmse_nmt?: number | null;
+            /** Bottom Bias Nmt */
+            bottom_bias_nmt?: number | null;
+            /** Bottom In Bounds Nmt */
+            bottom_in_bounds_nmt?: number | null;
+            /** Kz Rmse */
+            kz_rmse?: number | null;
+            /** Kz Bias */
+            kz_bias?: number | null;
+            /** Levels Mae Ab */
+            levels_mae_ab?: number | null;
+            /** Variant D Within 0 2 */
+            variant_d_within_0_2?: number | null;
         };
         /** AreaLevel */
         AreaLevel: {
@@ -319,6 +353,40 @@ export interface components {
             /** Draft */
             draft: number;
         };
+        /** GravelFeature */
+        GravelFeature: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "Feature";
+            /** Geometry */
+            geometry: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id?: string | number | null;
+            /** Bbox */
+            bbox?: number[] | null;
+            properties: components["schemas"]["GravelProperties"];
+        };
+        /** GravelProperties */
+        GravelProperties: {
+            /** Source */
+            source: string;
+            /** Attribution */
+            attribution: string;
+        };
+        /** GravelResponse */
+        GravelResponse: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "FeatureCollection";
+            /** Features */
+            features: components["schemas"]["GravelFeature"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -395,6 +463,13 @@ export interface components {
             period: string;
             /** Period Dates */
             period_dates: string[];
+            /**
+             * Model Period
+             * @enum {string}
+             */
+            model_period: "all" | "pre_flood" | "post_flood";
+            /** Model Period Reason */
+            model_period_reason: string;
             /** N Scenes */
             n_scenes: number;
             /** N Scenes By Method */
@@ -485,6 +560,8 @@ export interface components {
             bottom_above_water_max: number | null;
             /** Obs Count */
             obs_count: number | null;
+            /** Gravel */
+            gravel: boolean;
         };
         /** SceneOut */
         SceneOut: {
@@ -788,6 +865,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MarinasResponse"];
                 };
+            };
+        };
+    };
+    gravel_api_gravel_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GravelResponse"];
+                };
+            };
+            /** @description brak pliku z obrysem żwirowni */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { type Marinas, type Meta, type Zones } from '../api/client';
+import { type Gravel, type Marinas, type Meta, type Zones } from '../api/client';
 import type { ParameterPanelProps } from '../components/panel/ParameterPanel';
 import type { LayerKey, LevelMode } from '../components/panel/types';
 import { round05 } from '../format';
 import { useCapacityVm } from './useCapacityVm';
 import { useCurrentLevelVm } from './useCurrentLevelVm';
+import { useGravelVm } from './useGravelVm';
 import { useMarinasVm } from './useMarinasVm';
 import { useMetaVm } from './useMetaVm';
 import { usePointVm, type PointVm } from './usePointVm';
@@ -19,6 +20,7 @@ const DEFAULT_VISIBLE: Record<LayerKey, boolean> = {
   uncertainty: false,
   shorelines: false,
   marinas: true,
+  gravel: true,
 };
 
 export interface MapPageVm {
@@ -31,6 +33,8 @@ export interface MapPageVm {
   map: {
     zones?: Zones;
     marinas?: Marinas;
+    gravel?: Gravel;
+    gravelAttribution?: string;
     bottomLayer?: { url: string; coordinates: [number, number][] };
     uncertaintyLayer?: { url: string; coordinates: [number, number][] };
     visible: Record<LayerKey, boolean>;
@@ -67,6 +71,7 @@ export function useMapPageVm(): MapPageVm {
   const { meta, slider } = metaVm;
   const level = useCurrentLevelVm();
   const { marinas } = useMarinasVm();
+  const { gravel, attribution: gravelAttribution } = useGravelVm();
 
   const [hUser, setHUser] = useState<number>();
   const [draftUser, setDraftUser] = useState<number>();
@@ -164,6 +169,8 @@ export function useMapPageVm(): MapPageVm {
     map: {
       zones: zonesVm.zones,
       marinas,
+      gravel,
+      gravelAttribution,
       bottomLayer: layer(meta?.layers.bottom),
       uncertaintyLayer: layer(meta?.layers.uncertainty),
       visible,

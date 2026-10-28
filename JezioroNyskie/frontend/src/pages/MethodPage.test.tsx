@@ -45,6 +45,13 @@ describe('MethodPage', () => {
     expect(tile('RMSE dna')).toHaveTextContent(/w przygotowaniu/);
   });
 
+  it('RMSE tile shows the value from the API with its caption', async () => {
+    m.meta.mockResolvedValue({ ...meta, accuracy: { ...meta.accuracy, bottom_rmse_nmt: 1.51 } });
+    renderPage();
+    await screen.findByRole('heading', { name: 'Jak powstaje mapa głębokości' });
+    expect(tile('RMSE dna')).toHaveTextContent('1,51 mvs NMT LiDAR, bloki walidacyjne');
+  });
+
   it('chart renders one dot per area_level point and NPP/Max PP lines', async () => {
     const { container } = renderPage();
     await screen.findByRole('heading', { name: 'Jak powstaje mapa głębokości' });

@@ -36,7 +36,7 @@ from app.cache import TTLStore
 from app.data import Products, capacity_to_level, level_to_capacity, load_products
 from app.layers import RENDER_VERSION, UNC_MIN, layer_coordinates, bottom_breaks, render_bottom_png, render_uncertainty_png
 from app.point import point_info
-from app.schemas import (CapacityToLevel, CurrentLevelResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
+from app.schemas import (CapacityToLevel, CurrentLevelResponse, GravelResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
                          SceneOut, ShorelineFeature, ZonesResponse)
 from app.settings import Settings, get_settings
 from app.zones import (round_param, zone_classes, zone_stats, zone_warnings, zones_geojson)
@@ -112,6 +112,39 @@ def build_layers(products: Products) -> Layers:
         uncertainty={"url": "/api/layers/uncertainty.png", "coordinates": coords, "min_unc": UNC_MIN})
 
 
+GRAVEL_ATTRIBUTION = "Obrys wg mapy KŻ Nysa (W. Wróblewski, 2023)"
+
+
+def _num(d, *keys) -> float | None:
+    """Zagnieżdżona liczba skończona ze słownika JSON albo None (brak klucza, null, zły typ)."""
+    for k in keys:
+        if not isinstance(d, dict):
+            return None
+        d = d.get(k)
+    return finite_or_none(d) if isinstance(d, (int, float)) and not isinstance(d, bool) else None
+
+
+def eval_accuracy(products: Products) -> dict:
+    """Pola oceny dla `Accuracy`; każde null, gdy odpowiedni plik albo klucz nie istnieje."""
+    ev, period = products.eval, products.meta["period"]
+    pooled = ev.get("bottom_vs_nmt", {}).get(period)   # blok zbiorczy modelu serwowanego okresu
+    return {"bottom_rmse_nmt": _num(pooled, "rmse"), "bottom_bias_nmt": _num(pooled, "bias"),
+            "bottom_in_bounds_nmt": _num(pooled, "share_in_bounds"),
+            "kz_rmse": _num(ev.get("kz_compare"), "points", "rmse"),
+            "kz_bias": _num(ev.get("kz_compare"), "points", "bias"),
+            "levels_mae_ab": _num(ev.get("levels"), "a_vs_b", "mae"),
+            "variant_d_within_0_2": _num(ev.get("variant_d"), "share_within_0_2")}
+
+
+def model_period_reason(products: Products) -> str:
+    """Uzasadnienie wyboru okresu z `model_choice.json`, gdy serwowany okres jest tym wybranym; inaczej opis wymuszenia."""
+    choice = products.eval.get("model_choice") or {}
+    period = products.meta["period"]
+    if choice.get("period") == period and isinstance(choice.get("reason"), str):
+        return choice["reason"]
+    return f"Okres modelu ustawiony ręcznie ({period})."
+
+
 def build_meta(products: Products) -> MetaResponse:
     m, curve = products.meta, products.curve
     lo, hi = slider_range(products)
@@ -124,6 +157,7 @@ def build_meta(products: Products) -> MetaResponse:
     shore = products.rf_metrics["by_block"]["per_stratum"]["shore"]
     return MetaResponse(
         model_version=products.version, period=m["period"], period_dates=m["period_dates"],
+        model_period=m["period"], model_period_reason=model_period_reason(products),
         n_scenes=len(products.scenes), n_scenes_by_method=m["n_scenes_by_method"],
         first_scene_date=dates[0] if dates else None, last_scene_date=dates[-1] if dates else None,
         h_min_obs=m["h_min_obs"], h_max_obs=m["h_max_obs"], npp=products.npp, max_pp=products.max_pp,
@@ -135,7 +169,7 @@ def build_meta(products: Products) -> MetaResponse:
         z_max_floor=products.z_max_floor,
         accuracy={"rf_oa": shore["rf_t"]["oa"], "rf_ba": shore["rf_t"]["bacc"],
                   "rf_kappa": shore["rf_t"]["kappa"], "otsu_ba": shore["otsu"]["bacc"],
-                  "n_labels": shore["rf_t"]["n"]},
+                  "n_labels": shore["rf_t"]["n"], **eval_accuracy(products)},
         area_level={
             "nodes_area_km2": [finite_or_none(a) for a in curve.area_km2],
             "nodes_h": [finite_or_none(h) for h in curve.h],
@@ -274,6 +308,22 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
             gdf = p.marinas.to_crs(4326)[["osm_id", "kind", "name", "geometry"]]
             return gdf.to_json(drop_id=True, ensure_ascii=False).encode()   # NaN → null (geopandas)
         return static_json(request, "-marinas", build)
+
+    @app.get("/api/gravel", response_model=GravelResponse,
+             responses={404: {"description": "brak pliku z obrysem żwirowni"}})
+    def gravel(request: Request):
+        """Obrys żwirowni (dno zmienne) jako GeoJSON w EPSG:4326 z atrybucją mapy KŻ."""
+        p: Products = request.app.state.products
+        if p.gravel is None:
+            raise HTTPException(404, "brak obrysu żwirowni")
+
+        def build() -> bytes:
+            g = p.gravel.to_crs(4326)
+            feats = [{"type": "Feature", "geometry": geom.__geo_interface__,
+                      "properties": {"source": str(src), "attribution": GRAVEL_ATTRIBUTION}}
+                     for geom, src in zip(g.geometry, g.get("source", [""] * len(g)))]
+            return json.dumps({"type": "FeatureCollection", "features": feats}, ensure_ascii=False).encode()
+        return static_json(request, "-gravel", build)
 
     @app.get("/api/capacity-to-level", response_model=CapacityToLevel)
     def capacity_to_level_ep(request: Request, v: float = Query(..., gt=0, le=CAPACITY_MAX_MLN_M3,

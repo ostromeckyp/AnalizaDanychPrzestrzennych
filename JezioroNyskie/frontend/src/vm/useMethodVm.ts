@@ -1,4 +1,4 @@
-import { fmtDate, fmtNum, fmtPct, plScenes } from '../format';
+import { fmtDate, fmtM, fmtNum, fmtPct, plScenes } from '../format';
 import { useMetaVm } from './useMetaVm';
 
 export type MethodTile = { label: string; value: string; sub: string };
@@ -48,7 +48,7 @@ const SOURCES: MethodSource[] = [
   },
   {
     name: 'Mapa KŻ Nysa (Wiktor Wróblewski)',
-    use: 'tabela pojemność ↔ rzędna (wariant B); porównanie dna — plan 4',
+    use: 'tabela pojemność ↔ rzędna (wariant B); obrys żwirowni i porównanie dna',
     license:
       'bezpłatna, niekomercyjna; dane mogą zawierać błędy; źródło: Wiktor Wróblewski, KŻ Nysa, aktualizacja 23.05.2023',
   },
@@ -59,10 +59,16 @@ const SOURCES: MethodSource[] = [
   },
   {
     name: 'GUGiK',
-    use: 'ortofotomapa; NMT terenu wokół zbiornika — plan 4',
+    use: 'ortofotomapa; NMT i chmury punktów LiDAR terenu wokół zbiornika (wariant A, ocena dna)',
     license: 'otwarte dane PZGiK, z atrybucją',
   },
 ];
+
+const PERIOD_LABELS: Record<string, string> = {
+  all: 'cały okres',
+  pre_flood: 'przed powodzią',
+  post_flood: 'po powodzi',
+};
 
 const num = (x: number | null | undefined) => (typeof x === 'number' ? x : NaN);
 
@@ -82,6 +88,7 @@ export function useMethodVm(): MethodVm {
   const nB = byMethod.B ?? 0;
   const nC = byMethod.C ?? 0;
   const nR = byMethod.R ?? 0;
+  const nA = byMethod.A ?? 0;
   // Brak dat: pomijamy opis okresu zamiast pokazywać „—–—”.
   const period =
     meta.first_scene_date && meta.last_scene_date
@@ -106,14 +113,15 @@ export function useMethodVm(): MethodVm {
         `Granica maski to linia brzegowa. Poziom wody w dniu sceny przypisujemy jej z komunikatów RZGW (${plScenes(nB)}) ` +
         `oraz z krzywej powierzchnia–poziom dopasowanej do scen ze znanym poziomem (${plScenes(nC)}).` +
         (nR > 0 ? ` Pomiar wodowskazowy (wariant R): ${plScenes(nR)}.` : '') +
-        ' Kalibracja poziomu według NMT z LiDAR jest w przygotowaniu.',
+        (nA > 0 ? ` Kalibracja poziomu według NMT z LiDAR (wariant A): ${plScenes(nA)}.` : ''),
     },
     {
       n: '04',
       title: 'Model dna',
       text:
         'Dla każdego piksela wyznaczamy przedziały zalania: z jakich poziomów wody był pod wodą, a z jakich nad nią. ' +
-        'Z nich wynika wysokość dna razem z niepewnością.',
+        'Z nich wynika wysokość dna razem z niepewnością.' +
+        ` Okres modelu: ${PERIOD_LABELS[meta.model_period] ?? meta.model_period}. ${meta.model_period_reason}`,
     },
     {
       n: '05',
@@ -145,11 +153,24 @@ export function useMethodVm(): MethodVm {
       value: `${fmtNum(meta.h_min_obs, 2)}–${fmtNum(meta.h_max_obs, 2)}`,
       sub: 'm n.p.m.; poza nim model ekstrapoluje',
     },
-    {
-      label: 'RMSE dna',
-      value: 'w przygotowaniu (porównanie z NMT LiDAR — plan 4)',
-      sub: 'błąd wysokości dna względem pomiarów kontrolnych',
-    },
+    Number.isFinite(num(acc.bottom_rmse_nmt))
+      ? { label: 'RMSE dna', value: fmtM(num(acc.bottom_rmse_nmt)), sub: 'vs NMT LiDAR, bloki walidacyjne' }
+      : {
+          label: 'RMSE dna',
+          value: 'w przygotowaniu (porównanie z NMT LiDAR)',
+          sub: 'błąd wysokości dna względem pomiarów kontrolnych',
+        },
+    Number.isFinite(num(acc.kz_rmse)) && Number.isFinite(num(acc.kz_bias))
+      ? {
+          label: 'Zgodność z mapą KŻ',
+          value: `RMSE ${fmtM(num(acc.kz_rmse))}`,
+          sub: `obciążenie ${fmtM(num(acc.kz_bias))} · mapa KŻ to nie pomiar: model sprzed powodzi, rzędne od 192,5 m, bez żwirowni, komórki 50 m`,
+        }
+      : {
+          label: 'Zgodność z mapą KŻ',
+          value: 'w przygotowaniu (porównanie z mapą KŻ)',
+          sub: 'mapa KŻ to nie pomiar: porównanie tylko w warunkach, w których mapa jest wiarygodna',
+        },
   ];
 
   const al = meta.area_level;

@@ -21,7 +21,7 @@ describe('ParameterPanel', () => {
           onCapacityChange: noop,
         }}
         layers={{
-          visible: { zones: true, bottom: false, uncertainty: false, shorelines: false, marinas: false },
+          visible: { zones: true, bottom: false, uncertainty: false, shorelines: false, marinas: false, gravel: false },
           basemap: 'map',
           variant: 'list',
           onToggle: noop,

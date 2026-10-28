@@ -10,4 +10,5 @@ export type Visible = {
   uncertainty: boolean;
   shorelines: boolean;
   marinas: boolean;
+  gravel: boolean;
 };

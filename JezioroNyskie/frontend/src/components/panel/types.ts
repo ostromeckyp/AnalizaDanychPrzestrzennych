@@ -12,6 +12,6 @@ export type SliderProps = {
   maxPp: number;
 };
 
-export type LayerKey = 'zones' | 'bottom' | 'uncertainty' | 'shorelines' | 'marinas';
+export type LayerKey = 'zones' | 'bottom' | 'uncertainty' | 'shorelines' | 'marinas' | 'gravel';
 export type Basemap = 'map' | 'ortho';
 export type LevelMode = 'level' | 'capacity';

@@ -13,6 +13,7 @@ export interface PointVm {
   status: PointStatus;
 }
 
+const GRAVEL_TERM = 'Dno zmienne (eksploatacja kruszywa)';
 const NBSP = '\u00a0';
 const ZONE_NAMES: Record<ZoneKey, string> = { safe: 'Bezpieczna', risk: 'Ryzykowna', danger: 'Zbyt płytka / ląd' };
 
@@ -53,6 +54,12 @@ function heightRow(term: string, p: Point) {
 
 /** Czysta funkcja: odpowiedź /api/point + meta → model popupu (§16.7). Strefa zawsze z API. */
 export function toPopupModel(p: Point, meta: Meta): PopupModel {
+  const model = baseModel(p, meta);
+  if (!p.gravel) return model;
+  return { ...model, rows: [...model.rows, { term: GRAVEL_TERM, desc: 'model może być nieaktualny.', warning: true }] };
+}
+
+function baseModel(p: Point, meta: Meta): PopupModel {
   switch (p.kind) {
     case 'model':
       return {

@@ -41,6 +41,7 @@ vi.mock('../api/client', async (orig) => {
       point: vi.fn(),
       currentLevel: vi.fn(),
       marinas: vi.fn(),
+      gravel: vi.fn(),
       capacityToLevel: vi.fn(),
       levelToCapacity: vi.fn(),
     },
@@ -71,6 +72,7 @@ beforeEach(() => {
   m.point.mockResolvedValue(pointModel);
   m.currentLevel.mockResolvedValue({ ...currentLevel, h: 195.6 });
   m.marinas.mockResolvedValue({ type: 'FeatureCollection', features: [] });
+  m.gravel.mockRejectedValue(new Error('404'));
   m.capacityToLevel.mockResolvedValue({ h: 195, in_table: true } as never);
   m.levelToCapacity.mockResolvedValue({ v: 45.6, in_table: true } as never);
 });
