@@ -17,6 +17,7 @@ REF     := ../data/reference
 LABELS  := $(REF)/labels.gpkg
 LAKE    := $(PROC)/lake.gpkg
 S2CSV   := $(PROC)/scenes_candidates.csv
+INVENT  := $(PROC)/lidar/inventory.csv
 RFMODEL := $(PROC)/model/rf_model.joblib
 STATS   := $(PROC)/classify_stats.csv
 SHORES  := $(PROC)/shorelines.gpkg
@@ -25,12 +26,12 @@ SCENES  := $(PROC)/scenes.json
 BOTTOM  := $(PROC)/model/all/model_meta.json
 MIN_HUMAN_LABELS := 150
 
-.PHONY: help all osm s2 labels label-candidates label-ui check-labels rf classify shorelines \
+.PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
         bulletins levels bottom test clean-model
 .DEFAULT_GOAL := help
 
 help:
-	@echo "Cele: osm s2 label-candidates label-ui rf classify shorelines bulletins levels bottom all test clean-model"
+	@echo "Cele: osm nmt s2 label-candidates label-ui rf classify shorelines bulletins levels bottom all test clean-model"
 	@echo "Kolejność: osm -> s2 -> label-candidates -> (ręczne etykiety: label-ui) -> rf -> classify"
 	@echo "           -> shorelines -> bulletins -> levels -> bottom"
 
@@ -43,6 +44,10 @@ all:
 osm: $(LAKE)
 $(LAKE):                                   # 03: obrys jeziora, AOI, przystanie (Overpass, cache)
 	$(UV) 03_fetch_osm.py
+
+nmt: $(INVENT)
+$(INVENT): config.yaml | $(LAKE)          # 02: skorowidze GUGiK, NMT (pierścień brzegowy) i LAZ (wznawialne; --dry-run: plan)
+	$(UV) 02_fetch_nmt.py
 
 s2: $(S2CSV)
 $(S2CSV): config.yaml | $(LAKE)            # 01: wyszukiwanie STAC, scenes_candidates.csv, s2/*.tif (wznawialne)

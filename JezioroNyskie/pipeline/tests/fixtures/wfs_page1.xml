@@ -1,0 +1,68 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:gugik="http://www.gugik.gov.pl"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   timeStamp="2026-10-28T13:36:06" numberMatched="unknown" numberReturned="3">
+    <wfs:member>
+      <gugik:SkorowidzNMT2011 gml:id="SkorowidzNMT2011.1">
+        <gml:boundedBy><gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180"><gml:lowerCorner>288500 374000</gml:lowerCorner><gml:upperCorner>290000 376000</gml:upperCorner></gml:Envelope></gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMT2011.1.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior><gml:LinearRing><gml:posList srsDimension="2">288500 374000 288500 376000 290000 376000 290000 374000 288500 374000</gml:posList></gml:LinearRing></gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>M-33-35-C-c-1-1</gugik:godlo>
+        <gugik:akt_rok>2011</gugik:akt_rok>
+        <gugik:asortyment>NMT</gugik:asortyment>
+        <gugik:format>ARC/INFO ASCII GRID</gugik:format>
+        <gugik:char_przestrz>1.00 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0,10-0,15</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:url_do_pobrania>https://opendata.example.test/NMT/M-33-35-C-c-1-1.asc</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+      </gugik:SkorowidzNMT2011>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzNMT2024 gml:id="SkorowidzNMT2024.2">
+        <gml:boundedBy><gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180"><gml:lowerCorner>288500 376000</gml:lowerCorner><gml:upperCorner>290000 378000</gml:upperCorner></gml:Envelope></gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMT2024.2.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior><gml:LinearRing><gml:posList srsDimension="2">288500 376000 288500 378000 290000 378000 290000 376000 288500 376000</gml:posList></gml:LinearRing></gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>M-33-35-C-c-1-2</gugik:godlo>
+        <gugik:akt_rok>2024</gugik:akt_rok>
+        <gugik:asortyment>NMT</gugik:asortyment>
+        <gugik:format>ARC/INFO ASCII GRID</gugik:format>
+        <gugik:char_przestrz>1.00 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.02</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:url_do_pobrania>https://opendata.example.test/NMT/M-33-35-C-c-1-2.asc</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+      </gugik:SkorowidzNMT2024>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzNMT2011 gml:id="SkorowidzNMT2011.3">
+        <gml:boundedBy><gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180"><gml:lowerCorner>287000 374000</gml:lowerCorner><gml:upperCorner>288500 376000</gml:upperCorner></gml:Envelope></gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMT2011.3.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior><gml:LinearRing><gml:posList srsDimension="2">287000 374000 287000 376000 288500 376000 288500 374000 287000 374000</gml:posList></gml:LinearRing></gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>M-33-35-C-c-2-1</gugik:godlo>
+        <gugik:akt_rok>2011</gugik:akt_rok>
+        <gugik:asortyment>NMT</gugik:asortyment>
+        <gugik:format>ARC/INFO ASCII GRID</gugik:format>
+        <gugik:char_przestrz>1.00 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.90</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:url_do_pobrania>https://opendata.example.test/NMT/M-33-35-C-c-2-1.asc</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Zdj. lotnicze</gugik:zrodlo_danych>
+      </gugik:SkorowidzNMT2011>
+    </wfs:member>
+</wfs:FeatureCollection>

@@ -1,4 +1,10 @@
 data/raw/*
+!data/raw/nmt/
+data/raw/nmt/*
+!data/raw/nmt/README.md
+!data/raw/lidar/
+data/raw/lidar/*
+!data/raw/lidar/README.md
 !data/raw/check/
 data/processed/
 .venv/

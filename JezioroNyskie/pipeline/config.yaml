@@ -46,3 +46,17 @@ paths:
   raw: "raw"
   processed: "processed"
   reference: "reference"
+
+# LiDAR i NMT z GUGiK (krok 02). WFS: skorowidze arkuszy (warstwy roczne `gugik:Skorowidz...<rok>`).
+lidar:
+  epochs: [2011, 2017, 2022, 2024]
+  wfs:
+    laz_evrf: "https://mapy.geoportal.gov.pl/wss/service/PZGIK/DanePomiaroweLidarEVRF2007/WFS/Skorowidze"
+    laz_kron: "https://mapy.geoportal.gov.pl/wss/service/PZGIK/DanePomiaroweLidarKRON86/WFS/Skorowidze"
+    nmt_evrf: "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NumerycznyModelTerenuEVRF2007/WFS/Skorowidze"
+    nmt_kron: "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NumerycznyModelTerenuKRON86/WFS/Skorowidze"
+  layer_prefix: {laz: "gugik:SkorowidzDanychPomiarowychLIDAR", nmt: "gugik:SkorowidzNMT"}
+  page_size: 100
+  shore_band_m: 300          # NMT: pierścień lake.boundary.buffer(shore_band_m)
+  laz_sheets_per_epoch: 4    # LAZ: tyle arkuszy na epokę (najwięcej wody, po jednym na ćwiartkę)
+  max_download_gb: 15        # powyżej: skrypt zatrzymuje się po dry-run
