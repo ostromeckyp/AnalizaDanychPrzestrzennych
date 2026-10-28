@@ -1,0 +1,12 @@
+# Używane przez backend/Dockerfile (kontekst = katalog główny, bo backend zależy od ../pipeline).
+.git
+data
+docs
+**/node_modules
+**/dist
+**/test-results
+**/.venv
+**/__pycache__
+**/.pytest_cache
+frontend
+pipeline/tests

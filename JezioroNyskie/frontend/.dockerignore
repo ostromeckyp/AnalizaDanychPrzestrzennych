@@ -1,0 +1,7 @@
+node_modules
+dist
+test-results
+.venv
+__pycache__
+data
+e2e

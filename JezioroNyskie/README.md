@@ -3,6 +3,19 @@
 Model dna Jeziora Nyskiego budowany z obrazów Sentinel-2 (siatka wzorcowa EPSG:2180, 10 m),
 wraz z backendem i frontendem do wizualizacji mielizn.
 
+## Uruchomienie
+
+Wymagany jest Docker Compose v2 oraz gotowe `data/processed/` i `data/reference/` (wynik pipeline'u; montowane tylko do odczytu).
+
+```bash
+docker compose up --build        # http://localhost:8080
+docker compose down
+bash scripts/compose_smoke.sh    # test dymny: buduje, sprawdza /, /api/meta, /historia i sprząta
+```
+
+Tryb na żywo (odświeżanie bieżącego poziomu z Sentinel-2, potrzebna sieć wychodząca) jest domyślnie włączony;
+`MIELIZNA_LIVE=0` w pliku środowiskowym compose (obok `docker-compose.yml`) go wyłącza. Port frontu: 8080.
+
 ## Szybki start pipeline'u
 
 ```bash

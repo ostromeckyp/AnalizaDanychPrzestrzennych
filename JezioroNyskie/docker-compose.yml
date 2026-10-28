@@ -1,0 +1,25 @@
+# Mielizna: `docker compose up --build` -> http://localhost:8080
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      MIELIZNA_DATA_DIR: /data
+      MIELIZNA_LIVE: ${MIELIZNA_LIVE:-1}   # z pliku środowiskowego compose; 0 wyłącza odświeżanie poziomu z sieci
+    volumes:
+      - ./data/processed:/data/processed:ro
+      - ./data/reference:/data/reference:ro
+      # cache bieżącego poziomu (backend go zapisuje), więc osobny wolumen zamiast montowania tylko do odczytu
+      - current-cache:/data/processed/current
+    restart: unless-stopped
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  current-cache:
