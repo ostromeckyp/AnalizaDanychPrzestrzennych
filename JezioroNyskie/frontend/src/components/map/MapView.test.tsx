@@ -130,6 +130,18 @@ describe('MapView', () => {
     expect(h.fns.setLayoutProperty).toHaveBeenCalledWith('bottom', 'visibility', 'none');
   });
 
+  it('npp dochodzi po load: warstwa przerywana istnieje, filtry ustawiane jako wyrażenia', () => {
+    const { rerender } = mount({ npp: undefined });
+    expect(h.layers.has('shorelines-dashed')).toBe(true);
+    expect(h.fns.addLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'shorelines-dashed', filter: false }),
+      undefined,
+    );
+    rerender(<MapView {...base} npp={195.91} />);
+    expect(h.fns.setFilter).toHaveBeenCalledWith('shorelines-dashed', ['<', ['get', 'h_t'], 195.91]);
+    expect(h.fns.setFilter).toHaveBeenCalledWith('shorelines', ['>=', ['get', 'h_t'], 195.91]);
+  });
+
   it('przełącza podkład na ortofotomapę', () => {
     const { rerender } = mount();
     rerender(<MapView {...base} basemap="orto" />);

@@ -79,9 +79,7 @@ export const shorelineLayers = (npp: number | undefined): LayerSpecification[] =
 
 export const shorelineFilter = (npp: number | undefined, dashed: boolean) =>
   npp === undefined
-    ? dashed
-      ? ['==', 1, 0]
-      : true
+    ? !dashed // literał logiczny to poprawny filtr-wyrażenie (['==', 1, 0] MapLibre czyta jako filtr legacy i odrzuca)
     : [dashed ? '<' : '>=', ['get', 'h_t'], npp];
 
 export const marinaLayers = (theme: ThemeName): LayerSpecification[] => [
