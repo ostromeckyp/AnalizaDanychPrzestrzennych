@@ -100,11 +100,42 @@ Po ludzku: z rzędnych punktowych i poziomic mapy KŻ budujemy powierzchnię dna
 
 ## 7. Ocena dokładności (`08_evaluate.py` → `data/processed/eval/{bottom_vs_nmt,levels,bottom_change,model_choice,mask}.json`, `docs/img/eval-*.png`)
 
-Metoda: dno modelu (`z`) vs NMT uśredniony do 10 m (średnia komórek 1 m, wymóg ≥ 50 % pokrycia piksela), wyłącznie bloki „valid" (bez przecieku z wariantu A), piksele z NMT > `h_water_evrf` epoki + 0,1 m i z `z` w modelu. NMT KRON86 (2011, 2017) sprowadzony do EVRF2007 (+0,199 m) raz. Poziomy modelu pochodzą głównie z układu RZGW (nieznany), więc bias zawiera też ewentualne przesunięcie RZGW↔EVRF2007; nic nie jest korygowane.
+Metoda: dno modelu (`z`) vs NMT uśredniony do 10 m (średnia komórek 1 m, wymóg ≥ 50 % pokrycia piksela), wyłącznie bloki „valid" (bez przecieku z wariantu A). NMT KRON86 (2011, 2017) sprowadzony do EVRF2007 (+0,199 m) raz. Poziomy modelu pochodzą głównie z układu RZGW (nieznany), więc bias zawiera też ewentualne przesunięcie RZGW↔EVRF2007; nic nie jest korygowane.
 
-- **Dno vs NMT: model jest słaby.** Model `all`: MAE 1,41 / 1,34 / 1,88 / 1,59 m (epoki 2011 / 2017 / 2022 / 2024; n = 16 876 / 2 109 / 743 / 7 341), RMSE 1,52 / 1,57 / 2,05 / 1,85 m, bias −0,22 / +1,14 / −1,59 / −0,25 m, NMT w [z_min, z_max] tylko 2,2 / 7,5 / 6,2 / 9,4 %. Rozrzut samego NMT na tych pikselach to 0,05–0,48 m (stała predykcja dałaby RMSE rzędu 0,4 m), więc `all` nie wnosi tu nic ponad średnią (korelacja 0,50 / 0,86 / 0,05 / −0,06). Zbiór porównania to wąski pas brzegowy nad poziomem wody epoki (piksele 10 m mieszane woda/ląd), a model ma tam przedziały [z_min, z_max] o medianie szerokości ok. 0,4 m i rozkład dwumodalny (193,6 i 197 m), czyli klasyfikacja pasa brzegowego rozstrzyga o wyniku.
-- **Okresy dopasowane do epoki są lepsze:** `pre_flood` vs NMT 2017: MAE 0,58, RMSE 0,76, bias +0,20 m, korelacja 0,72, w granicach 26,7 % (n = 898). `pre_flood` vs 2011: RMSE 1,41, bias −1,03 m (epoka sprzed serii S-2, część różnicy to realne zmiany dna i żwirownia); vs 2022: RMSE 2,14 (n = 634, rozrzut NMT 0,05 m: pas przy wysokiej wodzie 195,69 m). `post_flood` vs 2024: RMSE 1,38, bias +0,70 m, w granicach 17,5 % (n = 5 092). Model `all` miesza obserwacje sprzed i po powodzi, stąd bias +1,14 m dla 2017.
-- **Poziomy wody:** A vs B (n = 92 dni z obiema wartościami): MAE 0,47, RMSE 0,58, bias −0,08 m (A − B); wg epoki LiDAR: 2017 −0,35, 2022 −0,33, 2024 +0,59 m (mieszanka układu EVRF2007 vs RZGW i błędu metod; niekorygowane). Punkt kontrolny R 2025 (197,92 m, 28.04 i 01.05): B −0,13 m (n = 2), C −0,61 m (krzywa refitowana bez R, sigma LOYO 0,48 m), A brak (brak epoki LiDAR). Punkt 12.09.2024 (194,70 m; brak sceny tego dnia, porównanie ze scenami 03 i 06.09): B −0,07 / −0,09, A −0,30 / −0,29, C +0,59 / +0,47 m. `h_sigma` mediana: A 0,22 (0,04–0,30), B 0,15, C 0,49, R 0,08 m; próg M3 (A < 0,3 m) spełniony.
-- **Zmiana dna po powodzi:** pre_flood vs post_flood na 8 438 pikselach wspólnych (3,4 % wspólnego obszaru obserwowanego): |Δz| > unc_pre + unc_post dla 44,4 %, mediana Δz −0,13 m. Próg 5 % przekroczony, więc `model_choice.json` = `post_flood`. Zastrzeżenie: oba modele widzą różne zakresy poziomów (pre 192,9–196,8 m, post 193,8–197,9 m), więc część Δz to różnica pokrycia poziomów, a nie realna zmiana dna; decyzja jest mechaniczna wg progu ze specyfikacji i dotyczy wąskiego pasa przedziałów (mapa `eval-zmiana-dna-mapa.png`).
+**Woda w NMT (poprawka po przeglądzie).** Arkusze NMT niosą jezioro jako płaską powierzchnię o rzędnej różnej dla arkusza i często innej niż poziom wody epoki z `epochs.csv` (np. 2024: dwa arkusze płasko na 195,95 m przy 194,89 m epoki). Jeden `h_water` na epokę zaliczał więc wodę jako ląd (37–86 % ocenianych pikseli). Teraz: dla każdego arkusza powierzchnia wody = dominanta histogramu NMT (zaokrąglenie 0,01 m; uznana, gdy ≥ 2 % komórek), komórki ≤ woda + 0,1 m pomijane, piksele 10 m o odchyleniu komórek 1 m < 0,03 m (płaskie) pomijane, żwirownia (`zwirownia.gpkg`) wyłączona; dodatkowo piksel > `h_water_evrf` epoki + 0,1 m. Powierzchnie wody arkuszy (diagnostyka):
+
+| Epoka | arkusz | powierzchnia wody (rzędna natywna, m) |
+|---|---|---|
+| 2011 | M-33-59-C-b-2-3 | brak dominanty (ląd) |
+| 2011 | M-33-59-C-b-2-4 | brak dominanty (ląd) |
+| 2011 | M-33-59-C-b-4-1 | brak dominanty (ląd) |
+| 2011 | M-33-59-C-b-4-2 | 194.69 |
+| 2011 | M-33-59-C-b-4-4 | brak dominanty (ląd) |
+| 2011 | M-33-59-D-a-1-3 | 194.44 |
+| 2011 | M-33-59-D-a-1-4 | 194.52 |
+| 2011 | M-33-59-D-a-3-1 | 194.43 |
+| 2011 | M-33-59-D-a-3-2 | 194.65 |
+| 2011 | M-33-59-D-a-3-3 | brak dominanty (ląd) |
+| 2017 | M-33-59-D-a-1-4 | 193.38 |
+| 2017 | M-33-59-D-a-3-2 | 193.39 |
+| 2022 | M-33-59-D-a-1-4 | 195.66 |
+| 2022 | M-33-59-D-a-3-2 | 195.72 |
+| 2024 | M-33-59-C-b-2-3 | brak dominanty (ląd) |
+| 2024 | M-33-59-C-b-2-4 | brak dominanty (ląd) |
+| 2024 | M-33-59-C-b-4-1 | brak dominanty (ląd) |
+| 2024 | M-33-59-C-b-4-2 | 194.89 |
+| 2024 | M-33-59-C-b-4-4 | brak dominanty (ląd) |
+| 2024 | M-33-59-D-a-1-3 | 194.88 |
+| 2024 | M-33-59-D-a-1-4 | 195.95 |
+| 2024 | M-33-59-D-a-3-1 | 194.89 |
+| 2024 | M-33-59-D-a-3-2 | 195.96 |
+| 2024 | M-33-59-D-a-3-3 | brak dominanty (ląd) |
+
+- **Dno vs NMT: model `all` ma stałe obciążenie ok. +1,2 m (model wyżej niż NMT).** MAE 1,35 / 1,40 / 0,92 / 1,20 m, RMSE 1,53 / 1,64 / 1,15 / 1,41 m, bias +1,16 / +1,19 / −0,21 / +1,16 m (epoki 2011 / 2017 / 2022 / 2024; n = 4 154 / 1 466 / 65 / 2 792); NMT w [z_min, z_max] tylko 5,8 / 7,1 / 4,6 / 7,1 %. Razem 8 477 pikseli: bias +1,16, RMSE 1,51 m. Rozrzut NMT na ocenianych pikselach to 0,11–0,69 m, korelacja 0,31 / 0,86 / −0,18 / 0,21. Przedziały są więc przeufne (w granicach 5–7 % zamiast oczekiwanych kilkudziesięciu).
+- **`pre_flood` jest modelem właściwym dla wszystkich epok, bo NMT 2024 pochodzi z 06.09.2024, czyli sprzed powodzi z połowy września:** vs 2017: MAE 0,64, RMSE 0,82, bias +0,30 m, korelacja 0,76, w granicach 25 % (n = 700); vs 2011: RMSE 1,08, bias +0,14 (n = 834; epoka sprzed serii S-2, część różnic to realne zmiany dna); vs 2022: RMSE 1,05, bias −0,67 (n = 43, rozrzut NMT 0,09 m); vs 2024: RMSE 0,86, bias +0,31 (n = 204). `post_flood` vs 2024 jest tylko informacyjne (NMT sprzed powodzi vs model po): RMSE 1,46, bias +1,29 m.
+- **Otwarte ustalenie (bez poprawki modelu):** resztkowe +1,2 m dla `all`. Hipotezy: maska lądu w zarośniętych i zalewanych marginesach brzegu (piksele 10 m mieszane woda/ląd/roślinność), a także różnica „osiągalności" wody vs wysokość terenu (woda dochodzi do piksela przy poziomie wyższym niż jego wysokość NMT). Do zbadania osobno.
+- **Poziomy wody:** A vs B (n = 92 dni z obiema wartościami): MAE 0,47, RMSE 0,58, bias −0,08 m (A − B); wg epoki LiDAR: 2017 −0,35, 2022 −0,33, 2024 +0,59 m (mieszanka układu EVRF2007 vs RZGW i błędu metod; niekorygowane). Punkt kontrolny R 2025 (197,92 m, 28.04 i 01.05): B −0,13 m (n = 2), C −0,61 m (krzywa refitowana bez R, sigma LOYO 0,48 m), A brak. Punkt 12.09.2024 (194,70 m; brak sceny tego dnia, sceny 03 i 06.09): B −0,07 / −0,09, A −0,30 / −0,29, C +0,59 / +0,47 m. `h_sigma` mediana: A 0,22 (0,04–0,30), B 0,15, C 0,49, R 0,08 m; próg M3 (A < 0,3 m) spełniony.
+- **Ustalenie (bez poprawki):** w dniu własnego nalotu, 2024-09-06, wariant A daje 194,41 m, a powierzchnia wody w NMT/LiDAR tego dnia to 194,88–194,89 m na większości arkuszy, czyli A jest ok. 0,48 m za niski w dniu własnego nalotu.
+- **Zmiana dna po powodzi:** pre_flood vs post_flood: oba modele mają `z` na 8 438 pikselach (3,4 % akwenu wspólnego, 250 292 px obserwowanych w obu okresach); |Δz| > unc_pre + unc_post dla 3 743 px = **1,5 % akwenu wspólnego** (wg ograniczenia projektu; poniżej progu 5 %), więc `model_choice.json` = **`all`**. Dla porównania udział liczony względem pikseli z `z` w obu modelach (`share_significant_overlap`) to 44,4 %, ale to wąski pas przedziałów, a część Δz to różne zakresy poziomów obu okresów (pre 192,9–196,8 m, post 193,8–197,9 m), nie realna zmiana dna. Kryterium |Δz| > suma niepewności jest słabym dowodem, bo przedziały są przeufne (w granicach 5–7 %).
 - **Maski** (`mask.json`, z `rf_metrics.json`, wg scen): RF OA 0,924, kappa 0,837, F1 wody 0,939, BA 0,923; RF z progiem 0,7 OA 0,890; Otsu OA 0,853; SCL OA 0,864.
 - `make evaluate` zależy tylko od kodu oceny (wejścia mają reguły o nieaktualnych datach: `make -n` z nimi uruchamiał 01/04b/04 przed 08); po zmianie modelu: `rm data/processed/eval/model_choice.json && make evaluate`.

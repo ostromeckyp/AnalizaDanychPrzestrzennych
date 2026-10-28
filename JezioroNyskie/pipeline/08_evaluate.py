@@ -37,51 +37,59 @@ IMG = Path(__file__).resolve().parents[1] / "docs" / "img"
 R_WINDOW = ("2025-04-28", "2025-05-12")
 POINT_0912 = ("2024-09-12", 194.70)
 EVRF = "PL-EVRF2007-NH"
-C_PRE = {"2011", "2017", "2022"}          # epoki <= 2022: porównywane także z modelem pre_flood
+MIN_STD = 0.03            # [m] piksel 10 m, którego komórki 1 m mają mniejsze odchylenie, uznajemy za płaski (woda) i pomijamy
+IN_PRE = {"2011", "2017", "2022", "2024"}   # NMT 2024 z 06.09.2024 = PRZED powodzią (połowa września): pre_flood jest modelem właściwym
 
 
 def _dump(path: Path, obj) -> None:
     path.write_text(json.dumps(obj, indent=1, ensure_ascii=False, default=float) + "\n", encoding="utf-8")
 
 
-def load_dem(epoch: int, offset: float, uklad_h: str, grid) -> np.ndarray:
-    """NMT epoki uśredniony do siatki 10 m; poprawka datum raz; kontrola tagu `uklad_h` arkuszy."""
-    tiles = []
+def load_dem(epoch: int, offset: float, uklad_h: str, grid):
+    """NMT epoki uśredniony do siatki 10 m (bez wody arkusza i płaskich pikseli); poprawka datum raz; kontrola `uklad_h`.
+
+    Zwraca (dem, powierzchnie wody arkuszy {nazwa: rzędna natywna lub None})."""
+    tiles, names = [], []
     for p in sorted(data_path("raw", "nmt", str(epoch)).glob("*.tif")):
         with rasterio.open(p) as ds:
             tag = ds.tags().get("uklad_h")
             if tag != uklad_h:
                 raise SystemExit(f"{p.name}: uklad_h={tag!r}, epochs.csv: {uklad_h!r}")
             tiles.append((ds.read(1).astype("float32"), ds.transform, ds.nodata))
+            names.append(p.stem)
     log.info("epoka %s: %d arkuszy, poprawka datum %+.3f m", epoch, len(tiles), offset)
-    return evaluate.dem_to_grid(tiles, grid, offset=offset)
+    dem, waters = evaluate.dem_to_grid(tiles, grid, offset=offset, water_margin=evaluate.WATER_MARGIN,
+                                       min_std=MIN_STD, return_info=True)
+    return dem, {n: (None if not np.isfinite(w) else float(w)) for n, w in zip(names, waters)}
 
 
-def eval_bottom(proc: Path, grid, models: dict):
+def eval_bottom(proc: Path, grid, models: dict, gravel: np.ndarray):
     epochs = pd.read_csv(proc / "lidar" / "epochs.csv")
     ii, jj = np.meshgrid(np.arange(grid.width), np.arange(grid.height))
     x = grid.transform.c + (ii + 0.5) * grid.transform.a
     y = grid.transform.f + (jj + 0.5) * grid.transform.e
     roles = block_role(x, y, grid)
     out = {"method": "z modelu (środek przedziału) vs NMT uśredniony do 10 m; bloki valid; NMT > h_water_evrf + 0,1 m",
-           "min_cover": evaluate.MIN_COVER, "datum_note": "NMT w EVRF2007; model głównie w układzie RZGW (nieznany) - bias zawiera ewentualne przesunięcie RZGW<->EVRF2007",
+           "min_cover": evaluate.MIN_COVER, "min_pixel_std": MIN_STD,
+           "water_filter": "per arkusz: dominanta NMT = płaska woda; komórki <= woda + 0,1 m pomijane; piksele 10 m z std < 0,03 m pomijane; żwirownia wyłączona",
+           "datum_note": "NMT w EVRF2007; model głównie w układzie RZGW (nieznany) - bias zawiera ewentualne przesunięcie RZGW<->EVRF2007",
            "by_epoch": {}}
     pooled = {"err": [], "zmin": [], "zmax": [], "dem": []}
     errs_for_plot = {}
     dems = {}
     for e in epochs.itertuples():
         offset = float(e.datum_offset) if e.uklad_h != EVRF else 0.0
-        dem = load_dem(e.epoch, offset, e.uklad_h, grid)
+        dem, waters = load_dem(e.epoch, offset, e.uklad_h, grid)
         dems[str(e.epoch)] = dem
         row = {"h_water_evrf": float(e.h_water_evrf), "date": e.date, "uklad_h": e.uklad_h,
-               "datum_offset_applied": offset, "dem_px": int(np.isfinite(dem).sum())}
-        row["all"] = evaluate.bottom_vs_dem(models["all"], dem, e.h_water_evrf, roles)
-        if str(e.epoch) in C_PRE:
-            row["pre_flood"] = evaluate.bottom_vs_dem(models["pre_flood"], dem, e.h_water_evrf, roles)
-        if e.epoch == 2024:
-            row["post_flood"] = evaluate.bottom_vs_dem(models["post_flood"], dem, e.h_water_evrf, roles)
+               "datum_offset_applied": offset, "sheet_water_native": waters, "dem_px": int(np.isfinite(dem).sum())}
+        row["all"] = evaluate.bottom_vs_dem(models["all"], dem, e.h_water_evrf, roles, gravel)
+        if str(e.epoch) in IN_PRE:
+            row["pre_flood"] = evaluate.bottom_vs_dem(models["pre_flood"], dem, e.h_water_evrf, roles, gravel)
+        if e.epoch == 2024:      # informacyjnie: NMT sprzed powodzi vs model po powodzi
+            row["post_flood_informational"] = evaluate.bottom_vs_dem(models["post_flood"], dem, e.h_water_evrf, roles, gravel)
         out["by_epoch"][str(e.epoch)] = row
-        errs_for_plot[str(e.epoch)] = evaluate.bottom_errors(models["all"], dem, e.h_water_evrf, roles)
+        errs_for_plot[str(e.epoch)] = evaluate.bottom_errors(models["all"], dem, e.h_water_evrf, roles, gravel)
         log.info("epoka %s all: %s", e.epoch, {k: round(v, 3) for k, v in row["all"].items()})
     # puli wszystkich epok dla modelu all (piksele z różnych epok liczone osobno)
     allerr = np.concatenate(list(errs_for_plot.values()))
@@ -203,7 +211,12 @@ def main() -> int:
     grid = reference_grid()
     models = {p: bottom.read_model(proc / "model" / p)[0] for p in ("all", "pre_flood", "post_flood")}
 
-    res, errs, roles, dems = eval_bottom(proc, grid, models)
+    import geopandas as gpd
+    from rasterio.features import rasterize
+    gpoly = gpd.read_file(data_path("reference", "zwirownia.gpkg")).to_crs(grid.crs).geometry.union_all()
+    gravel = rasterize([(gpoly, 1)], out_shape=(grid.height, grid.width), transform=grid.transform, fill=0,
+                       dtype="uint8").astype(bool)
+    res, errs, roles, dems = eval_bottom(proc, grid, models, gravel)
     _dump(out / "bottom_vs_nmt.json", res)
 
     scenes = pd.DataFrame(json.loads((proc / "scenes.json").read_text(encoding="utf-8")))
@@ -211,13 +224,14 @@ def main() -> int:
     lv, curve = eval_levels(proc, scenes, bulletins)
     _dump(out / "levels.json", lv)
 
-    ch = evaluate.bottom_change(models["pre_flood"], models["post_flood"])
     both = np.isfinite(models["pre_flood"]["z"]) & np.isfinite(models["post_flood"]["z"])
     obs_both = (models["pre_flood"]["obs_count"] > 0) & (models["post_flood"]["obs_count"] > 0) \
         & (models["pre_flood"]["flags"] != 255) & (models["post_flood"]["flags"] != 255)
+    ch = evaluate.bottom_change(models["pre_flood"], models["post_flood"], common=obs_both)
     ch["n_common_observed"] = int(obs_both.sum())
     ch["share_of_common_observed"] = float(both.sum() / max(obs_both.sum(), 1))
-    ch["note"] = "share_significant: udział pikseli, gdzie oba modele mają z i |Δz| > unc_pre + unc_post; Δz = post - pre"
+    ch["note"] = ("share_significant = piksele z |Δz| > unc_pre + unc_post / akwen wspólny (obserwowany w obu okresach, wg ograniczenia "
+                  "projektu); share_significant_overlap = ten sam licznik / piksele z z w obu modelach; Δz = post - pre")
     _dump(out / "bottom_change.json", ch)
     choice = evaluate.choose_model(ch["share_significant"])
     _dump(out / "model_choice.json", choice)

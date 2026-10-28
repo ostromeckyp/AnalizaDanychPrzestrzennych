@@ -55,6 +55,41 @@ def test_bottom_change_significance():
     post = {"z": np.array([[1.1, 2., 1.]]), "unc": np.array([[.1, .1, .1]])}
     r = evaluate.bottom_change(pre, post)
     assert r["n"] == 2 and r["share_significant"] == 0.5     # 0,1 < 0,2; 1,0 > 0,2; trzeci bez pre
+    r = evaluate.bottom_change(pre, post, common=np.array([[True, True, True]]))
+    assert r["share_significant"] == pytest.approx(1 / 3) and r["share_significant_overlap"] == 0.5
+
+
+def test_bottom_vs_dem_exclude_gravel():
+    roles = np.full((2, 2), "valid")
+    excl = np.array([[False, False], [True, False]])
+    assert evaluate.bottom_vs_dem(_model(), DEM, 190.0, roles, exclude=excl)["n"] == 2
+
+
+def _tile(z):
+    return [(z, Affine(1, 0, 0, 0, -1, 20), -9999.)]
+
+
+def test_dem_to_grid_flat_water_above_epoch_level_excluded():
+    grid = Grid("EPSG:2180", Affine(10, 0, 0, 0, -10, 20), 2, 2)
+    rng = np.random.default_rng(0)
+    z = 200 + rng.normal(0, 0.5, (20, 20)).astype("float32")      # ląd, nierówny
+    z[:, :10] = 195.95                                            # płaska woda (lewa połowa) wyżej niż poziom epoki
+    assert evaluate.sheet_water_surface(z) == pytest.approx(195.95)
+    out = evaluate.dem_to_grid(_tile(z), grid, water_margin=0.1, min_std=0.03)
+    assert np.isnan(out[:, 0]).all() and np.isfinite(out[:, 1]).all()
+    assert evaluate.sheet_water_surface(200 + rng.normal(0, 0.5, (20, 20))) != evaluate.sheet_water_surface(z)
+
+
+def test_dem_to_grid_flat_pixel_excluded_and_resolution_checked():
+    grid = Grid("EPSG:2180", Affine(10, 0, 0, 0, -10, 20), 2, 2)
+    rng = np.random.default_rng(1)
+    z = 200 + rng.normal(0, 0.5, (20, 20)).astype("float32")
+    z[:10, 10:] = 197.0                                           # dwa płaskie piksele (płaski ląd/lustro)
+    z[10:, :10] = 198.0
+    out = evaluate.dem_to_grid(_tile(z), grid, min_std=0.03)       # bez water_margin: tylko filtr płaskości
+    assert np.isnan(out[0, 1]) and np.isnan(out[1, 0]) and np.isfinite(out[0, 0])
+    with pytest.raises(ValueError):
+        evaluate.dem_to_grid(_tile(z) + [(z, Affine(2, 0, 0, 0, -2, 20), -9999.)], grid)
 
 
 def test_dem_to_grid_mean_and_coverage():
