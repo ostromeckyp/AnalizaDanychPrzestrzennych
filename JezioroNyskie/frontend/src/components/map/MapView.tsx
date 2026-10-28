@@ -76,7 +76,10 @@ export function MapView(props: MapViewProps) {
     });
     mapRef.current = map;
     const [w, s, e, n] = p.bbox;
-    map.fitBounds([[w, s], [e, n]], { padding: 24, animate: false });
+    // Panel (desktop) i dolny arkusz (mobile) zasłaniają mapę — kadr jeziora liczymy bez nich.
+    const desktop = window.innerWidth >= 768;
+    const padding = desktop ? { top: 24, right: 24, bottom: 48, left: 400 } : { top: 80, right: 16, bottom: 310, left: 16 };
+    map.fitBounds([[w, s], [e, n]], { padding, animate: false });
     map.addControl(new maplibregl.AttributionControl({ compact: false, customAttribution: ATTRIBUTION }), 'bottom-right');
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 100 }), 'bottom-left');
     map.on('click', (ev: { lngLat: { lng: number; lat: number } }) =>

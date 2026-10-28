@@ -39,7 +39,7 @@ Retrening to godziny (ok. 550 dopasowań), więc wymuszaj go świadomie.
 | `make test` | `pytest -q` | 182 testów |
 
 Dane surowe w `data/raw/`, logi w `data/processed/logs/`. Notatki do nauki (po polsku, z pytaniami obronnymi):
-[`docs/nauka/`](docs/nauka/) — `M1-dane.md`, `M2-klasyfikacja.md`, `M3-poziomy.md`, `M4-model-dna.md`, `M5-backend.md`, `decyzje.md`.
+[`docs/nauka/`](docs/nauka/) — `M1-dane.md`, `M2-klasyfikacja.md`, `M3-poziomy.md`, `M4-model-dna.md`, `M5-backend.md`, `M6-frontend.md`, `decyzje.md`.
 
 ## Backend
 
@@ -56,6 +56,9 @@ Zmienne środowiskowe: `MIELIZNA_DATA_DIR` (katalog danych), `MIELIZNA_PERIOD` (
 
 ## Frontend
 
+Pełne uruchomienie (dwa terminale): `cd backend && uv run uvicorn app.main:app --port 8000`, potem `cd frontend && npm ci && npm run dev`
+i otwórz http://localhost:5173 (`MIELIZNA_LIVE=0` wyłącza odświeżanie poziomu z sieci).
+
 React + TypeScript + Vite (`frontend/`), MapLibre GL, TanStack Query. Typy API generowane z `backend/openapi.json`.
 
 ```bash
@@ -63,6 +66,8 @@ cd frontend && npm ci
 npm run dev        # http://localhost:5173, proxy /api -> http://localhost:8000
 npm test           # Vitest (w tym test architektury warstw)
 npm run lint && npm run build
+npm run e2e        # Playwright (Chromium): sam stawia backend i vite preview; wymaga data/processed/model/all/
+SCREENSHOTS=1 npx playwright test e2e/screenshots.spec.ts   # zrzuty do docs/img/m6-*.png
 npm run gen:api    # odświeża src/api/schema.ts po zmianie openapi.json
 ```
 

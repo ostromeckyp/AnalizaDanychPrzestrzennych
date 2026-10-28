@@ -56,6 +56,18 @@ pozasezonowe niosą niskie poziomy, które mierzą płycizny. R22 zostaje (ostro
 
 Wynik kontroli `real` (zadanie 11): ledger planu 1 liczył `safe_km2` z zapasem m = 0,3 w całym modelu; po R25 128 901 px = 12,890 km², API daje to samo, a przy m = 0 129 880 px = 12,988 km² — patrz `M5-backend.md` §6.
 
+## 1b. Decyzje planu 3 (frontend)
+
+- **F-R1** Warstwy komponent → VM → Query → klient wymuszone testem architektury i ESLintem (`no-restricted-imports`, `fetch`): reguła, której nikt nie pilnuje, znika po trzecim PR.
+- **F-R2** `src/theme.ts` jest jedynym źródłem kolorów stref i skali poziomów (`levelColor`); test dryfu porównuje go z `tokens.css`, więc CSS i mapa nie rozjadą się po cichu.
+- **F-R3** Popup kotwiczony przez `maplibregl.Marker` + portal Reacta, nie `maplibregl.Popup`: treść to zwykły komponent React z `role="dialog"`, fokusem i Esc.
+- **F-R4** W trybie pojemności poziom `h` jest wyprowadzany (pojemność → `/api/capacity`), nie przechowywany osobno: mapa i panel zawsze pokazują ten sam poziom.
+- **F-R5** Ruch suwaka w trybie pojemności przełącza tryb na rzędną; przycisk „Wróć do rzędnej" przywraca spójność, zamiast po cichu przeliczać pojemność.
+- **F-R6** Teksty źródeł na `/metoda` są dosłownie z BRIEF §16 (z poprawkami §16.9) i dają się wskazać w briefie; liczby tylko z API.
+- **F-R7** e2e (Playwright) w `frontend/e2e/`, poza Vitestem i `tsc`; pomijane bez `data/processed/model/all/`; zrzuty tylko z `SCREENSHOTS=1`. `@playwright/test` 1.63.0 przypięte pod Chromium 1243 już obecny w cache.
+- **F-R8** `fitBounds` mapy uwzględnia panel (desktop) i dolny arkusz (mobile); wykryte dopiero na zrzucie z prawdziwej przeglądarki, jsdom tego nie pokaże.
+- **F-R9** B-R7 (szwy stref) sprawdzone przy zoomie 15–16: niewidoczne, zostaje bez zmian.
+
 ## 2. Znane ograniczenia / do zrobienia (z listy „minor (deferred)" w ledgerze)
 
 **Dane i pobieranie (Task 1–4)**

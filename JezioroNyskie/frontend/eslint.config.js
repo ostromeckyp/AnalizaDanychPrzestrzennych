@@ -23,7 +23,7 @@ const viewLayerRules = {
 };
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'src/api/schema.ts'] },
+  { ignores: ['dist', 'node_modules', 'test-results', 'playwright-report', 'src/api/schema.ts'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

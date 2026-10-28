@@ -8,3 +8,5 @@ __pycache__/
 data/reference/*_backup.gpkg
 frontend/node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
