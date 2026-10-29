@@ -35,12 +35,13 @@ LEVELSD := $(PROC)/kz/levels_d.csv
 EVALD   := $(PROC)/eval/variant_d.json
 EVALCH  := $(PROC)/eval/model_choice.json
 EVALKZ  := $(PROC)/eval/kz_compare.json
+EVALVOL := $(PROC)/eval/volume.json
 KZOVER  := ../docs/img/kz-overlay.png
 ZWIR    := $(REF)/zwirownia.gpkg
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate test check-locks clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate volume test check-locks clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -172,6 +173,12 @@ $(KZOVER): 10_kz_compare.py mielizna/kz_compare.py $(wildcard $(REF)/kz_spot_qc.
 evaluate: $(EVALCH)
 $(EVALCH): 08_evaluate.py mielizna/evaluate.py mielizna/blocks.py
 	$(UV) 08_evaluate.py
+
+# volume: ΔV warstw z modelu vs tabela pojemności KŻ i szacunek dna rdzenia (mielizna/volume.py). Jak evaluate: zależy tylko
+# od kodu, tabeli i model_choice.json (model ma regułę z nieaktualnym łańcuchem). Po zmianie modelu: rm $(EVALVOL) && make volume.
+volume: $(EVALVOL)
+$(EVALVOL): 11_volume.py mielizna/volume.py $(REF)/kz_pojemnosc_rzedna.csv $(EVALCH)
+	$(UV) 11_volume.py
 
 test:
 	uv run pytest -q

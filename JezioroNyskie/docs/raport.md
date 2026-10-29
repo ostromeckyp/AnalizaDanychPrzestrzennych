@@ -268,6 +268,7 @@ poziomów obu okresów, nie z realnej zmiany dna; przy tym kryterium „|Δz| > 
 | Model vs mapa KŻ (punkty ≥ 192,5 m, bez żwirowni) | 47<!-- eval:kz_points.json:pooled.n_spots --> punktów KŻ, z modelem w pikselu 32<!-- eval:kz_points.json:pooled.n --> | bias +0,31<!-- eval:kz_points.json:pooled.bias -->, MAE 0,60<!-- eval:kz_points.json:pooled.mae -->, RMSE 0,84<!-- eval:kz_points.json:pooled.rmse --> m; KŻ ∈ [z_min, z_max]: 31 %<!-- eval:kz_points.json:pooled.share_in_bounds --> | go (\|bias\| < 0,5 m); orientacyjne |
 | Poziomice modelu vs KŻ | 195,0 m (KŻ 7,01<!-- eval:kz_contours.json:[195.0].kz_length_km --> km), 192,5 m (KŻ 2,40<!-- eval:kz_contours.json:[192.5].kz_length_km --> km) | 195,0: średnia symetryczna 47<!-- eval:kz_contours.json:[195.0].mean_distance_m --> m, KŻ → model 36,6<!-- eval:kz_contours.json:[195.0].kz_to_model_mean_m --> m (P90 77,8<!-- eval:kz_contours.json:[195.0].kz_to_model_p90_m --> m), Hausdorff 258<!-- eval:kz_contours.json:[195.0].hausdorff_m --> m; 192,5: model nie ma takiej poziomicy | orientacyjne |
 | `h_t` wariant D vs A/B | 107<!-- eval:variant_d.json:n_valid --> scen w dziedzinie D (`h_t` < 194,95<!-- eval:variant_d.json:h_max_valid --> m) | w ±0,2 m: 27,1 %<!-- eval:variant_d.json:share_within_0_2 --> scen (A 55,6 %<!-- eval:variant_d.json:by_method.A.share_within_0_2 -->, B 14,8 %<!-- eval:variant_d.json:by_method.B.share_within_0_2 -->, C 0 %<!-- eval:variant_d.json:by_method.C.share_within_0_2 -->); mediana \|D − h_t\| 0,28<!-- eval:variant_d.json:median_abs_diff --> m | kryterium „większość w ±0,2 m” **niespełnione**; D tylko zgrubną kontrolą |
+| Objętość (ΔV warstw) vs tabela pojemności | tabela KŻ pojemność ↔ rzędna | 193,3–194,8 m: model/tabela 0,986<!-- eval:volume.json:bands.[193.3-194.8].ratio -->; 194,8–196,3 m: 0,893<!-- eval:volume.json:bands.[194.8-196.3].ratio -->; 196,3–197,8 m: 0,750<!-- eval:volume.json:bands.[196.3-197.8].ratio -->; dno rdzenia z bilansu 190,49<!-- eval:volume.json:core_bottom_main.z_core_mean --> m | zgodne do ok. 194,8 m; wyżej brak powierzchni wody (§5.4) |
 
 ![Błąd dna względem NMT](img/eval-dno-vs-nmt-histogram.png)
 
@@ -343,6 +344,39 @@ bez powodzi i piętrzenia 2025 piksele powyżej ok. 196 m nie mają w nim górne
 `h_sigma` wg metody (mediana): A 0,22 m, B 0,15 m, C 0,49 m, R 0,08<!-- eval:levels.json:h_sigma_by_method.R.median --> m.
 A vs B i punkty kontrolne: §3.3 i §3.5. Krzywa C: LOO RMSE 0,466 m, LOYO 0,488 m (n = 131 obserwacji B/R,
 `model/area_level_curve.json`).
+
+### 5.4 Objętość: model vs tabela pojemności
+
+Tabela pojemność ↔ rzędna (KŻ, ta sama, którą wariant B zamienia komunikaty RZGW na `h_t`) mówi, ile wody przybywa, gdy poziom
+rośnie. Model dna daje to samo: przyrost objętości między h1 a h2 to suma po pikselach `clip(h2 − z, 0, h2 − h1)` × 100 m².
+Dla h1 powyżej `z_max` rdzenia (mediana 193,05<!-- eval:volume.json:core_zmax_median --> m) przyrost **nie zależy od nieznanej głębokości
+rdzenia** (zawsze mokrego środka), więc to jedyny test obejmujący cały akwen. Skrypt: `pipeline/11_volume.py` (`make volume`).
+
+| pas | ΔV tabela [mln m³] | ΔV model [mln m³] (przedział z_min/z_max) | model / tabela |
+|---|---|---|---|
+| 193,3–194,8 m | 19,5<!-- eval:volume.json:bands.[193.3-194.8].dv_table --> | 19,2<!-- eval:volume.json:bands.[193.3-194.8].dv_model --> (18,8<!-- eval:volume.json:bands.[193.3-194.8].dv_model_min -->–19,5<!-- eval:volume.json:bands.[193.3-194.8].dv_model_max -->) | 0,986<!-- eval:volume.json:bands.[193.3-194.8].ratio --> |
+| 194,8–196,3 m | 22,5<!-- eval:volume.json:bands.[194.8-196.3].dv_table --> | 20,1<!-- eval:volume.json:bands.[194.8-196.3].dv_model --> (20,0<!-- eval:volume.json:bands.[194.8-196.3].dv_model_min -->–20,3<!-- eval:volume.json:bands.[194.8-196.3].dv_model_max -->) | 0,893<!-- eval:volume.json:bands.[194.8-196.3].ratio --> |
+| 196,3–197,8 m | 28,5<!-- eval:volume.json:bands.[196.3-197.8].dv_table --> | 21,4<!-- eval:volume.json:bands.[196.3-197.8].dv_model --> (21,1<!-- eval:volume.json:bands.[196.3-197.8].dv_model_min -->–21,8<!-- eval:volume.json:bands.[196.3-197.8].dv_model_max -->) | 0,750<!-- eval:volume.json:bands.[196.3-197.8].ratio --> |
+
+Wartości tabeli mają krok 0,5 mln m³, więc błąd zaokrąglenia ΔV pasa to ok. 2–3 %. Wnioski:
+
+1. **Do ok. 194,8 m model zgadza się z tabelą** (−1,4<!-- eval:volume.json:bands.[193.3-194.8].diff_pct --> %, w granicach zaokrąglenia).
+2. **Wyżej modelowi brakuje powierzchni wody**: −10,7<!-- eval:volume.json:bands.[194.8-196.3].diff_pct --> % w pasie 194,8–196,3 m i
+   −25,0<!-- eval:volume.json:bands.[196.3-197.8].diff_pct --> % w pasie 196,3–197,8 m; przedział z_min/z_max tego nie tłumaczy. Tabela
+   przy 197 m odpowiada powierzchni ok. 20 km², a satelita widzi tam ok. 14,5 km² wody (`area_level_curve.json`). To ten sam
+   kierunek co pierścień +1,43 m z §5.2: przy wysokiej wodzie część zalanego terenu (roślinność, płytkie rozlewiska, mieszane
+   piksele) jest klasyfikowana jako ląd. Alternatywa: górna część tabeli jest niedokładna (wartości od 196,7 m rosną równo
+   o 2,0 mln m³ na 0,1 m). Rozstrzygnięcie wymaga niezależnej krzywej RZGW.
+3. **Dno rdzenia z bilansu**: V_tabela − V_reszta przy 194,0 m daje objętość nad rdzeniem
+   (10,49<!-- eval:volume.json:core_bottom_main.area_core_km2 --> km²), a stąd średnią rzędną dna rdzenia
+   **190,49<!-- eval:volume.json:core_bottom_main.z_core_mean --> m** (średnio 3,51<!-- eval:volume.json:core_bottom_main.mean_depth_core --> m pod
+   lustrem 194,0 m). Wynik jest stabilny dla h 193,5–195,0 m (190,45–190,55 m), a dla wyższych h spada (189,99<!-- eval:volume.json:core_bottom.5.z_core_mean -->
+   m przy 197 m) przez brak powierzchni z pkt 2. Powierzchnia KŻ na tych samych pikselach (pokrycie 83 %<!-- eval:volume.json:kz_core.share_of_core -->)
+   ma średnią 191,16<!-- eval:volume.json:kz_core.mean --> m: różnica ok. 0,7 m przy mapie, która poniżej 192,5 m jest orientacyjna, i przy
+   możliwym przesunięciu układu ok. 0,2 m (§3.4). To jedyna liczba o głębokim środku, jaką mamy bez echosondy, i jest średnią
+   dla całego rdzenia, a nie mapą.
+
+![Przyrost objętości: model vs tabela](img/eval-objetosc.png)
 
 ---
 
@@ -536,7 +570,7 @@ make kz-georef kz-spots
 make kz-qc-ui                      # RĘCZNIE: kontrola punktów KŻ (wynik w repo: data/reference/kz_spot_qc.csv)
 make kz-contours kz-gravel variant-d
 uv run python 06_water_levels.py   # dopisuje D do scenes.json (h_t bez zmian; bez retreningu RF)
-make evaluate kz-compare kz-overlay
+make evaluate kz-compare kz-overlay volume
 uv run pytest -q                   # w tym test spójności liczb tego raportu
 ```
 
