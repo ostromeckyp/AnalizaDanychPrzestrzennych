@@ -33,7 +33,9 @@ log = logging.getLogger("12")
 IMG = Path(__file__).resolve().parents[1] / "docs" / "img"
 PERIODS = {"2020-2023": (2020, 2023), "2024": (2024, 2024), "2025-2026": (2025, 2026)}
 METHOD = ("Roczny hold-out: dla każdego roku 2020-2026 model dna z scen pozostałych lat; test = sceny z poziomem z "
-          "pomiaru (B/R). Błąd pionowy = z − h na pikselach brzegowych sceny (4-sąsiedztwo lądu), IoU wody i odległość "
+          "pomiaru (B/R). Błąd pionowy = z − h na pikselach brzegowych sceny po obu stronach linii (woda z sąsiadem lądu "
+          "i ląd z sąsiadem wody; prawdziwe dno przecina h między nimi, jedna strona dawałaby obciążenie; strony osobno w "
+          "`vertical_by_side`), IoU wody i odległość "
           "linii brzegowych względem obserwacji RF∧Otsu. In-sample = serwowany model `all` na tych samych scenach.")
 LEAKAGE = ("RF i krzywa C (poziomy wariantu C) nie są trenowane od nowa na foldach: maski scen i poziomy treningowe "
            "pochodzą z potoku, który widział też scenę testową, więc hold-out jest optymistyczny w tym zakresie.")
@@ -46,13 +48,19 @@ def load_ev(sel, aoi):
     return bottom.combine_evidence(rf_s, ot_s)
 
 
-def scene_record(model, ev_i, h, zone, lake_zone, transform, shore):
-    """Metryki jednej sceny dla modelu `model` (fałdy albo serwowany)."""
-    ve = holdout.vertical_errors(model, shore, h)
+def scene_record(model, ev_i, h, zone, lake_zone, transform):
+    """Metryki jednej sceny dla modelu `model` (fałdy albo serwowany).
+
+    Błąd pionowy na pikselach brzegowych obu stron (woda i ląd); `err_water`/`err_land` to diagnostyka stron osobno.
+    """
+    ve = holdout.vertical_errors(model, holdout.shore_pixels(ev_i, "both"), h)
+    vw = holdout.vertical_errors(model, holdout.shore_pixels(ev_i, "water"), h)
+    vl = holdout.vertical_errors(model, holdout.shore_pixels(ev_i, "land"), h)
     pred, unc = holdout.predict_water(model, h)
     valid = zone & (ev_i != 255)
     sd = holdout.shoreline_distance(pred, ev_i, transform)
-    return {"n_shore": ve["n_shore"], "err": ve["err"], "in_bounds": ve["in_bounds"],
+    return {"side": {"water": vw, "land": vl},
+            "n_shore": ve["n_shore"], "err": ve["err"], "in_bounds": ve["in_bounds"],
             "iou_zone": holdout.iou(pred, ev_i, zone), "iou_lake": holdout.iou(pred, ev_i, lake_zone),
             "share_uncertain": float(unc[valid].mean()) if valid.any() else float("nan"),
             "shore_dist_median": sd["median"], "shore_dist_p90": sd["p90"]}
@@ -114,16 +122,26 @@ def main() -> int:
         res = bottom.compute_bounds(ev[f.train], h[f.train], sig[f.train], is_c=is_c[f.train], k_sigma=1.0)
         log.info("fold %d: train %d, test %d (%.0f s)", f.year, len(f.train), len(f.test), time.time() - t0)
         for i in f.test:
-            shore = holdout.shore_pixels(ev[i])
-            rec_h[i] = scene_record(res, ev[i], float(h[i]), zone, aoi, grid.transform, shore)
-            rec_s[i] = scene_record(served, ev[i], float(h[i]), zone, aoi, grid.transform, shore)
+            rec_h[i] = scene_record(res, ev[i], float(h[i]), zone, aoi, grid.transform)
+            rec_s[i] = scene_record(served, ev[i], float(h[i]), zone, aoi, grid.transform)
         del res
     test_idx = [i for i in range(n) if rec_h[i] is not None]
     rh, rs = [rec_h[i] for i in test_idx], [rec_s[i] for i in test_idx]
     ah, as_ = holdout.aggregate(rh), holdout.aggregate(rs)
 
-    def block(a):
-        return {k: a[k] for k in ("vertical", "iou_zone", "iou_lake", "share_uncertain", "shore_dist_m")}
+    def by_side(recs):
+        out = {}
+        for sd in ("water", "land"):
+            ok = [r["side"][sd] for r in recs]
+            err = np.concatenate([o["err"] for o in ok])
+            ib = np.concatenate([o["in_bounds"] for o in ok])
+            out[sd] = holdout.summarize(err, ib, int(sum(o["n_shore"] for o in ok)))
+        return out
+
+    def block(a, recs):
+        b = {k: a[k] for k in ("vertical", "iou_zone", "iou_lake", "share_uncertain", "shore_dist_m")}
+        b["vertical_by_side"] = by_side(recs)
+        return b
 
     yrs = year_of[test_idx]
     by_fold = {}
@@ -144,7 +162,7 @@ def main() -> int:
                       "in_sample_vertical": s["vertical"] if s["vertical"]["n"] else {"n": 0}}
 
     out = {"method": METHOD, "leakage_note": LEAKAGE, "n_folds": len(folds), "n_test_scenes": ah["n_test_scenes"],
-           "n_skipped": ah["n_skipped"], "holdout": block(ah), "in_sample": block(as_), "by_fold": by_fold,
+           "n_skipped": ah["n_skipped"], "holdout": block(ah, rh), "in_sample": block(as_, rs), "by_fold": by_fold,
            "by_period": by_period, "by_band": by_band}
     path = proc / "eval" / "holdout.json"
     path.parent.mkdir(parents=True, exist_ok=True)

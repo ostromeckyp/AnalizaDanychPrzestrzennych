@@ -24,7 +24,7 @@ def test_year_folds_split():
 
 def test_shore_pixels_4_neighbours():
     ev = np.array([[1, 1, 0], [1, 1, 255]], "uint8")
-    assert holdout.shore_pixels(ev).tolist() == [[False, True, False], [False, False, False]]
+    assert holdout.shore_pixels(ev, side="water").tolist() == [[False, True, False], [False, False, False]]
 
 
 def test_predict_water_rules():
@@ -111,3 +111,12 @@ def test_aggregate_nan_iou_excluded_and_all_empty():
     out = holdout.aggregate([_scene(0, [])])
     assert out["n_skipped"] == 1 and out["vertical"]["n"] == 0
     json.dumps(out, allow_nan=False)
+
+
+def test_shore_pixels_sides():
+    ev = np.array([[1, 1, 0], [1, 1, 255]], "uint8")
+    F, T = False, True
+    assert holdout.shore_pixels(ev, "water").tolist() == [[F, T, F], [F, F, F]]
+    assert holdout.shore_pixels(ev, "land").tolist() == [[F, F, T], [F, F, F]]
+    assert holdout.shore_pixels(ev, "both").tolist() == [[F, T, T], [F, F, F]]
+    assert holdout.shore_pixels(ev).tolist() == holdout.shore_pixels(ev, "both").tolist()

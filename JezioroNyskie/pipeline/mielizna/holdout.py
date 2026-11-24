@@ -43,15 +43,27 @@ def year_folds(sel: pd.DataFrame, years=range(2020, 2027), test_methods=("B", "R
     return folds
 
 
-def shore_pixels(ev: np.ndarray) -> np.ndarray:
-    """Piksele wody (1) mające co najmniej jednego 4-sąsiada lądu (0); 255 nie jest lądem, skośni sąsiedzi się nie liczą."""
-    land = ev == 0
-    nb = np.zeros(ev.shape, bool)
-    nb[1:, :] |= land[:-1, :]
-    nb[:-1, :] |= land[1:, :]
-    nb[:, 1:] |= land[:, :-1]
-    nb[:, :-1] |= land[:, 1:]
-    return (ev == 1) & nb
+def shore_pixels(ev: np.ndarray, side: str = "both") -> np.ndarray:
+    """Piksele brzegowe: woda z 4-sąsiadem lądu (`water`), ląd z 4-sąsiadem wody (`land`) albo suma (`both`, domyślnie).
+
+    Dlaczego tak: prawdziwe dno przecina poziom h między tymi dwoma pikselami, więc sam piksel wody dowodzi tylko, że dno
+      < h (z leży poniżej h, błąd obciążony o pół odstępu poziomów). Zebranie obu stron daje referencję ≈ h średnio.
+    255 nie jest ani wodą, ani lądem; skośni sąsiedzi się nie liczą.
+    """
+    if side not in ("water", "land", "both"):
+        raise ValueError(f"side: {side!r}")
+
+    def near(target):
+        nb = np.zeros(ev.shape, bool)
+        nb[1:, :] |= target[:-1, :]
+        nb[:-1, :] |= target[1:, :]
+        nb[:, 1:] |= target[:, :-1]
+        nb[:, :-1] |= target[:, 1:]
+        return nb
+
+    water = (ev == 1) & near(ev == 0)
+    land = (ev == 0) & near(ev == 1)
+    return water if side == "water" else land if side == "land" else water | land
 
 
 def predict_water(model: dict, h: float) -> tuple[np.ndarray, np.ndarray]:
