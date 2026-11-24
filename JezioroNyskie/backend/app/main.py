@@ -379,9 +379,8 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
 
         def build() -> bytes:
             h = p.hazards or {"source": "", "features": []}
-            urls = [f["properties"]["source_url"] for f in h["features"]]
             return json.dumps({"type": "FeatureCollection", "features": h["features"], "source": h["source"],
-                               "source_url": urls[0] if urls else HAZARDS_SOURCE_URL}, ensure_ascii=False).encode()
+                               "source_url": HAZARDS_SOURCE_URL}, ensure_ascii=False).encode()
         return static_json(request, f"-hazards-{p.hazards_hash}", build)
 
     @app.get("/api/capacity-to-level", response_model=CapacityToLevel)

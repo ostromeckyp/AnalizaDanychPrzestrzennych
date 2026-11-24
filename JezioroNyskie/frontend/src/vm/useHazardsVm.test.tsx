@@ -30,7 +30,7 @@ describe('useHazardsVm', () => {
     hazardsMock.mockResolvedValue(hazards);
     const { result } = setup();
     await waitFor(() => expect(result.current.hazards).toBeDefined());
-    expect(result.current.attribution).toBe('Klub Żeglarski NYSA, Locja Jeziora Nyskiego');
+    expect(result.current.attribution).toBe('Locja KŻ Nysa (kz.nysa.pl)');
   });
 
   it('empty collection leaves the layer absent', async () => {
@@ -56,13 +56,18 @@ describe('toHazardPopupModel', () => {
     const m = toHazardPopupModel(rafa, 195.25);
     expect(m.title).toBe('Miedniki – żelbetowa rafa');
     expect(m.level).toBe(`Rzędna wierzchołek: 193,7${NB}m n.p.m.`);
-    expect(m.relation).toEqual({ kind: 'under', text: `pod wodą: 1,55${NB}m` });
+    expect(m.relation).toEqual({ kind: 'under', text: `Przy poziomie 195,25${NB}m n.p.m.: pod wodą 1,55${NB}m` });
     expect(m.note).toBe('Rzędna z podpisu zdjęcia.');
   });
 
-  it('above the water level: over water; equal level counts as over water', () => {
-    expect(toHazardPopupModel(grzbiet, 195.25).relation).toEqual({ kind: 'over', text: `nad wodą: 0,25${NB}m` });
-    expect(toHazardPopupModel(rafa, 193.7).relation).toEqual({ kind: 'over', text: `nad wodą: 0,00${NB}m` });
+  it('above the water level: over water; within 5 mm counts as at water level', () => {
+    expect(toHazardPopupModel(grzbiet, 195.25).relation).toEqual({ kind: 'over', text: `Przy poziomie 195,25${NB}m n.p.m.: nad wodą 0,25${NB}m` });
+    expect(toHazardPopupModel(rafa, 193.702).relation).toEqual({ kind: 'at', text: `Przy poziomie 193,70${NB}m n.p.m.: na poziomie wody` });
+  });
+
+  it('non-http(s) source_url gives no link', () => {
+    const bad = { ...rafa, properties: { ...rafa.properties, source_url: 'javascript:alert(1)' } };
+    expect(toHazardPopupModel(bad, 195).sourceUrl).toBeUndefined();
   });
 
   it('empty note is omitted; unknown level omits the relation', () => {

@@ -35,9 +35,13 @@ export function HazardPopup({ model, onClose }: HazardPopupProps) {
         {model.note && <p className="popup__note">{model.note}</p>}
       </div>
       <p className="popup__caveat">
-        <a href={model.sourceUrl} target="_blank" rel="noopener noreferrer">
-          {model.sourceLabel}
-        </a>
+        {model.sourceUrl ? (
+          <a href={model.sourceUrl} target="_blank" rel="noopener noreferrer">
+            {model.sourceLabel}
+          </a>
+        ) : (
+          model.sourceLabel
+        )}
       </p>
       <p className="popup__caveat">{model.disclaimer}</p>
     </div>

@@ -173,7 +173,14 @@ export function useMapPageVm(): MapPageVm {
             visible,
             basemap: basemap === 'osm' ? 'map' : 'ortho',
             variant: 'list',
-            onToggle: (k) => setUserVisible((v) => ({ ...v, [k]: !visible[k] })),
+            onToggle: (k) => {
+              // Wyłączenie warstwy przeszkód zamyka otwarty popup przeszkody (pinezka też, bo należała do przeszkody).
+              if (k === 'hazards' && visible.hazards && hazardId) {
+                setHazardId(undefined);
+                setPin(undefined);
+              }
+              setUserVisible((v) => ({ ...v, [k]: !visible[k] }));
+            },
             onBasemap: (b) => setBasemap(b === 'map' ? 'osm' : 'orto'),
           },
           margin: {

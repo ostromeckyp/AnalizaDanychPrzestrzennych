@@ -25,11 +25,12 @@ export type HazardPopupModel = {
   /** „Rzędna wierzchołek: 193,7 m n.p.m.” */
   level: string;
   /** Położenie względem bieżącego lustra wody; brak, gdy poziom jeszcze nieznany. */
-  relation?: { kind: 'under' | 'over'; text: string };
+  relation?: { kind: 'under' | 'over' | 'at'; text: string };
   description: string;
   /** Uwaga z podpisu zdjęcia (mały, wyciszony tekst); brak, gdy pusta. */
   note?: string;
   sourceLabel: string;
-  sourceUrl: string;
+  /** Tylko adres http(s); inny schemat daje brak linku. */
+  sourceUrl?: string;
   disclaimer: string;
 };

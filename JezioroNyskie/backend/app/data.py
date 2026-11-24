@@ -13,6 +13,7 @@ Jak to obronić: „poza modelem" = obs_count 0 lub 65535 lub flags 255; bit 8 f
 """
 import hashlib
 import json
+import logging
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,6 +28,7 @@ from mielizna.capacity import MAX_PP_MLN_M3, NPP_MLN_M3  # brief §4, wspólne z
 from mielizna.levels import AreaLevelCurve
 
 CRS = "EPSG:2180"
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -111,7 +113,7 @@ def load_hazards(data_dir: Path) -> dict | None:
         return None
     if not isinstance(body, dict) or not isinstance(body.get("features"), list):
         return None
-    out = []
+    out, seen = [], set()
     for f in body["features"]:
         geom = f.get("geometry") if isinstance(f, dict) else None
         c = geom.get("coordinates") if isinstance(geom, dict) and geom.get("type") == "Point" else None
@@ -124,6 +126,12 @@ def load_hazards(data_dir: Path) -> dict | None:
             continue
         if not math.isfinite(props.z):
             continue
+        if not props.source_url.startswith(("https://", "http://")):    # link trafia do popupu: tylko http(s), nigdy javascript:
+            continue
+        if props.id in seen:
+            log.warning("locja_przeszkody: powtórzone id %r, pomijam kolejną cechę", props.id)
+            continue
+        seen.add(props.id)
         out.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [float(c[0]), float(c[1])]},
                     "properties": props.model_dump()})
     source = body.get("source")

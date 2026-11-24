@@ -228,11 +228,22 @@ describe('MapPage', () => {
       const dlg = await screen.findByRole('dialog', { name: 'Przeszkoda z locji' });
       expect(dlg).toHaveTextContent('Miedniki – żelbetowa rafa');
       expect(dlg.textContent).toContain(`Rzędna wierzchołek: 193,7${NB}m n.p.m.`);
-      expect(dlg.textContent).toContain(`pod wodą: 1,55${NB}m`);
+      expect(dlg.textContent).toContain(`Przy poziomie 195,25${NB}m n.p.m.: pod wodą 1,55${NB}m`);
       expect(m.point).not.toHaveBeenCalled();
       expect(mapProps.last!.pin).toEqual({ lon: 17.296333, lat: 50.453667 });
       await userEvent.click(within(dlg).getByRole('button', { name: 'Zamknij' }));
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('switching the layer off closes the hazard popup and clears the pin', async () => {
+      m.hazards.mockResolvedValue(hazards);
+      renderPage('/?h=195.25');
+      await waitFor(() => expect(mapProps.last!.hazards).toBeDefined());
+      await userEvent.click(screen.getByRole('button', { name: 'klik-rafa' }));
+      await screen.findByRole('dialog', { name: 'Przeszkoda z locji' });
+      await userEvent.click(screen.getByLabelText('Przeszkody z locji'));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(mapProps.last!.pin).toBeUndefined();
     });
 
     it('hazard above the water shows "nad wodą"; the relation follows the slider; a map click returns to the point popup', async () => {
@@ -241,9 +252,9 @@ describe('MapPage', () => {
       await waitFor(() => expect(mapProps.last!.hazards).toBeDefined());
       await userEvent.click(screen.getByRole('button', { name: 'klik-grzbiet' }));
       const dlg = await screen.findByRole('dialog', { name: 'Przeszkoda z locji' });
-      expect(dlg.textContent).toContain(`nad wodą: 0,25${NB}m`);
+      expect(dlg.textContent).toContain(`Przy poziomie 195,25${NB}m n.p.m.: nad wodą 0,25${NB}m`);
       fireEvent.change(screen.getByRole('slider'), { target: { value: '196' } });
-      await waitFor(() => expect(dlg.textContent).toContain(`pod wodą: 0,50${NB}m`));
+      await waitFor(() => expect(dlg.textContent).toContain(`Przy poziomie 196,00${NB}m n.p.m.: pod wodą 0,50${NB}m`));
       await userEvent.click(screen.getByRole('button', { name: 'klik-mapa' }));
       expect(await screen.findByRole('dialog', { name: 'Informacje o punkcie' })).toBeInTheDocument();
     });

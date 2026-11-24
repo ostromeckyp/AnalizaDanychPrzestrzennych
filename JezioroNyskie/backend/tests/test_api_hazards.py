@@ -79,7 +79,20 @@ def test_hazards_drops_invalid_features(dataset):
     bad_z = _feature(id="nan", z="wysoko")
     out_of_range = _feature(id="far")
     out_of_range["geometry"]["coordinates"] = [200.0, 50.0]
-    r = _client(dataset, _fc(_feature(id="ok"), bad_geom, bad_kind, missing, bad_z, out_of_range, "śmieć", None)).get("/api/hazards")
+    bad_url = _feature(id="js", source_url="javascript:alert(1)")
+    r = _client(dataset, _fc(_feature(id="ok"), bad_url, bad_geom, bad_kind, missing, bad_z, out_of_range, "śmieć", None)).get("/api/hazards")
     assert r.status_code == 200
     assert [f["properties"]["id"] for f in r.json()["features"]] == ["ok"]
     assert r.json()["source"] == "Źródło testowe"
+
+
+def test_hazards_duplicate_id_keeps_first_and_warns(dataset, caplog):
+    with caplog.at_level("WARNING"):
+        r = _client(dataset, _fc(_feature(id="a", name="Pierwsza"), _feature(id="a", name="Druga"), _feature(id="b"))).get("/api/hazards")
+    assert [(f["properties"]["id"], f["properties"]["name"]) for f in r.json()["features"]] == [("a", "Pierwsza"), ("b", "X")]
+    assert "powtórzone id" in caplog.text
+
+
+def test_hazards_source_url_is_constant(dataset):
+    r = _client(dataset, _fc(_feature(id="a", source_url="https://example.org/x"))).get("/api/hazards")
+    assert r.json()["source_url"] == "https://kz.nysa.pl/jezioro-nyskie/locja/"
