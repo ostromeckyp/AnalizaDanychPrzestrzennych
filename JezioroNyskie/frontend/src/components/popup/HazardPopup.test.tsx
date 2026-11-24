@@ -6,7 +6,7 @@ import type { HazardPopupModel } from './types';
 
 const model: HazardPopupModel = {
   title: 'Miedniki – żelbetowa rafa',
-  level: 'Rzędna wierzchołek: 193,7 m n.p.m.',
+  level: 'Rzędna wierzchołka: 193,7 m n.p.m.',
   relation: { kind: 'under', text: 'Przy poziomie 194,20 m n.p.m.: pod wodą 1,55 m' },
   description: 'Betonowa rafa tuż pod lustrem.',
   note: 'Rzędna z podpisu zdjęcia.',
@@ -20,7 +20,7 @@ describe('HazardPopup', () => {
     render(<HazardPopup model={model} onClose={vi.fn()} />);
     const dlg = screen.getByRole('dialog', { name: 'Przeszkoda z locji' });
     expect(dlg).toHaveTextContent('Miedniki – żelbetowa rafa');
-    expect(dlg).toHaveTextContent('Rzędna wierzchołek: 193,7 m n.p.m.');
+    expect(dlg).toHaveTextContent('Rzędna wierzchołka: 193,7 m n.p.m.');
     expect(dlg).toHaveTextContent('Przy poziomie 194,20 m n.p.m.: pod wodą 1,55 m');
     expect(dlg).toHaveTextContent('Betonowa rafa tuż pod lustrem.');
     expect(dlg).toHaveTextContent('Rzędna z podpisu zdjęcia.');

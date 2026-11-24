@@ -16,6 +16,9 @@ export function useHazardsVm(): { hazards?: Hazards; attribution?: string } {
   return { hazards: data, attribution: data ? HAZARDS_ATTRIBUTION : undefined };
 }
 
+// z_kind z pliku locji (mianownik) → dopełniacz po „Rzędna”; nieznany rodzaj zostaje bez zmian.
+const Z_KIND_GENITIVE: Record<string, string> = { wierzchołek: 'wierzchołka', dno: 'dna', grzbiet: 'grzbietu' };
+
 /** Czysta funkcja: cecha z API + bieżący poziom wody h → model popupu. Bez skończonego h pomijamy położenie względem wody. */
 export function toHazardPopupModel(f: HazardFeature, h: number): HazardPopupModel {
   const p = f.properties;
@@ -23,7 +26,7 @@ export function toHazardPopupModel(f: HazardFeature, h: number): HazardPopupMode
   const at = `Przy poziomie ${fmtLevel(h)}`;
   return {
     title: p.name,
-    level: `Rzędna ${p.z_kind}: ${fmtNum(p.z, 1)}${NBSP}m n.p.m.`,
+    level: `Rzędna ${Z_KIND_GENITIVE[p.z_kind] ?? p.z_kind}: ${fmtNum(p.z, 1)}${NBSP}m n.p.m.`,
     relation: Number.isFinite(h)
       ? diff < 0.005
         ? { kind: 'at', text: `${at}: na poziomie wody` }

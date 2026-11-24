@@ -227,7 +227,7 @@ describe('MapPage', () => {
       await userEvent.click(screen.getByRole('button', { name: 'klik-rafa' }));
       const dlg = await screen.findByRole('dialog', { name: 'Przeszkoda z locji' });
       expect(dlg).toHaveTextContent('Miedniki – żelbetowa rafa');
-      expect(dlg.textContent).toContain(`Rzędna wierzchołek: 193,7${NB}m n.p.m.`);
+      expect(dlg.textContent).toContain(`Rzędna wierzchołka: 193,7${NB}m n.p.m.`);
       expect(dlg.textContent).toContain(`Przy poziomie 195,25${NB}m n.p.m.: pod wodą 1,55${NB}m`);
       expect(m.point).not.toHaveBeenCalled();
       expect(mapProps.last!.pin).toEqual({ lon: 17.296333, lat: 50.453667 });

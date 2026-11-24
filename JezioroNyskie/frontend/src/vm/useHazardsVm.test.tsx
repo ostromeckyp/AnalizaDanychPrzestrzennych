@@ -55,7 +55,7 @@ describe('toHazardPopupModel', () => {
   it('below the water level: under water with a decimal comma', () => {
     const m = toHazardPopupModel(rafa, 195.25);
     expect(m.title).toBe('Miedniki – żelbetowa rafa');
-    expect(m.level).toBe(`Rzędna wierzchołek: 193,7${NB}m n.p.m.`);
+    expect(m.level).toBe(`Rzędna wierzchołka: 193,7${NB}m n.p.m.`);
     expect(m.relation).toEqual({ kind: 'under', text: `Przy poziomie 195,25${NB}m n.p.m.: pod wodą 1,55${NB}m` });
     expect(m.note).toBe('Rzędna z podpisu zdjęcia.');
   });

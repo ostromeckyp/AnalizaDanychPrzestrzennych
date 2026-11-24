@@ -22,7 +22,7 @@ export type PopupModel = {
 /** Model popupu przeszkody z locji; budowany w vm/useHazardsVm, komponent tylko go wyświetla. */
 export type HazardPopupModel = {
   title: string;
-  /** „Rzędna wierzchołek: 193,7 m n.p.m.” */
+  /** „Rzędna wierzchołka: 193,7 m n.p.m.” */
   level: string;
   /** Położenie względem bieżącego lustra wody; brak, gdy poziom jeszcze nieznany. */
   relation?: { kind: 'under' | 'over' | 'at'; text: string };
