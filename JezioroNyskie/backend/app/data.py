@@ -13,6 +13,7 @@ Jak to obronić: „poza modelem" = obs_count 0 lub 65535 lub flags 255; bit 8 f
 """
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -54,6 +55,8 @@ class Products:
     gravel: gpd.GeoDataFrame | None = None            # obrys żwirowni (EPSG:2180) albo None, gdy brak pliku
     eval_hash: str = ""                               # odcisk treści plików oceny (część ETagu /api/meta)
     gravel_hash: str = ""                             # odcisk bajtów pliku obrysu (część ETagu /api/gravel)
+    hazards: dict | None = None                       # przeszkody z locji KŻ ({"source", "features"}) albo None, gdy brak pliku
+    hazards_hash: str = ""                            # odcisk bajtów pliku przeszkód (część ETagu /api/hazards)
     gravel_geom: object | None = None                 # suma obrysów jako przygotowana geometria do testu „punkt w obrysie"
 
 
@@ -92,6 +95,39 @@ def load_gravel(data_dir: Path) -> gpd.GeoDataFrame | None:
     """Obrys żwirowni z `reference/zwirownia.gpkg` (EPSG:2180) albo None, gdy plik nie istnieje."""
     f = Path(data_dir) / "reference" / "zwirownia.gpkg"
     return gpd.read_file(f).to_crs(CRS) if f.exists() else None
+
+
+def load_hazards(data_dir: Path) -> dict | None:
+    """Przeszkody z locji KŻ Nysa (`reference/locja_przeszkody.geojson`, EPSG:4326) jako {"source", "features"}.
+
+    Brak pliku albo uszkodzony plik daje None; niepoprawne cechy (nie-punkt, współrzędne poza zakresem,
+    brak lub zły typ właściwości) są pomijane pojedynczo.
+    """
+    from pydantic import ValidationError
+    from app.schemas import HazardProperties
+    try:
+        body = json.loads((Path(data_dir) / "reference" / "locja_przeszkody.geojson").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(body, dict) or not isinstance(body.get("features"), list):
+        return None
+    out = []
+    for f in body["features"]:
+        geom = f.get("geometry") if isinstance(f, dict) else None
+        c = geom.get("coordinates") if isinstance(geom, dict) and geom.get("type") == "Point" else None
+        if (not isinstance(c, list) or len(c) < 2 or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in c[:2])
+                or not (-180 <= c[0] <= 180 and -90 <= c[1] <= 90)):
+            continue
+        try:
+            props = HazardProperties.model_validate(f.get("properties"))
+        except ValidationError:
+            continue
+        if not math.isfinite(props.z):
+            continue
+        out.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [float(c[0]), float(c[1])]},
+                    "properties": props.model_dump()})
+    source = body.get("source")
+    return {"source": source if isinstance(source, str) else "", "features": out}
 
 
 def load_products(data_dir: Path, period: str = "all") -> Products:
@@ -133,6 +169,8 @@ def load_products(data_dir: Path, period: str = "all") -> Products:
     ev = load_eval(data_dir)
     gf = data_dir / "reference" / "zwirownia.gpkg"
     gravel_hash = short_hash(gf.read_bytes()) if gf.exists() else ""
+    hf = data_dir / "reference" / "locja_przeszkody.geojson"
+    hazards_hash = short_hash(hf.read_bytes()) if hf.exists() else ""
     gravel_geom = None
     if gravel is not None and len(gravel):
         from shapely.prepared import prep
@@ -145,4 +183,5 @@ def load_products(data_dir: Path, period: str = "all") -> Products:
         curve=curve, rf_metrics=rf_metrics, z_max_floor=float(finite_max.min()), npp=npp, max_pp=max_pp,
         capacity_table=capacity_table, eval=ev, eval_hash=short_hash(json.dumps(ev, sort_keys=True).encode()),
         gravel_hash=gravel_hash, gravel=gravel, gravel_geom=gravel_geom,
+        hazards=load_hazards(data_dir), hazards_hash=hazards_hash,
     )

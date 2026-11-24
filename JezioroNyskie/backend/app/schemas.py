@@ -228,6 +228,29 @@ class GravelResponse(BaseModel):
     features: list[GravelFeature]
 
 
+class HazardProperties(BaseModel):
+    id: str
+    name: str
+    kind: Literal["przeszkoda", "spłycenie"]
+    z: float                                    # rzędna [m n.p.m.]
+    z_kind: Literal["wierzchołek", "dno", "grzbiet"]
+    description: str
+    coords_as_published: str
+    note: str = ""
+    source_url: str
+
+
+class HazardFeature(GeoFeature):
+    properties: HazardProperties
+
+
+class HazardsResponse(BaseModel):
+    type: Literal["FeatureCollection"]
+    features: list[HazardFeature]
+    source: str
+    source_url: str
+
+
 class SceneOut(BaseModel):
     date: str
     h_t: float | None

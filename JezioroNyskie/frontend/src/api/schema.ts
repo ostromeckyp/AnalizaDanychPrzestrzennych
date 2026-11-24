@@ -126,6 +126,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hazards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Hazards
+         * @description Przeszkody z locji KŻ Nysa (punkty, EPSG:4326); brak pliku daje pustą kolekcję, nie błąd.
+         */
+        get: operations["hazards_api_hazards_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/capacity-to-level": {
         parameters: {
             query?: never;
@@ -453,6 +473,67 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HazardFeature */
+        HazardFeature: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "Feature";
+            /** Geometry */
+            geometry: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id?: string | number | null;
+            /** Bbox */
+            bbox?: number[] | null;
+            properties: components["schemas"]["HazardProperties"];
+        };
+        /** HazardProperties */
+        HazardProperties: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "przeszkoda" | "spłycenie";
+            /** Z */
+            z: number;
+            /**
+             * Z Kind
+             * @enum {string}
+             */
+            z_kind: "wierzchołek" | "dno" | "grzbiet";
+            /** Description */
+            description: string;
+            /** Coords As Published */
+            coords_as_published: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Source Url */
+            source_url: string;
+        };
+        /** HazardsResponse */
+        HazardsResponse: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "FeatureCollection";
+            /** Features */
+            features: components["schemas"]["HazardFeature"][];
+            /** Source */
+            source: string;
+            /** Source Url */
+            source_url: string;
         };
         /** Layers */
         Layers: {
@@ -987,6 +1068,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    hazards_api_hazards_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HazardsResponse"];
+                };
             };
         };
     };

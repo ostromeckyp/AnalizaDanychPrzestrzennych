@@ -38,7 +38,7 @@ from app.cache import TTLStore
 from app.data import Products, capacity_to_level, level_to_capacity, load_products, short_hash
 from app.layers import RENDER_VERSION, UNC_MIN, layer_coordinates, bottom_breaks, render_bottom_png, render_uncertainty_png
 from app.point import point_info
-from app.schemas import (BulletinLatest, CapacityToLevel, CurrentLevelResponse, GravelResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
+from app.schemas import (BulletinLatest, CapacityToLevel, CurrentLevelResponse, GravelResponse, HazardsResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
                          SceneOut, ShorelineFeature, Validation, ValidationBand, ValidationCheck, ZonesResponse)
 from app.settings import Settings, get_settings
 from app.zones import (round_param, zone_classes, zone_stats, zone_warnings, zones_geojson)
@@ -114,6 +114,7 @@ def build_layers(products: Products) -> Layers:
         uncertainty={"url": "/api/layers/uncertainty.png", "coordinates": coords, "min_unc": UNC_MIN})
 
 
+HAZARDS_SOURCE_URL = "https://kz.nysa.pl/jezioro-nyskie/locja/"
 GRAVEL_ATTRIBUTION = "Obrys wg mapy KŻ Nysa (W. Wróblewski, 2023)"
 
 
@@ -370,6 +371,18 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
                       "properties": {"source": "; ".join(sources), "attribution": GRAVEL_ATTRIBUTION}}]
             return json.dumps({"type": "FeatureCollection", "features": feats}, ensure_ascii=False).encode()
         return static_json(request, f"-gravel-{p.gravel_hash}", build)
+
+    @app.get("/api/hazards", response_model=HazardsResponse)
+    def hazards(request: Request):
+        """Przeszkody z locji KŻ Nysa (punkty, EPSG:4326); brak pliku daje pustą kolekcję, nie błąd."""
+        p: Products = request.app.state.products
+
+        def build() -> bytes:
+            h = p.hazards or {"source": "", "features": []}
+            urls = [f["properties"]["source_url"] for f in h["features"]]
+            return json.dumps({"type": "FeatureCollection", "features": h["features"], "source": h["source"],
+                               "source_url": urls[0] if urls else HAZARDS_SOURCE_URL}, ensure_ascii=False).encode()
+        return static_json(request, f"-hazards-{p.hazards_hash}", build)
 
     @app.get("/api/capacity-to-level", response_model=CapacityToLevel)
     def capacity_to_level_ep(request: Request, v: float = Query(..., gt=0, le=CAPACITY_MAX_MLN_M3,

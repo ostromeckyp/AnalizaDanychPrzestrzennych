@@ -276,6 +276,25 @@
     }
    }
   },
+  "/api/hazards": {
+   "get": {
+    "summary": "Hazards",
+    "description": "Przeszkody z locji KŻ Nysa (punkty, EPSG:4326); brak pliku daje pustą kolekcję, nie błąd.",
+    "operationId": "hazards_api_hazards_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HazardsResponse"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/capacity-to-level": {
    "get": {
     "summary": "Capacity To Level Ep",
@@ -1225,6 +1244,152 @@
     },
     "type": "object",
     "title": "HTTPValidationError"
+   },
+   "HazardFeature": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "Feature",
+      "title": "Type"
+     },
+     "geometry": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Geometry"
+     },
+     "id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "bbox": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "number"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bbox"
+     },
+     "properties": {
+      "$ref": "#/components/schemas/HazardProperties"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "geometry",
+     "properties"
+    ],
+    "title": "HazardFeature"
+   },
+   "HazardProperties": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "przeszkoda",
+       "spłycenie"
+      ],
+      "title": "Kind"
+     },
+     "z": {
+      "type": "number",
+      "title": "Z"
+     },
+     "z_kind": {
+      "type": "string",
+      "enum": [
+       "wierzchołek",
+       "dno",
+       "grzbiet"
+      ],
+      "title": "Z Kind"
+     },
+     "description": {
+      "type": "string",
+      "title": "Description"
+     },
+     "coords_as_published": {
+      "type": "string",
+      "title": "Coords As Published"
+     },
+     "note": {
+      "type": "string",
+      "title": "Note",
+      "default": ""
+     },
+     "source_url": {
+      "type": "string",
+      "title": "Source Url"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "kind",
+     "z",
+     "z_kind",
+     "description",
+     "coords_as_published",
+     "source_url"
+    ],
+    "title": "HazardProperties"
+   },
+   "HazardsResponse": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "FeatureCollection",
+      "title": "Type"
+     },
+     "features": {
+      "items": {
+       "$ref": "#/components/schemas/HazardFeature"
+      },
+      "type": "array",
+      "title": "Features"
+     },
+     "source": {
+      "type": "string",
+      "title": "Source"
+     },
+     "source_url": {
+      "type": "string",
+      "title": "Source Url"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "features",
+     "source",
+     "source_url"
+    ],
+    "title": "HazardsResponse"
    },
    "Layers": {
     "properties": {
