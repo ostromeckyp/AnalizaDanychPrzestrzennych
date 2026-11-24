@@ -37,16 +37,17 @@ EVALCH  := $(PROC)/eval/model_choice.json
 EVALKZ  := $(PROC)/eval/kz_compare.json
 EVALVOL := $(PROC)/eval/volume.json
 EVALHO  := $(PROC)/eval/holdout.json
+EVALEB  := $(PROC)/eval/error_budget.json
 KZOVER  := ../docs/img/kz-overlay.png
 ZWIR    := $(REF)/zwirownia.gpkg
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate volume holdout test check-locks clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate volume holdout error-budget test check-locks clean-model
 .DEFAULT_GOAL := help
 
 help:
-	@echo "Cele: osm nmt s2 label-candidates label-ui rf classify shorelines bulletins lidar-epochs levels-a levels bottom kz-georef evaluate volume holdout all test clean-model"
+	@echo "Cele: osm nmt s2 label-candidates label-ui rf classify shorelines bulletins lidar-epochs levels-a levels bottom kz-georef evaluate volume holdout error-budget all test clean-model"
 	@echo "Kolejność: osm -> s2 -> label-candidates -> (ręczne etykiety: label-ui) -> rf -> classify"
 	@echo "           -> shorelines -> bulletins -> levels -> bottom"
 
@@ -186,6 +187,11 @@ $(EVALVOL): 11_volume.py mielizna/volume.py $(REF)/kz_pojemnosc_rzedna.csv $(EVA
 holdout: $(EVALHO)
 $(EVALHO): 12_holdout.py mielizna/holdout.py mielizna/budget.py $(EVALCH)
 	$(UV) 12_holdout.py
+
+# error-budget: budżet błędu wg pasm rzędnej (13_error_budget.py). Czyta tylko JSON-y oceny, nie dotyka łańcucha S2.
+error-budget: $(EVALEB)
+$(EVALEB): 13_error_budget.py mielizna/budget.py $(EVALHO) $(EVALCH) $(EVALKZ) $(EVALVOL)
+	$(UV) 13_error_budget.py
 
 test:
 	uv run pytest -q
