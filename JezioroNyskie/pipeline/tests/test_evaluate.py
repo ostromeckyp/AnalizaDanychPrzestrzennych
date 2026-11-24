@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from affine import Affine
 
-from mielizna import evaluate
+from mielizna import budget, evaluate
 from mielizna.grid import Grid
 
 NAN = np.nan
@@ -124,6 +124,16 @@ def test_split_pairs_by_z_partitions_pixels():
     assert evaluate.pooled_bottom(lt)["n"] == 2 and evaluate.pooled_bottom(ge)["n"] == 2
     assert all((p["z"] < 194.5).all() for p in lt) and all((p["z"] >= 194.5).all() for p in ge)
     assert set(lt[0]) == {"z", "z_min", "z_max", "ref"}
+
+
+def test_split_pairs_by_band_on_ref():
+    part = {"z": np.array([194.0, 194.0, 194.0]), "z_min": np.array([193.0] * 3), "z_max": np.array([195.0] * 3),
+            "ref": np.array([192.0, 193.0, 195.0])}
+    out = evaluate.split_pairs_by_band([part])
+    assert list(out) == list(budget.BANDS)
+    assert all(len(out[b][0]["ref"]) == 1 for b in budget.BANDS)       # po jednym pikselu; z (wszędzie 194) nie wpływa
+    assert out["<192.9"][0]["ref"][0] == 192.0 and out["194.8+"][0]["ref"][0] == 195.0
+    assert set(out["<192.9"][0]) == {"z", "z_min", "z_max", "ref"}
 
 
 def test_compare_models_common_and_extra_ring():

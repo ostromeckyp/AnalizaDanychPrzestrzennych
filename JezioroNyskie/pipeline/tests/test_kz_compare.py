@@ -60,6 +60,14 @@ def test_points_banded_and_gravel_excluded():
     assert r["pooled"]["bands"] == "192.5+"
 
 
+def test_compare_points_by_band_empty_band():
+    s = spots([(105, 105, 195.5), (305, 305, 196.5)])                    # oba >= 194,8
+    r = kz_compare.compare_points_by_band(s, model(), None, GRID, verdict="good")
+    assert list(r) == ["<192.9", "192.9-194.8", "194.8+"]
+    assert r["192.9-194.8"] == {"n": 0} and r["<192.9"] == {"n": 0}
+    assert r["194.8+"]["n"] == 2 and {"mae", "bias"} <= set(r["194.8+"])
+
+
 def test_points_without_model_are_dropped_and_counted():
     m = model()
     m["z"][0:20, 0:20] = np.nan                                    # lewy górny róg (x<200, y>800) bez modelu

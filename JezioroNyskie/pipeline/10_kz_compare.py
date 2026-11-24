@@ -117,6 +117,7 @@ def run_points() -> dict:
         res["ocr_error_rate"] = {"rate_weighted": rate, "n_judged": n_ev, "n_population": int(len(ocr)), "n_unmatched_qc_rows": n_unmatched,
                                  "qc_counts": qc.qc.value_counts().to_dict(),
                                  "note": "ważony warstwami (podejrzane vs pewne); próg roboczy <= 10 % na próbie >= 200"}
+    res["budget_bands"] = kz_compare.compare_points_by_band(spots, model, gravel, grid=grid, verdict=meta["verdict"])
     _write("kz_points.json", res)
     p = res["pooled"]
     log.info("punkty: pooled n=%d rmse=%.2f bias=%+.2f in_bounds=%.2f; pasma %s", p["n"], p["rmse"], p["bias"], p["share_in_bounds"],

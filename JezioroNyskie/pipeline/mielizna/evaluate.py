@@ -14,6 +14,8 @@ Jak to obronić: każda metryka ma jawny wzór (bias = średnia(pred - ref)); fi
 """
 import numpy as np
 
+from mielizna import budget
+
 SHARE_THRESHOLD = 0.05        # udział pikseli z istotną zmianą dna, od którego aplikacja przechodzi na post_flood
 WATER_MARGIN = 0.1            # [m] NMT musi leżeć o tyle nad poziomem wody epoki, by uznać piksel za ląd
 MIN_WATER_SHARE = 0.02       # dominanta histogramu arkusza uznawana za płaską wodę, gdy obejmuje >= 2 % komórek
@@ -82,6 +84,18 @@ def split_pairs_by_z(parts: list[dict], z_split: float) -> tuple[list[dict], lis
     def take(p, m):
         return {k: p[k][m] for k in ("z", "z_min", "z_max", "ref")}
     return ([take(p, p["z"] < z_split) for p in parts], [take(p, p["z"] >= z_split) for p in parts])
+
+
+def split_pairs_by_band(parts: list[dict], key: str = "ref") -> dict[str, list[dict]]:
+    """Dzieli piksele (wynik `bottom_pairs`) na pasma budżetu błędu wg `p[key]` (domyślnie `ref`, rzędna odniesienia).
+
+    Dlaczego tak: pasmo ma opisywać, gdzie leży dno naprawdę (NMT), a nie gdzie model je ustawił; podział wg `z` modelu
+      mieszałby błąd z przynależnością do pasma. Wejście → wyjście: lista słowników {z, z_min, z_max, ref} →
+      słownik pasmo → ta sama lista (klucze = `budget.BANDS`, pasmo bez pikseli daje puste tablice).
+    Jak to obronić: test sprawdza, że `z` nie wpływa na podział, a granica 192,9 należy do pasma wyższego."""
+    labels = [budget.band_of(p[key]) for p in parts]
+    return {b: [{k: p[k][lab == b] for k in ("z", "z_min", "z_max", "ref")} for p, lab in zip(parts, labels)]
+            for b in budget.BANDS}
 
 
 def _pct(v: np.ndarray, qs=(5, 50, 95)) -> dict:

@@ -20,7 +20,7 @@ import shapely
 from shapely.geometry import LineString, MultiLineString
 from skimage.measure import find_contours
 
-from mielizna import capacity, evaluate
+from mielizna import budget, capacity, evaluate
 from mielizna.capacity import NPP_MLN_M3   # wspólna z backendem (brief §4)
 
 MAIN_FROM = 192.5         # poniżej mapa KŻ jest orientacyjna
@@ -110,6 +110,26 @@ def compare_points(spots, model: dict, gravel, npp: float, grid, verdict: str = 
     out["pooled"]["bands"] = "192.5+"
     out["unit"] = unit
     out["npp"] = float(npp)
+    return out
+
+
+def compare_points_by_band(spots, model: dict, gravel, grid, verdict: str = "good") -> dict[str, dict]:
+    """Metryki dna modelu względem rzędnych KŻ w pasmach budżetu błędu (`budget.BANDS`), pasmo wg rzędnej KŻ.
+
+    Co robi: te same pary co `compare_points` (piksel 10 m lub komórka 50 m wg `verdict`), ale dzielone na pasma
+      <192,9 / 192,9-194,8 / 194,8+ po rzędnej odniesienia (KŻ), nie modelu. Pasmo bez par daje `{"n": 0}` (bez NaN).
+    Dlaczego tak: budżet błędu zestawia źródła w tych samych pasmach; pasmo wg odniesienia nie zależy od błędu modelu.
+    Wejście → wyjście: punkty KŻ, model (zwykle `pre_flood`), żwirownia, siatka → {pasmo: {n, mae, rmse, bias, ...}}.
+    Jak to obronić: test na zbiorze bez punktów w paśmie środkowym; wartości liczy ten sam `_block` co pasma KŻ."""
+    cells = verdict == "aggregated_only"
+    ref, pred, lo, hi = (_pairs_cells if cells else _pairs_points)(spots, model, gravel, grid)
+    unit = "cell50" if cells else "pixel10"
+    lab = budget.band_of(ref)
+    out = {}
+    for b in budget.BANDS:
+        m = lab == b
+        blk = _block(ref[m], pred[m], lo[m], hi[m], int(m.sum()), unit)
+        out[b] = blk if blk["n"] else {"n": 0}
     return out
 
 

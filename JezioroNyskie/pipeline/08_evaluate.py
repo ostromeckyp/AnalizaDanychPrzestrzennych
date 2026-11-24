@@ -107,6 +107,11 @@ def eval_bottom(proc: Path, grid, models: dict, gravel: np.ndarray):
     lt, ge = evaluate.split_pairs_by_z(pooled["all"], Z_SPLIT)
     out["all_z_lt_196"] = {**evaluate.pooled_bottom(lt), "note": f"model all, piksele z z modelu < {Z_SPLIT} m, wszystkie epoki"}
     out["all_z_ge_196"] = {**evaluate.pooled_bottom(ge), "note": f"model all, piksele z z modelu >= {Z_SPLIT} m, wszystkie epoki"}
+    # pasma budżetu błędu wg wysokości NMT (ref), nie modelu; pasmo puste = {"n": 0}
+    out["all_by_band"] = {}
+    for band, parts in evaluate.split_pairs_by_band(pooled["all"]).items():
+        r = evaluate.pooled_bottom(parts)
+        out["all_by_band"][band] = {**r, "split_on": "ref"} if r["n"] else {"n": 0}
     out["all_vs_pre_flood_models"] = {**evaluate.compare_models(models["all"], models["pre_flood"]),
                                       "note": "rastry modeli (cały akwen, bez filtra bloków/NMT): diff = z_all - z_pre_flood na pikselach "
                                               "wspólnych; z_a_only = rzędne pikseli, które ma tylko model all"}
