@@ -127,7 +127,7 @@ def _sample(geom, step: float = LINE_STEP_M) -> np.ndarray:
     return np.asarray(pts, float).reshape(-1, 2)
 
 
-def _dists(a, b, step: float = LINE_STEP_M) -> np.ndarray:
+def line_distances(a, b, step: float = LINE_STEP_M) -> np.ndarray:
     """Odległości punktów próbkowanych na `a` (co `step` m) do geometrii `b`."""
     pts = _sample(a, step)
     return shapely.distance(shapely.points(pts), b) if len(pts) else np.array([])
@@ -135,7 +135,7 @@ def _dists(a, b, step: float = LINE_STEP_M) -> np.ndarray:
 
 def mean_distance(a, b, step: float = LINE_STEP_M) -> float:
     """Średnia odległość symetryczna linii: (śr. a->b + śr. b->a) / 2 [m]; równoległe linie o odstępie 10 m dają 10."""
-    return float((_dists(a, b, step).mean() + _dists(b, a, step).mean()) / 2)
+    return float((line_distances(a, b, step).mean() + line_distances(b, a, step).mean()) / 2)
 
 
 def model_contour(z: np.ndarray, grid, level: float):
@@ -163,8 +163,8 @@ def compare_contours(kz_geom, model_geom, clip_m: float = CLIP_M) -> dict:
     if not _parts(clipped) or not _parts(kz_geom):
         return {**out, "mean_distance_m": float("nan"), "hausdorff_m": float("nan"),
                 "kz_to_model_mean_m": float("nan"), "kz_to_model_p90_m": float("nan")}
-    d = _dists(kz_geom, model_geom)
-    out.update({"mean_distance_m": mean_distance(kz_geom, clipped), "hausdorff_m": float(max(_dists(kz_geom, clipped).max(), _dists(clipped, kz_geom).max())),
+    d = line_distances(kz_geom, model_geom)
+    out.update({"mean_distance_m": mean_distance(kz_geom, clipped), "hausdorff_m": float(max(line_distances(kz_geom, clipped).max(), line_distances(clipped, kz_geom).max())),
                 "kz_to_model_mean_m": float(d.mean()), "kz_to_model_p90_m": float(np.percentile(d, 90)),
                 "clip_m": float(clip_m)})
     return out
