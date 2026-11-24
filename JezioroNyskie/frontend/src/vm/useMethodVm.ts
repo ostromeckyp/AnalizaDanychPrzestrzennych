@@ -18,6 +18,7 @@ export type MethodValidation = {
   intro: string;
   checks: { name: string; comparedWith: string; result: string }[];
   bands: { label: string; range: string; dominant: string; note: string }[];
+  bandsNote: string;
   lidarNote: string;
 };
 
@@ -222,6 +223,7 @@ export function useMethodVm(): MethodVm {
           dominant: b.dominant ?? '—',
           note: b.range_m ? '' : b.note,
         })),
+        bandsNote: 'Główne źródło = kontrola z największym błędem w paśmie.',
         lidarNote: val.lidar_note,
       }
     : undefined;

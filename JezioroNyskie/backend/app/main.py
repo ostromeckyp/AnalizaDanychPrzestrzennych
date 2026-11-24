@@ -151,7 +151,7 @@ def _int(d, *keys) -> int | None:
 
 # pasma budżetu błędu od najwyższego: klucz w `error_budget.json` → etykieta (przecinek dziesiętny, półpauza)
 VALIDATION_BANDS = (("194.8+", "≥ 194,8 m"), ("192.9-194.8", "192,9–194,8 m"), ("<192.9", "< 192,9 m"))
-DOMINANT_LABELS = {"holdout": "hold-out roczny", "lidar": "NMT LiDAR", "kz": "mapa KŻ (model pre_flood)"}
+DOMINANT_LABELS = {"holdout": "hold-out roczny", "lidar": "NMT LiDAR", "kz": "mapa KŻ (model sprzed powodzi)"}
 
 
 def build_validation(products: Products) -> Validation | None:

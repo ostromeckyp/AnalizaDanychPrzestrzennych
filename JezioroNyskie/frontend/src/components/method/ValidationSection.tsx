@@ -2,7 +2,7 @@ import type { MethodValidation } from '../../vm/useMethodVm';
 
 // Sekcja „Jak sprawdziliśmy model”: pięć kontroli i tabela zakresu błędu dna wg pasm wysokości.
 // Tabela przewija się w własnym kontenerze (.sources), nie strona.
-export function ValidationSection({ intro, checks, bands, lidarNote }: MethodValidation) {
+export function ValidationSection({ intro, checks, bands, bandsNote, lidarNote }: MethodValidation) {
   return (
     <section aria-labelledby="m-val">
       <h2 id="m-val">Jak sprawdziliśmy model</h2>
@@ -28,7 +28,7 @@ export function ValidationSection({ intro, checks, bands, lidarNote }: MethodVal
             {bands.map((b) => (
               <tr key={b.label}>
                 <th scope="row">{b.label}</th>
-                <td>{b.range}</td>
+                <td className="val__range">{b.range}</td>
                 <td>
                   {b.dominant}
                   {b.note && <small className="val__note">{b.note}</small>}
@@ -38,6 +38,7 @@ export function ValidationSection({ intro, checks, bands, lidarNote }: MethodVal
           </tbody>
         </table>
       </div>
+      <p className="method__note">{bandsNote}</p>
       <p className="method__credit">{lidarNote}</p>
     </section>
   );

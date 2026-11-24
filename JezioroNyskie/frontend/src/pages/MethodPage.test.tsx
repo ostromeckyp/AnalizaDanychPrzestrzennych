@@ -35,7 +35,7 @@ const validation: NonNullable<Meta['validation']> = {
   ],
   bands: [
     { band: '≥ 194,8 m', range_m: [0.6, 1.3], dominant: 'NMT LiDAR', note: 'n1' },
-    { band: '192,9–194,8 m', range_m: [1.04, 1.34], dominant: 'mapa KŻ (model pre_flood)', note: 'n2' },
+    { band: '192,9–194,8 m', range_m: [1.04, 1.34], dominant: 'mapa KŻ (model sprzed powodzi)', note: 'n2' },
     { band: '< 192,9 m', range_m: null, dominant: null, note: 'Brak pomiarów w tym paśmie.' },
   ],
   lidar_note: 'LiDAR obejmuje tylko odsłonięty teren.',
@@ -114,10 +114,12 @@ describe('MethodPage', () => {
     expect(list).toHaveTextContent('Hold-out roczny — linie wody tego roku');
     const table = screen.getByRole('table', { name: 'Zakres błędu dna' });
     expect(within(table).getByText('1,04–1,34 m')).toBeInTheDocument();
-    expect(within(table).getByText('mapa KŻ (model pre_flood)')).toBeInTheDocument();
+    expect(within(table).getByText('mapa KŻ (model sprzed powodzi)')).toBeInTheDocument();
     const row = within(table).getByText('< 192,9 m').closest('tr')!;
     expect(row).toHaveTextContent('brak danych');
     expect(row).toHaveTextContent('Brak pomiarów w tym paśmie.');
+    expect(screen.getByText('Główne źródło = kontrola z największym błędem w paśmie.')).toBeInTheDocument();
+    expect(within(table).getByText('1,04–1,34 m')).toHaveClass('val__range');
     expect(screen.getByText('LiDAR obejmuje tylko odsłonięty teren.')).toBeInTheDocument();
   });
 

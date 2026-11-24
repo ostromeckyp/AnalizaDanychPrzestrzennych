@@ -148,7 +148,7 @@ def test_meta_validation_dominant_labels_and_passthrough(dataset):
     b["bands"]["194.8+"]["dominant"] = "inne"
     _write_eval(dataset, "error_budget", b)
     bands = _client(dataset).get("/api/meta").json()["validation"]["bands"]
-    assert [x["dominant"] for x in bands] == ["inne", "NMT LiDAR", "mapa KŻ (model pre_flood)"]
+    assert [x["dominant"] for x in bands] == ["inne", "NMT LiDAR", "mapa KŻ (model sprzed powodzi)"]
 
 
 @pytest.mark.parametrize("body", [

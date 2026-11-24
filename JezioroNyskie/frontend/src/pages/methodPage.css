@@ -45,4 +45,5 @@
 
 .checks { max-width: 760px; margin: 0 0 16px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
 .val__sub { font-size: 15px; margin: 8px 0; }
+.val__range { white-space: nowrap; }
 .val__note { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; }
