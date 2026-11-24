@@ -13,8 +13,8 @@ pikseli. Rozbieżność skupia się w pierścieniu brzegu powyżej 196 m, który
 są praktycznie takie same. Przyczyny błędu w pierścieniu nie ustaliliśmy (otwarte ustalenie, §5.2). Pod wodą, w porównaniu z amatorską mapą
 KŻ Nysa, model sprzed powodzi jest średnio o +0,31<!-- eval:kz_points.json:pooled.bias --> m płytszy (RMSE
 0,84<!-- eval:kz_points.json:pooled.rmse --> m), ale na małej próbie (n = 32<!-- eval:kz_points.json:pooled.n -->) i tylko
-w paśmie 192,5–195 m; to porównanie dotyczy wyłącznie modelu `pre_flood`, a model serwowany w aplikacji (`all`) ma jako
-jedyną niezależną kontrolę wynik względem NMT podany wyżej. Model nie wie nic o dnie poniżej ok. 192,9 m (najniższy zaobserwowany poziom wody). **To projekt naukowy;
+w paśmie 192,5–195 m; to porównanie dotyczy wyłącznie modelu `pre_flood`, a dla modelu serwowanego w aplikacji (`all`)
+jedyną niezależną kontrolą rzędnej dna w metrach jest wynik względem NMT podany wyżej (objętość, §5.4, sprawdza przyrost warstw, nie rzędne). Model nie wie nic o dnie poniżej ok. 192,9 m (najniższy zaobserwowany poziom wody). **To projekt naukowy;
 aplikacja nie służy do nawigacji** (ten sam napis jest w stopce aplikacji i na stronie „O metodzie”).
 
 Konwencje. Rzędne w m n.p.m.; docelowy układ wysokości PL-EVRF2007-NH, ale poziomy z komunikatów RZGW mają układ nieznany
@@ -437,10 +437,10 @@ zawyża jakość.
 | odległość linii, mediana (P90) [m] | 3,0<!-- eval:holdout.json:holdout.shore_dist_m.median --> (12,7<!-- eval:holdout.json:holdout.shore_dist_m.p90 -->) | 1,5<!-- eval:holdout.json:in_sample.shore_dist_m.median --> (10,0<!-- eval:holdout.json:in_sample.shore_dist_m.p90 -->) |
 
 **Wynik: hold-out ≈ w próbie.** MAE rośnie z 0,931<!-- eval:holdout.json:in_sample.vertical.mae --> do 0,944<!-- eval:holdout.json:holdout.vertical.mae --> m, IoU strefy spada z 0,962<!-- eval:holdout.json:in_sample.iou_zone.median --> do
-0,948<!-- eval:holdout.json:holdout.iou_zone.median -->, a mediana odległości linii rośnie z 1,5<!-- eval:holdout.json:in_sample.shore_dist_m.median --> do 3,0<!-- eval:holdout.json:holdout.shore_dist_m.median --> m. To ustalenie, nie porażka: wyrzucenie całego roku prawie nie zmienia modelu, bo granice piksela brzegowego
-wyznaczają najbliższe obserwowane poziomy poniżej i powyżej, a te same poziomy prawie zawsze występują też w innych latach.
-Model nie „uczy się” sezonu, tylko zbiera poziomy, a 2017–2026 pokrywa je gęsto. Błąd na linii wody to więc głównie błąd samej
-metody (rozdzielczość poziomów, maski, `h_sigma`), a nie dopasowanie do danych treningowych. Mniejszy udział pikseli bez
+0,948<!-- eval:holdout.json:holdout.iou_zone.median -->, a mediana odległości linii rośnie z 1,5<!-- eval:holdout.json:in_sample.shore_dist_m.median --> do 3,0<!-- eval:holdout.json:holdout.shore_dist_m.median --> m. To ustalenie, nie porażka. Prawdopodobne wyjaśnienie (niesprawdzone osobno): granice piksela brzegowego wyznaczają najbliższe
+obserwowane poziomy poniżej i powyżej, a podobne poziomy występują też w innych latach, więc usunięcie roku mało zmienia model.
+Jeśli tak jest, błąd na linii wody pochodzi raczej z samej metody (rozdzielczość poziomów, maski, `h_sigma`) niż z dopasowania do
+danych treningowych; rozkładu błędu na te składniki nie liczyliśmy. Mniejszy udział pikseli bez
 przewidywania w hold-oucie (21,6 %<!-- eval:holdout.json:holdout.vertical.share_no_pred --> wobec 22,6 %<!-- eval:holdout.json:in_sample.vertical.share_no_pred -->) jest mały i jego przyczyny nie sprawdzaliśmy.
 
 Bias jest słabą miarą tej kontroli: zbiorczy bias wynika głównie z proporcji pikseli wody i lądu wśród pikseli brzegowych (strony
@@ -485,7 +485,7 @@ mały (woda ze scen C i tak nie ustala `z_max`, a RF ocenia piksel, nie poziom),
 każdą fałdę wymagałby powtórzenia kroków 04 i 06.
 
 **Co hold-out mówi, a czego nie.** Mówi, że na nowym sezonie model trafia w linię wody z MAE ok. 0,94<!-- eval:holdout.json:holdout.vertical.mae --> m i że wynik w próbie nie
-jest zawyżony. Nie mówi nic o dnie poniżej 192,9 m (żadnej sceny testowej tam nie ma). Nie wykrywa błędów systematycznych
+jest wyraźnie zawyżony względem hold-outu, który sam jest optymistyczny (RF i krzywa C bez ponownego treningu, patrz wyżej). Nie mówi nic o dnie poniżej 192,9 m (żadnej sceny testowej tam nie ma). Nie wykrywa błędów systematycznych
 klasyfikacji: referencją jest ta sama maska RF ∧ Otsu, więc jeśli przy wysokiej wodzie zalana roślinność jest klasyfikowana jako ląd
 (hipoteza 1 z §5.2), to model i referencja mylą się tak samo. Pierścienia +1,43<!-- eval:bottom_vs_nmt.json:all_z_ge_196.bias --> m względem NMT ta kontrola nie może zobaczyć.
 
@@ -546,8 +546,9 @@ układu RZGW ↔ EVRF2007 (NMT jest w EVRF2007, poziomy B w układzie nieznanym,
 przez nią nie zmienia. Zmniejszanie błędu o niezmierzone przesunięcie byłoby poprawianiem wyniku pod tezę.
 
 **Pasma wg referencji, a nie modelu.** LiDAR w paśmie 192,9–194,8 m ma bias +0,82<!-- eval:bottom_vs_nmt.json:all_by_band.[192.9-194.8].bias --> m, choć w §5.2 piksele z `z` modelu < 196 m mają
-bias −0,02<!-- eval:bottom_vs_nmt.json:all_z_lt_196.bias --> m. To nie sprzeczność, tylko inny podział: dzieląc wg niskiej rzędnej NMT, wybieramy piksele, na których model częściej
-jest za wysoko, a dzieląc wg rzędnej modelu, odwrotnie. Do budżetu bierzemy podział wg referencji, bo nie zależy od błędu modelu.
+bias −0,02<!-- eval:bottom_vs_nmt.json:all_z_lt_196.bias --> m. Różnica wynika z innego podziału pikseli: §5.2 dzieli wg rzędnej modelu (< 196 m), budżet wg rzędnej NMT
+(192,9–194,8 m), czyli inne piksele i inny zakres. Możliwe wyjaśnienie to regresja do średniej (dzieląc wg niskiej rzędnej referencji
+wybieramy piksele, na których model częściej jest za wysoko), ale tego nie sprawdzaliśmy osobnym rachunkiem. Do budżetu bierzemy podział wg referencji, bo nie zależy od błędu modelu.
 
 **Pasmo ≥ 194,8 m: znaki biasu się różnią.** Hold-out ma −0,41<!-- eval:error_budget.json:bands.[194.8+].sources.holdout.bias --> m (dno modelu poniżej linii wody), LiDAR +1,21<!-- eval:error_budget.json:bands.[194.8+].sources.lidar.bias --> m (dno modelu powyżej
 terenu). Model nie ma więc jednego stałego przesunięcia, które dałoby się odjąć. Obie referencje widzą inne piksele: LiDAR
@@ -634,7 +635,7 @@ pomiaru amatorski, bez podanej niepewności.
 **płytszą** niż mapa (kierunek ostrożny dla żeglarza). Ale RMSE 0,84 m jest prawie trzy razy większe niż bias, a tylko 31 % punktów KŻ
 mieści się w przedziale modelu: pojedyncze miejsca mogą być w modelu głębsze niż na mapie. Próba jest mała (32 punkty) i dotyczy
 tylko pasa 192,5–195 m. **Zakres wniosku:** porównanie z KŻ dotyczy wyłącznie modelu `pre_flood` (mapa z 2023 r.); model `all`,
-serwowany w aplikacji, nie był porównywany z KŻ, a jego jedyną niezależną kontrolą jest +1,16 m względem NMT (§5.2).
+serwowany w aplikacji, nie był porównywany z KŻ, a jego jedyną niezależną kontrolą rzędnej dna w metrach jest NMT (+1,16 m, §5.2; objętość, §5.4, sprawdza przyrost warstw, nie rzędne).
 
 ### 6.5 Wariant D — kontrola `h_t`
 
