@@ -1,6 +1,6 @@
 # Mielizna — raport: model dna Jeziora Nyskiego z Sentinel-2 i jego dokładność
 
-Autor: Paweł Ostromecki. Stan: gałąź `feat/plan4`, październik 2026.
+Autor: Paweł Ostromecki. Stan: gałąź `eval/holdout-error-budget`, listopad 2026.
 
 **Najważniejsze w pięciu zdaniach.** Model dna powstał wyłącznie z obrazów Sentinel-2 i znanego poziomu wody w dniu każdego
 zdjęcia: piksel widziany jako woda przy poziomie `h` ma dno poniżej `h`, a widziany jako ląd ma dno powyżej. Na odsłoniętym
@@ -401,7 +401,7 @@ w §5.2. Lata 2017–2019 mają tylko sceny A i C, więc są zawsze w treningu.
 
 **Referencja.** Maska sceny testowej z `combine_evidence` (RF ∧ Otsu), czyli to samo, co model dostałby na wejściu. Ta maska ma
 własny błąd: RF przy progu 0,70 ma OA 0,89<!-- eval:mask.json:by_scene.rf_t.oa --> (§2). Wynik hold-outu zawiera więc tę „podłogę”
-klasyfikacji i nie może być lepszy od niej.
+klasyfikacji: błędy wspólne dla modelu i referencji jej nie podnoszą, tylko są niewidoczne.
 
 **Miary.**
 
@@ -434,7 +434,7 @@ zawyża jakość.
 | piksele brzegowe bez przewidywania | 21,6 %<!-- eval:holdout.json:holdout.vertical.share_no_pred --> | 22,6 %<!-- eval:holdout.json:in_sample.vertical.share_no_pred --> |
 | IoU strefy zmiennej, mediana (P10) | 0,948<!-- eval:holdout.json:holdout.iou_zone.median --> (0,883<!-- eval:holdout.json:holdout.iou_zone.p10 -->) | 0,962<!-- eval:holdout.json:in_sample.iou_zone.median --> (0,917<!-- eval:holdout.json:in_sample.iou_zone.p10 -->) |
 | IoU całego jeziora, mediana | 0,980<!-- eval:holdout.json:holdout.iou_lake.median --> | 0,986<!-- eval:holdout.json:in_sample.iou_lake.median --> |
-| odległość linii, mediana (P90) [m] | 3,0<!-- eval:holdout.json:holdout.shore_dist_m.median --> (12,7<!-- eval:holdout.json:holdout.shore_dist_m.p90 -->) | 1,5<!-- eval:holdout.json:in_sample.shore_dist_m.median --> (10,0<!-- eval:holdout.json:in_sample.shore_dist_m.p90 -->) |
+| odległość linii: P90 sceny, mediana po scenach [m] | 3,0<!-- eval:holdout.json:holdout.shore_dist_m.median --> (12,7<!-- eval:holdout.json:holdout.shore_dist_m.p90 -->) | 1,5<!-- eval:holdout.json:in_sample.shore_dist_m.median --> (10,0<!-- eval:holdout.json:in_sample.shore_dist_m.p90 -->) |
 
 **Wynik: hold-out ≈ w próbie.** MAE rośnie z 0,931<!-- eval:holdout.json:in_sample.vertical.mae --> do 0,944<!-- eval:holdout.json:holdout.vertical.mae --> m, IoU strefy spada z 0,962<!-- eval:holdout.json:in_sample.iou_zone.median --> do
 0,948<!-- eval:holdout.json:holdout.iou_zone.median -->, a mediana odległości linii rośnie z 1,5<!-- eval:holdout.json:in_sample.shore_dist_m.median --> do 3,0<!-- eval:holdout.json:holdout.shore_dist_m.median --> m. To ustalenie, nie porażka. Prawdopodobne wyjaśnienie (niesprawdzone osobno): granice piksela brzegowego wyznaczają najbliższe
@@ -533,7 +533,7 @@ zakresu nie wchodzi. Objętość i poziomy to kontekst, nie składnik zakresu.
 | 192,9–194,8 m | 0,77<!-- eval:error_budget.json:bands.[192.9-194.8].sources.holdout.mae --> (+0,29<!-- eval:error_budget.json:bands.[192.9-194.8].sources.holdout.bias -->, 319 179<!-- eval:error_budget.json:bands.[192.9-194.8].sources.holdout.n -->) | 1,11<!-- eval:error_budget.json:bands.[192.9-194.8].sources.lidar.mae --> (+0,82<!-- eval:error_budget.json:bands.[192.9-194.8].sources.lidar.bias -->, 1 157<!-- eval:error_budget.json:bands.[192.9-194.8].sources.lidar.n -->) | 0,65<!-- eval:error_budget.json:bands.[192.9-194.8].sources.kz.mae --> (+0,30<!-- eval:error_budget.json:bands.[192.9-194.8].sources.kz.bias -->, 27<!-- eval:error_budget.json:bands.[192.9-194.8].sources.kz.n -->) | **0,65<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.0 -->–1,11<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.1 --> m** | LiDAR | 0,986<!-- eval:error_budget.json:bands.[192.9-194.8].volume.ratio --> (193,3<!-- eval:error_budget.json:bands.[192.9-194.8].volume.covered.0 -->–194,8<!-- eval:error_budget.json:bands.[192.9-194.8].volume.covered.1 --> m) |
 | ≥ 194,8 m | 1,04<!-- eval:error_budget.json:bands.[194.8+].sources.holdout.mae --> (−0,41<!-- eval:error_budget.json:bands.[194.8+].sources.holdout.bias -->, 577 551<!-- eval:error_budget.json:bands.[194.8+].sources.holdout.n -->) | 1,34<!-- eval:error_budget.json:bands.[194.8+].sources.lidar.mae --> (+1,21<!-- eval:error_budget.json:bands.[194.8+].sources.lidar.bias -->, 7 320<!-- eval:error_budget.json:bands.[194.8+].sources.lidar.n -->) | 0,64<!-- eval:error_budget.json:bands.[194.8+].sources.kz.mae --> (n = 1<!-- eval:error_budget.json:bands.[194.8+].sources.kz.n -->), poza zakresem | **1,04<!-- eval:error_budget.json:bands.[194.8+].range_m.0 -->–1,34<!-- eval:error_budget.json:bands.[194.8+].range_m.1 --> m** | LiDAR | 0,813<!-- eval:error_budget.json:bands.[194.8+].volume.ratio --> (194,8<!-- eval:error_budget.json:bands.[194.8+].volume.covered.0 -->–197,8<!-- eval:error_budget.json:bands.[194.8+].volume.covered.1 --> m) |
 
-MAE i bias w metrach; n to piksele (hold-out, LiDAR) albo punkty mapy (KŻ). Poziomy wody jako kontekst dla wszystkich pasm:
+MAE i bias w metrach; n to piksele (hold-out, LiDAR) albo punkty mapy (KŻ). Kolumna „dominuje” to kontrola z największym MAE w paśmie (nie: przyczyna błędu). Poziomy wody jako kontekst dla wszystkich pasm:
 `h_sigma` B 0,15<!-- eval:error_budget.json:level_context.h_sigma_median_m.B --> m, A − B MAE 0,47<!-- eval:error_budget.json:level_context.a_vs_b.mae --> m.
 
 **Dlaczego zestawienie, a nie suma.** Źródła nie są niezależne: hold-out i model używają tych samych masek i poziomów, a LiDAR i KŻ
