@@ -100,3 +100,72 @@ def test_current_cache_dir_setting(tmp_path, monkeypatch):
     assert get_settings().current_cache_dir == tmp_path / "processed" / "current"   # domyślnie jak dotąd
     monkeypatch.setenv("MIELIZNA_CURRENT_DIR", str(tmp_path / "cache"))
     assert get_settings().current_cache_dir == tmp_path / "cache"
+
+
+def _budget(**over):
+    band = lambda rng, dom: {"range_m": rng, "dominant": dom, "sources": {}, "volume": None, "note": "nota"}
+    body = {"bands": {"<192.9": band(None, None), "192.9-194.8": band([0.6, 1.1], "lidar"),
+                      "194.8+": band([1.0, 1.3], "holdout")},
+            "checks": [{"name": "Roczny hold-out", "compared_with": "B/R", "result": "MAE 0,94 m"}],
+            "lidar_note": "uwaga LiDAR"}
+    body.update(over)
+    return body
+
+
+def _write_eval(dataset, name, body):
+    import json
+    (dataset / "processed" / "eval" / f"{name}.json").write_text(
+        body if isinstance(body, str) else json.dumps(body), encoding="utf-8")
+
+
+def test_meta_validation_null_without_budget(client_no_eval):
+    m = client_no_eval.get("/api/meta").json()
+    assert m["validation"] is None
+    a = m["accuracy"]
+    assert a["holdout_mae"] is None and a["holdout_bias"] is None
+    assert a["holdout_in_bounds"] is None and a["holdout_n_scenes"] is None
+
+
+def test_meta_validation_from_budget(dataset):
+    _write_eval(dataset, "error_budget", _budget())
+    _write_eval(dataset, "holdout", {"n_test_scenes": 155, "holdout": {"vertical": {
+        "n": 10, "bias": -0.16, "mae": 0.94, "share_in_bounds": 0.17, "share_no_pred": 0.2}}})
+    m = _client(dataset).get("/api/meta").json()
+    v = m["validation"]
+    assert [b["band"] for b in v["bands"]] == ["≥ 194,8 m", "192,9–194,8 m", "< 192,9 m"]
+    assert [b["dominant"] for b in v["bands"]] == ["hold-out roczny", "NMT LiDAR", None]
+    assert v["bands"][2]["range_m"] is None and v["bands"][0]["range_m"] == [1.0, 1.3]
+    assert v["bands"][0]["note"] == "nota" and v["lidar_note"] == "uwaga LiDAR"
+    assert v["checks"] == [{"name": "Roczny hold-out", "compared_with": "B/R", "result": "MAE 0,94 m"}]
+    a = m["accuracy"]
+    assert a["holdout_mae"] == 0.94 and a["holdout_bias"] == -0.16
+    assert a["holdout_in_bounds"] == 0.17 and a["holdout_n_scenes"] == 155
+
+
+def test_meta_validation_dominant_labels_and_passthrough(dataset):
+    b = _budget()
+    b["bands"]["<192.9"]["dominant"] = "kz"
+    b["bands"]["194.8+"]["dominant"] = "inne"
+    _write_eval(dataset, "error_budget", b)
+    bands = _client(dataset).get("/api/meta").json()["validation"]["bands"]
+    assert [x["dominant"] for x in bands] == ["inne", "NMT LiDAR", "mapa KŻ (model pre_flood)"]
+
+
+@pytest.mark.parametrize("body", [
+    "{bad", "[]", "null", {}, {"bands": {}, "checks": [], "lidar_note": "x"},
+    _budget(checks="x"), _budget(lidar_note=None), {k: v for k, v in _budget().items() if k != "bands"},
+    _budget(bands={"<192.9": {"range_m": [1, 2, 3], "dominant": None, "note": "n"}, "192.9-194.8": {}, "194.8+": {}}),
+])
+def test_meta_validation_malformed_budget_is_null(dataset, body):
+    _write_eval(dataset, "error_budget", body)
+    r = _client(dataset).get("/api/meta")
+    assert r.status_code == 200 and r.json()["validation"] is None
+
+
+@pytest.mark.parametrize("body", ["null", "[]", {"holdout": None}, {"holdout": {"vertical": {"mae": "x"}}, "n_test_scenes": "a"}])
+def test_meta_holdout_malformed_is_null(dataset, body):
+    _write_eval(dataset, "holdout", body)
+    r = _client(dataset).get("/api/meta")
+    assert r.status_code == 200
+    a = r.json()["accuracy"]
+    assert a["holdout_mae"] is None and a["holdout_n_scenes"] is None

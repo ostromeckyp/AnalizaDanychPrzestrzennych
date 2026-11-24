@@ -617,6 +617,50 @@
        }
       ],
       "title": "Variant D Within 0 2"
+     },
+     "holdout_mae": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Holdout Mae"
+     },
+     "holdout_bias": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Holdout Bias"
+     },
+     "holdout_in_bounds": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Holdout In Bounds"
+     },
+     "holdout_n_scenes": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Holdout N Scenes"
      }
     },
     "type": "object",
@@ -1514,6 +1558,16 @@
      "accuracy": {
       "$ref": "#/components/schemas/Accuracy"
      },
+     "validation": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Validation"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
      "area_level": {
       "$ref": "#/components/schemas/AreaLevel"
      },
@@ -1990,6 +2044,110 @@
      "min_unc"
     ],
     "title": "UncertaintyLayer"
+   },
+   "Validation": {
+    "properties": {
+     "checks": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationCheck"
+      },
+      "type": "array",
+      "title": "Checks"
+     },
+     "bands": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationBand"
+      },
+      "type": "array",
+      "title": "Bands"
+     },
+     "lidar_note": {
+      "type": "string",
+      "title": "Lidar Note"
+     }
+    },
+    "type": "object",
+    "required": [
+     "checks",
+     "bands",
+     "lidar_note"
+    ],
+    "title": "Validation"
+   },
+   "ValidationBand": {
+    "properties": {
+     "band": {
+      "type": "string",
+      "title": "Band"
+     },
+     "range_m": {
+      "anyOf": [
+       {
+        "prefixItems": [
+         {
+          "type": "number"
+         },
+         {
+          "type": "number"
+         }
+        ],
+        "type": "array",
+        "maxItems": 2,
+        "minItems": 2
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Range M"
+     },
+     "dominant": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Dominant"
+     },
+     "note": {
+      "type": "string",
+      "title": "Note"
+     }
+    },
+    "type": "object",
+    "required": [
+     "band",
+     "range_m",
+     "dominant",
+     "note"
+    ],
+    "title": "ValidationBand"
+   },
+   "ValidationCheck": {
+    "properties": {
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "compared_with": {
+      "type": "string",
+      "title": "Compared With"
+     },
+     "result": {
+      "type": "string",
+      "title": "Result"
+     }
+    },
+    "type": "object",
+    "required": [
+     "name",
+     "compared_with",
+     "result"
+    ],
+    "title": "ValidationCheck"
    },
    "ValidationError": {
     "properties": {

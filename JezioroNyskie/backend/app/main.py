@@ -39,7 +39,7 @@ from app.data import Products, capacity_to_level, level_to_capacity, load_produc
 from app.layers import RENDER_VERSION, UNC_MIN, layer_coordinates, bottom_breaks, render_bottom_png, render_uncertainty_png
 from app.point import point_info
 from app.schemas import (BulletinLatest, CapacityToLevel, CurrentLevelResponse, GravelResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
-                         SceneOut, ShorelineFeature, ZonesResponse)
+                         SceneOut, ShorelineFeature, Validation, ValidationBand, ValidationCheck, ZonesResponse)
 from app.settings import Settings, get_settings
 from app.zones import (round_param, zone_classes, zone_stats, zone_warnings, zones_geojson)
 
@@ -136,7 +136,40 @@ def eval_accuracy(products: Products) -> dict:
             "kz_rmse": _num(ev.get("kz_compare"), "points", "rmse"),
             "kz_bias": _num(ev.get("kz_compare"), "points", "bias"),
             "levels_mae_ab": _num(ev.get("levels"), "a_vs_b", "mae"),
-            "variant_d_within_0_2": _num(ev.get("variant_d"), "share_within_0_2")}
+            "variant_d_within_0_2": _num(ev.get("variant_d"), "share_within_0_2"),
+            "holdout_mae": _num(ev.get("holdout"), "holdout", "vertical", "mae"),
+            "holdout_bias": _num(ev.get("holdout"), "holdout", "vertical", "bias"),
+            "holdout_in_bounds": _num(ev.get("holdout"), "holdout", "vertical", "share_in_bounds"),
+            "holdout_n_scenes": _int(ev.get("holdout"), "n_test_scenes")}
+
+
+def _int(d, *keys) -> int | None:
+    """Zagnieżdżona liczba całkowita ze słownika JSON albo None (brak klucza, zły typ)."""
+    v = _num(d, *keys)
+    return int(v) if v is not None and v == int(v) else None
+
+
+# pasma budżetu błędu od najwyższego: klucz w `error_budget.json` → etykieta (przecinek dziesiętny, półpauza)
+VALIDATION_BANDS = (("194.8+", "≥ 194,8 m"), ("192.9-194.8", "192,9–194,8 m"), ("<192.9", "< 192,9 m"))
+DOMINANT_LABELS = {"holdout": "hold-out roczny", "lidar": "NMT LiDAR", "kz": "mapa KŻ (model pre_flood)"}
+
+
+def build_validation(products: Products) -> Validation | None:
+    """Blok `validation` z `error_budget.json`; None, gdy pliku brak albo struktura nie pasuje (nigdy 500)."""
+    eb = products.eval.get("error_budget")
+    if eb is None:
+        return None
+    try:
+        bands = []
+        for key, label in VALIDATION_BANDS:
+            b = eb["bands"][key]
+            dom = b["dominant"]
+            bands.append(ValidationBand(band=label, range_m=b["range_m"],
+                                        dominant=DOMINANT_LABELS.get(dom, dom), note=b["note"]))
+        return Validation(checks=[ValidationCheck(**c) for c in eb["checks"]], bands=bands,
+                          lidar_note=eb["lidar_note"])
+    except (KeyError, TypeError, ValueError):       # ValidationError dziedziczy po ValueError
+        return None
 
 
 def model_period_reason(products: Products) -> str:
@@ -175,6 +208,7 @@ def build_meta(products: Products) -> MetaResponse:
         accuracy={"rf_oa": shore["rf_t"]["oa"], "rf_ba": shore["rf_t"]["bacc"],
                   "rf_kappa": shore["rf_t"]["kappa"], "otsu_ba": shore["otsu"]["bacc"],
                   "n_labels": shore["rf_t"]["n"], **eval_accuracy(products)},
+        validation=build_validation(products),
         area_level={
             "nodes_area_km2": [finite_or_none(a) for a in curve.area_km2],
             "nodes_h": [finite_or_none(h) for h in curve.h],

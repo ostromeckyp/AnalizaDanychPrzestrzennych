@@ -106,6 +106,30 @@ class Accuracy(BaseModel):
     # Udział scen z |D − (A/B/R/C)| ≤ 0,2 m - TYLKO w dziedzinie wariantu D (sceny z h_t < h_max_valid),
     # a nie dokładność całej populacji.
     variant_d_within_0_2: float | None = None
+    # Roczny hold-out (scena testowa poza treningiem): null do czasu `eval/holdout.json`.
+    holdout_mae: float | None = None
+    holdout_bias: float | None = None
+    holdout_in_bounds: float | None = None   # udział pikseli brzegowych, dla których predykcja mieści się w granicach
+    holdout_n_scenes: int | None = None
+
+
+class ValidationCheck(BaseModel):
+    name: str
+    compared_with: str
+    result: str
+
+
+class ValidationBand(BaseModel):
+    band: str                                       # etykieta pasma rzędnych, np. „≥ 194,8 m"
+    range_m: tuple[float, float] | None             # zakres błędu w metrach; null = brak liczby dla pasma
+    dominant: str | None                            # źródło o największym błędzie (etykieta do wyświetlenia)
+    note: str
+
+
+class Validation(BaseModel):
+    checks: list[ValidationCheck]
+    bands: list[ValidationBand]                     # od najwyższego pasma
+    lidar_note: str
 
 
 class AreaLevelPoint(BaseModel):
@@ -163,6 +187,7 @@ class MetaResponse(BaseModel):
     crs: str
     z_max_floor: float
     accuracy: Accuracy
+    validation: Validation | None = None
     area_level: AreaLevel
     layers: Layers
 

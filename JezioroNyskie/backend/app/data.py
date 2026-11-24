@@ -67,7 +67,8 @@ def level_to_capacity(p: Products, h: float) -> float:
     return float(capacity.level_to_capacity(h, table=p.capacity_table))
 
 
-EVAL_FILES = ("bottom_vs_nmt", "levels", "bottom_change", "model_choice", "variant_d", "kz_compare")
+EVAL_FILES = ("bottom_vs_nmt", "levels", "bottom_change", "model_choice", "variant_d", "kz_compare",
+              "holdout", "error_budget")
 
 
 def load_eval(data_dir: Path) -> dict:
