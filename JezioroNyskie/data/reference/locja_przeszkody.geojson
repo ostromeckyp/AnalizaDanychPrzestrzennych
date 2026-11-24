@@ -1,0 +1,112 @@
+{
+ "type": "FeatureCollection",
+ "name": "locja_przeszkody",
+ "source": "Klub Żeglarski NYSA, Locja Jeziora Nyskiego, https://kz.nysa.pl/jezioro-nyskie/locja/ (współrzędne i rzędne z podpisów zdjęć; opisy streszczone)",
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     17.285333,
+     50.466667
+    ]
+   },
+   "properties": {
+    "id": "u-boot",
+    "name": "U-Boot",
+    "kind": "spłycenie",
+    "z": 192.2,
+    "z_kind": "dno",
+    "description": "Niegroźne spłycenie; zaskakuje przy podejściu do NOR, WOPR i KŻ Nysa, gdy lustro jest poniżej ok. 193,2 m.",
+    "coords_as_published": "50°28,00'N ; 017°17,12'E",
+    "note": "",
+    "source_url": "https://kz.nysa.pl/jezioro-nyskie/locja/"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     17.296333,
+     50.453667
+    ]
+   },
+   "properties": {
+    "id": "miedniki-rafa",
+    "name": "Miedniki – żelbetowa rafa",
+    "kind": "przeszkoda",
+    "z": 193.7,
+    "z_kind": "wierzchołek",
+    "description": "Bardzo niebezpieczna żelbetowa rafa z wystającymi prętami zbrojenia (pozostałości zatopionej wsi).",
+    "coords_as_published": "50°27,22'N ; 017°17,78'E",
+    "note": "",
+    "source_url": "https://kz.nysa.pl/jezioro-nyskie/locja/"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     17.2545,
+     50.439333
+    ]
+   },
+   "properties": {
+    "id": "most-wschod-brzeziny",
+    "name": "Most na wschód od Brzeziny Polskiej",
+    "kind": "przeszkoda",
+    "z": 196.0,
+    "z_kind": "wierzchołek",
+    "description": "Ukryty w zaroślach; pod wodą może uszkodzić kadłub przy przejściu blisko krzaków.",
+    "coords_as_published": "50°26,36'N ; 017°15,27'E",
+    "note": "",
+    "source_url": "https://kz.nysa.pl/jezioro-nyskie/locja/"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     17.244667,
+     50.442833
+    ]
+   },
+   "properties": {
+    "id": "most-brzezina",
+    "name": "Most w Brzezinie Polskiej",
+    "kind": "przeszkoda",
+    "z": 194.2,
+    "z_kind": "wierzchołek",
+    "description": "Nieco na wschód od osi wąskiej zatoki prowadzącej w kierunku Miedzy.",
+    "coords_as_published": "50°26,57'N ; 017°14,68'E",
+    "note": "",
+    "source_url": "https://kz.nysa.pl/jezioro-nyskie/locja/"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     17.293667,
+     50.459
+    ]
+   },
+   "properties": {
+    "id": "kaszaloty",
+    "name": "Kaszaloty – najwyższy grzbiet",
+    "kind": "spłycenie",
+    "z": 193.1,
+    "z_kind": "grzbiet",
+    "description": "Łańcuch żwirowych spłyceń ok. 900 m na SW od elektrowni; podany punkt to najwyższy grzbiet.",
+    "coords_as_published": "50°27,54'N ; 017°62'E",
+    "note": "W źródle długość 017°62'E (niemożliwe minuty); przyjęto 17°17,62'E – zgodne z podpisem „Kaszaloty” na mapie KŻ.",
+    "source_url": "https://kz.nysa.pl/jezioro-nyskie/locja/"
+   }
+  }
+ ]
+}
