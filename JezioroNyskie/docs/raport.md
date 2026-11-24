@@ -31,6 +31,12 @@ liczby mają podane źródło w tekście. Notatki do nauki z uzasadnieniami i py
 3. [Poziom wody `h_t`](#3-poziom-wody-h_t)
 4. [Model dna](#4-model-dna)
 5. [Ocena dokładności (BRIEF §7)](#5-ocena-dokładności-brief-7)
+   - [5.1 Tabela §7](#51-tabela-7)
+   - [5.2 Dno vs NMT LiDAR (szczegóły)](#52-dno-vs-nmt-lidar-szczegóły)
+   - [5.3 Poziomy wody (szczegóły)](#53-poziomy-wody-szczegóły)
+   - [5.4 Objętość: model vs tabela pojemności](#54-objętość-model-vs-tabela-pojemności)
+   - [5.5 Hold-out roczny](#55-hold-out-roczny)
+   - [5.6 Jak zmierzyliśmy i zakres błędu (bez terenu)](#56-jak-zmierzyliśmy-i-zakres-błędu-bez-terenu)
 6. [Porównanie z mapą KŻ (K1–K5)](#6-porównanie-z-mapą-kż-k1k5)
 7. [Aplikacja](#7-aplikacja)
 8. [Ograniczenia: do czego model się nadaje, a do czego nie](#8-ograniczenia-do-czego-model-się-nadaje-a-do-czego-nie)
@@ -269,6 +275,8 @@ poziomów obu okresów, nie z realnej zmiany dna; przy tym kryterium „|Δz| > 
 | Poziomice modelu vs KŻ | 195,0 m (KŻ 7,01<!-- eval:kz_contours.json:[195.0].kz_length_km --> km), 192,5 m (KŻ 2,40<!-- eval:kz_contours.json:[192.5].kz_length_km --> km) | 195,0: średnia symetryczna 47<!-- eval:kz_contours.json:[195.0].mean_distance_m --> m, KŻ → model 36,6<!-- eval:kz_contours.json:[195.0].kz_to_model_mean_m --> m (P90 77,8<!-- eval:kz_contours.json:[195.0].kz_to_model_p90_m --> m), Hausdorff 258<!-- eval:kz_contours.json:[195.0].hausdorff_m --> m; 192,5: model nie ma takiej poziomicy | orientacyjne |
 | `h_t` wariant D vs A/B | 107<!-- eval:variant_d.json:n_valid --> scen w dziedzinie D (`h_t` < 194,95<!-- eval:variant_d.json:h_max_valid --> m) | w ±0,2 m: 27,1 %<!-- eval:variant_d.json:share_within_0_2 --> scen (A 55,6 %<!-- eval:variant_d.json:by_method.A.share_within_0_2 -->, B 14,8 %<!-- eval:variant_d.json:by_method.B.share_within_0_2 -->, C 0 %<!-- eval:variant_d.json:by_method.C.share_within_0_2 -->); mediana \|D − h_t\| 0,28<!-- eval:variant_d.json:median_abs_diff --> m | kryterium „większość w ±0,2 m” **niespełnione**; D tylko zgrubną kontrolą |
 | Objętość (ΔV warstw) vs tabela pojemności | tabela KŻ pojemność ↔ rzędna | 193,3–194,8 m: model/tabela 0,986<!-- eval:volume.json:bands.[193.3-194.8].ratio -->; 194,8–196,3 m: 0,893<!-- eval:volume.json:bands.[194.8-196.3].ratio -->; 196,3–197,8 m: 0,750<!-- eval:volume.json:bands.[196.3-197.8].ratio -->; dno rdzenia z bilansu 190,49<!-- eval:volume.json:core_bottom_main.z_core_mean --> m | zgodne do ok. 194,8 m; wyżej brak powierzchni wody (§5.4) |
+| Hold-out roczny (model bez roku vs sceny tego roku) | 155<!-- eval:holdout.json:n_test_scenes --> scen B/R z lat 2020–2026, linia wody na masce RF ∧ Otsu | MAE 0,94<!-- eval:holdout.json:holdout.vertical.mae -->, bias −0,16<!-- eval:holdout.json:holdout.vertical.bias -->, P90 \|błędu\| 1,95<!-- eval:holdout.json:holdout.vertical.p90_abs --> m; `h_t` ∈ [z_min, z_max]: 17,2 %<!-- eval:holdout.json:holdout.vertical.share_in_bounds -->; w próbie MAE 0,93<!-- eval:holdout.json:in_sample.vertical.mae --> m | hold-out ≈ w próbie; optymistyczny (RF i krzywa C bez ponownego treningu) (§5.5) |
+| Zakres błędu dna wg pasm | hold-out, LiDAR (`all`), KŻ (`pre_flood`), źródła z n ≥ 5 | 192,9–194,8 m: 0,65<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.0 -->–1,11<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.1 --> m; ≥ 194,8 m: 1,04<!-- eval:error_budget.json:bands.[194.8+].range_m.0 -->–1,34<!-- eval:error_budget.json:bands.[194.8+].range_m.1 --> m; < 192,9 m: brak danych | zestawienie, nie suma; bez terenu (§5.6) |
 
 ![Błąd dna względem NMT](img/eval-dno-vs-nmt-histogram.png)
 
@@ -377,6 +385,187 @@ Wartości tabeli mają krok 0,5 mln m³, więc błąd zaokrąglenia ΔV pasa to 
    dla całego rdzenia, a nie mapą.
 
 ![Przyrost objętości: model vs tabela](img/eval-objetosc.png)
+
+### 5.5 Hold-out roczny
+
+**Po co.** Kontrole z §5.2–§5.4 porównują model z referencją zewnętrzną, ale żadna nie sprawdza, jak model przewiduje sceny,
+których nie widział. Hold-out roczny to sprawdza: budujemy model dna bez jednego roku i porównujemy go ze scenami tego roku.
+Skrypt: `pipeline/12_holdout.py` (`make holdout`), funkcje w `mielizna/holdout.py`, wynik `eval/holdout.json`.
+
+**Fałdy.** Jest ich 7<!-- eval:holdout.json:n_folds -->, po jednej na rok 2020–2026 (lata, w których są sceny z poziomem
+z pomiaru). Trening fałdy: sceny okresu `all` bez wszystkich scen roku fałdy, ten sam kod i te same parametry co w kroku 07
+(`select_scenes` → `combine_evidence` → `compute_bounds`). Test: sceny roku fałdy z `h_method` B lub R, razem
+155<!-- eval:holdout.json:n_test_scenes --> scen; pominiętych scen testowych (bez pikseli brzegowych): 0<!-- eval:holdout.json:n_skipped -->.
+Scen A i C nie testujemy, bo poziom C pochodzi z maski przez krzywą powierzchnia–poziom (błędne koło), a A z LiDAR-u, który ocenia dno
+w §5.2. Lata 2017–2019 mają tylko sceny A i C, więc są zawsze w treningu.
+
+**Referencja.** Maska sceny testowej z `combine_evidence` (RF ∧ Otsu), czyli to samo, co model dostałby na wejściu. Ta maska ma
+własny błąd: RF przy progu 0,70 ma OA 0,89<!-- eval:mask.json:by_scene.rf_t.oa --> (§2). Wynik hold-outu zawiera więc tę „podłogę”
+klasyfikacji i nie może być lepszy od niej.
+
+**Miary.**
+
+1. **Błąd pionowy na linii wody (miara główna).** Bierzemy piksele brzegowe sceny testowej z obu stron linii: wodę z 4-sąsiadem
+   lądu i ląd z 4-sąsiadem wody. Piksel wody dowodzi tylko, że dno < `h_t`, a piksel lądu, że dno > `h_t`; prawdziwe dno przecina
+   `h_t` między nimi, więc średnio po obu stronach referencja to `h_t`. Jedna strona byłaby obciążona o mniej więcej pół odstępu
+   między sąsiednimi obserwowanymi poziomami: sama woda daje bias −0,65<!-- eval:holdout.json:holdout.vertical_by_side.water.bias --> m
+   (n = 488 097<!-- eval:holdout.json:holdout.vertical_by_side.water.n -->), sam ląd
+   +0,42<!-- eval:holdout.json:holdout.vertical_by_side.land.bias --> m (n = 408 633<!-- eval:holdout.json:holdout.vertical_by_side.land.n -->).
+   Błąd = `z` − `h_t`, gdzie `z` to środek przedziału [`z_min`, `z_max`] modelu fałdy; liczą się piksele, dla których model fałdy
+   ma obie granice. Pozostałe idą do „bez przewidywania”. MAE zawiera przez to składnik rozdzielczości poziomów: nawet model
+   z idealnymi granicami ma |`z` − `h_t`| do połowy szerokości przedziału, czyli rzędu połowy odstępu między poziomami, a nie tylko
+   błąd „złego” dna. Dodatkowo podajemy udział pikseli z `h_t` ∈ [`z_min`, `z_max`] (kalibracja przedziałów).
+2. **IoU wody w strefie zmiennej.** Strefa = piksele, które w modelu pełnym mają przedział albo sprzeczności (bez rdzenia
+   „zawsze woda” i dalekiego lądu, które trafiają się same). Przewidywana woda: `z` < `h_t`. IoU całego jeziora tylko dla porównania.
+3. **Odległość linii brzegowych.** Linia z maski przewidywanej vs linia z maski obserwowanej; mediana i P90 odległości
+   przewidywana → obserwowana. Miara pomocnicza.
+
+Te same miary liczymy dla serwowanego modelu `all` na tych samych scenach („w próbie”). Różnica pokazuje, ile wynik w próbie
+zawyża jakość.
+
+| miara | hold-out | w próbie (`all`) |
+|---|---|---|
+| pikseli brzegowych z przewidywaniem | 896 730<!-- eval:holdout.json:holdout.vertical.n --> | 884 618<!-- eval:holdout.json:in_sample.vertical.n --> |
+| bias `z` − `h_t` [m] | −0,16<!-- eval:holdout.json:holdout.vertical.bias --> | −0,18<!-- eval:holdout.json:in_sample.vertical.bias --> |
+| MAE [m] | 0,944<!-- eval:holdout.json:holdout.vertical.mae --> | 0,931<!-- eval:holdout.json:in_sample.vertical.mae --> |
+| RMSE [m] | 1,19<!-- eval:holdout.json:holdout.vertical.rmse --> | 1,18<!-- eval:holdout.json:in_sample.vertical.rmse --> |
+| P90 \|błędu\| [m] | 1,95<!-- eval:holdout.json:holdout.vertical.p90_abs --> | 1,94<!-- eval:holdout.json:in_sample.vertical.p90_abs --> |
+| `h_t` ∈ [`z_min`, `z_max`] | 17,2 %<!-- eval:holdout.json:holdout.vertical.share_in_bounds --> | 16,7 %<!-- eval:holdout.json:in_sample.vertical.share_in_bounds --> |
+| piksele brzegowe bez przewidywania | 21,6 %<!-- eval:holdout.json:holdout.vertical.share_no_pred --> | 22,6 %<!-- eval:holdout.json:in_sample.vertical.share_no_pred --> |
+| IoU strefy zmiennej, mediana (P10) | 0,948<!-- eval:holdout.json:holdout.iou_zone.median --> (0,883<!-- eval:holdout.json:holdout.iou_zone.p10 -->) | 0,962<!-- eval:holdout.json:in_sample.iou_zone.median --> (0,917<!-- eval:holdout.json:in_sample.iou_zone.p10 -->) |
+| IoU całego jeziora, mediana | 0,980<!-- eval:holdout.json:holdout.iou_lake.median --> | 0,986<!-- eval:holdout.json:in_sample.iou_lake.median --> |
+| odległość linii, mediana (P90) [m] | 3,0<!-- eval:holdout.json:holdout.shore_dist_m.median --> (12,7<!-- eval:holdout.json:holdout.shore_dist_m.p90 -->) | 1,5<!-- eval:holdout.json:in_sample.shore_dist_m.median --> (10,0<!-- eval:holdout.json:in_sample.shore_dist_m.p90 -->) |
+
+**Wynik: hold-out ≈ w próbie.** MAE rośnie z 0,931<!-- eval:holdout.json:in_sample.vertical.mae --> do 0,944<!-- eval:holdout.json:holdout.vertical.mae --> m, IoU strefy spada z 0,962<!-- eval:holdout.json:in_sample.iou_zone.median --> do
+0,948<!-- eval:holdout.json:holdout.iou_zone.median -->, a mediana odległości linii rośnie z 1,5<!-- eval:holdout.json:in_sample.shore_dist_m.median --> do 3,0<!-- eval:holdout.json:holdout.shore_dist_m.median --> m. To ustalenie, nie porażka: wyrzucenie całego roku prawie nie zmienia modelu, bo granice piksela brzegowego
+wyznaczają najbliższe obserwowane poziomy poniżej i powyżej, a te same poziomy prawie zawsze występują też w innych latach.
+Model nie „uczy się” sezonu, tylko zbiera poziomy, a 2017–2026 pokrywa je gęsto. Błąd na linii wody to więc głównie błąd samej
+metody (rozdzielczość poziomów, maski, `h_sigma`), a nie dopasowanie do danych treningowych. Mniejszy udział pikseli bez
+przewidywania w hold-oucie (21,6 %<!-- eval:holdout.json:holdout.vertical.share_no_pred --> wobec 22,6 %<!-- eval:holdout.json:in_sample.vertical.share_no_pred -->) jest mały i jego przyczyny nie sprawdzaliśmy.
+
+Bias jest słabą miarą tej kontroli: zbiorczy bias wynika głównie z proporcji pikseli wody i lądu wśród pikseli brzegowych (strony
+mają bias −0,65<!-- eval:holdout.json:holdout.vertical_by_side.water.bias --> i +0,42<!-- eval:holdout.json:holdout.vertical_by_side.land.bias --> m). Główną liczbą jest MAE.
+
+| rok fałdy | scen | pikseli | bias [m] | MAE [m] | `h_t` w przedziale | IoU strefy (mediana) |
+|---|---|---|---|---|---|---|
+| 2020 | 28<!-- eval:holdout.json:by_fold.2020.n_scenes --> | 164 544<!-- eval:holdout.json:by_fold.2020.vertical.n --> | −0,55<!-- eval:holdout.json:by_fold.2020.vertical.bias --> | 1,00<!-- eval:holdout.json:by_fold.2020.vertical.mae --> | 21,7 %<!-- eval:holdout.json:by_fold.2020.vertical.share_in_bounds --> | 0,923<!-- eval:holdout.json:by_fold.2020.iou_zone_median --> |
+| 2021 | 17<!-- eval:holdout.json:by_fold.2021.n_scenes --> | 96 321<!-- eval:holdout.json:by_fold.2021.vertical.n --> | +0,10<!-- eval:holdout.json:by_fold.2021.vertical.bias --> | 0,74<!-- eval:holdout.json:by_fold.2021.vertical.mae --> | 34,6 %<!-- eval:holdout.json:by_fold.2021.vertical.share_in_bounds --> | 0,957<!-- eval:holdout.json:by_fold.2021.iou_zone_median --> |
+| 2022 | 16<!-- eval:holdout.json:by_fold.2022.n_scenes --> | 97 001<!-- eval:holdout.json:by_fold.2022.vertical.n --> | −0,09<!-- eval:holdout.json:by_fold.2022.vertical.bias --> | 0,86<!-- eval:holdout.json:by_fold.2022.vertical.mae --> | 14,4 %<!-- eval:holdout.json:by_fold.2022.vertical.share_in_bounds --> | 0,951<!-- eval:holdout.json:by_fold.2022.iou_zone_median --> |
+| 2023 | 22<!-- eval:holdout.json:by_fold.2023.n_scenes --> | 124 470<!-- eval:holdout.json:by_fold.2023.vertical.n --> | −0,30<!-- eval:holdout.json:by_fold.2023.vertical.bias --> | 0,99<!-- eval:holdout.json:by_fold.2023.vertical.mae --> | 11,4 %<!-- eval:holdout.json:by_fold.2023.vertical.share_in_bounds --> | 0,945<!-- eval:holdout.json:by_fold.2023.iou_zone_median --> |
+| 2024 | 20<!-- eval:holdout.json:by_fold.2024.n_scenes --> | 106 094<!-- eval:holdout.json:by_fold.2024.vertical.n --> | −0,18<!-- eval:holdout.json:by_fold.2024.vertical.bias --> | 0,95<!-- eval:holdout.json:by_fold.2024.vertical.mae --> | 12,0 %<!-- eval:holdout.json:by_fold.2024.vertical.share_in_bounds --> | 0,949<!-- eval:holdout.json:by_fold.2024.iou_zone_median --> |
+| 2025 | 28<!-- eval:holdout.json:by_fold.2025.n_scenes --> | 169 880<!-- eval:holdout.json:by_fold.2025.vertical.n --> | −0,16<!-- eval:holdout.json:by_fold.2025.vertical.bias --> | 1,06<!-- eval:holdout.json:by_fold.2025.vertical.mae --> | 14,4 %<!-- eval:holdout.json:by_fold.2025.vertical.share_in_bounds --> | 0,943<!-- eval:holdout.json:by_fold.2025.iou_zone_median --> |
+| 2026 | 24<!-- eval:holdout.json:by_fold.2026.n_scenes --> | 138 420<!-- eval:holdout.json:by_fold.2026.vertical.n --> | +0,19<!-- eval:holdout.json:by_fold.2026.vertical.bias --> | 0,88<!-- eval:holdout.json:by_fold.2026.vertical.mae --> | 14,1 %<!-- eval:holdout.json:by_fold.2026.vertical.share_in_bounds --> | 0,960<!-- eval:holdout.json:by_fold.2026.iou_zone_median --> |
+
+| okres | scen | bias [m] | MAE [m] | RMSE [m] | `h_t` w przedziale |
+|---|---|---|---|---|---|
+| przed powodzią (2020–2023) | 83<!-- eval:holdout.json:by_period.[2020-2023].n_scenes --> | −0,26<!-- eval:holdout.json:by_period.[2020-2023].vertical.bias --> | 0,92<!-- eval:holdout.json:by_period.[2020-2023].vertical.mae --> | 1,18<!-- eval:holdout.json:by_period.[2020-2023].vertical.rmse --> | 20,2 %<!-- eval:holdout.json:by_period.[2020-2023].vertical.share_in_bounds --> |
+| 2024 (rok mieszany) | 20<!-- eval:holdout.json:by_period.2024.n_scenes --> | −0,18<!-- eval:holdout.json:by_period.2024.vertical.bias --> | 0,95<!-- eval:holdout.json:by_period.2024.vertical.mae --> | 1,13<!-- eval:holdout.json:by_period.2024.vertical.rmse --> | 12,0 %<!-- eval:holdout.json:by_period.2024.vertical.share_in_bounds --> |
+| po powodzi (2025–2026) | 52<!-- eval:holdout.json:by_period.[2025-2026].n_scenes --> | 0,00<!-- eval:holdout.json:by_period.[2025-2026].vertical.bias --> | 0,98<!-- eval:holdout.json:by_period.[2025-2026].vertical.mae --> | 1,23<!-- eval:holdout.json:by_period.[2025-2026].vertical.rmse --> | 14,3 %<!-- eval:holdout.json:by_period.[2025-2026].vertical.share_in_bounds --> |
+
+MAE fałd waha się od 0,74<!-- eval:holdout.json:by_fold.2021.vertical.mae --> m (2021) do 1,06<!-- eval:holdout.json:by_fold.2025.vertical.mae --> m (2025). Po powodzi MAE jest nieco większe niż przed nią
+(0,98<!-- eval:holdout.json:by_period.[2025-2026].vertical.mae --> wobec 0,92<!-- eval:holdout.json:by_period.[2020-2023].vertical.mae --> m), ale różnica jest mniejsza niż rozrzut między latami; zmiany dna przy brzegu w tej kontroli nie widać.
+
+| pasmo `h_t` sceny | scen | hold-out: MAE / bias [m] | w próbie: MAE / bias [m] | hold-out: `h_t` w przedziale |
+|---|---|---|---|---|
+| < 192,9 m | 0<!-- eval:holdout.json:by_band.[<192.9].n_scenes --> | — | — | — |
+| 192,9–194,8 m | 54<!-- eval:holdout.json:by_band.[192.9-194.8].n_scenes --> | 0,77<!-- eval:holdout.json:by_band.[192.9-194.8].vertical.mae --> / +0,29<!-- eval:holdout.json:by_band.[192.9-194.8].vertical.bias --> | 0,75<!-- eval:holdout.json:by_band.[192.9-194.8].in_sample_vertical.mae --> / +0,25<!-- eval:holdout.json:by_band.[192.9-194.8].in_sample_vertical.bias --> | 26,7 %<!-- eval:holdout.json:by_band.[192.9-194.8].vertical.share_in_bounds --> |
+| ≥ 194,8 m | 101<!-- eval:holdout.json:by_band.[194.8+].n_scenes --> | 1,04<!-- eval:holdout.json:by_band.[194.8+].vertical.mae --> / −0,41<!-- eval:holdout.json:by_band.[194.8+].vertical.bias --> | 1,03<!-- eval:holdout.json:by_band.[194.8+].in_sample_vertical.mae --> / −0,42<!-- eval:holdout.json:by_band.[194.8+].in_sample_vertical.bias --> | 11,9 %<!-- eval:holdout.json:by_band.[194.8+].vertical.share_in_bounds --> |
+
+Na linii wody `h_t` ≈ dno, więc pasmo poziomu sceny jest zarazem pasmem rzędnej dna (tak liczy je budżet w §5.6). Wyżej błąd jest
+większy; przyczyn nie rozdzielaliśmy, ale ten sam kierunek pokazują LiDAR (§5.2) i objętość (§5.4).
+
+![Hold-out roczny: błąd pionowy wg pasm](img/eval-holdout.png)
+
+*Rozkład błędu `z` − `h_t` na pikselach brzegowych wg pasma poziomu sceny: hold-out (niebieski) i w próbie (szary). Pasmo
+< 192,9 m jest puste: żadna scena nie ma tak niskiego poziomu.*
+
+**Przeciek.** Fałda usuwa tylko sceny swojego roku. Klasyfikator RF i krzywa C nie są trenowane od nowa: maski scen i poziomy C
+w treningu pochodzą z potoku, który widział też sceny testowe. Hold-out jest więc w tym zakresie optymistyczny. Przeciek uważamy za
+mały (woda ze scen C i tak nie ustala `z_max`, a RF ocenia piksel, nie poziom), ale go nie zmierzyliśmy; trening RF i krzywej na
+każdą fałdę wymagałby powtórzenia kroków 04 i 06.
+
+**Co hold-out mówi, a czego nie.** Mówi, że na nowym sezonie model trafia w linię wody z MAE ok. 0,94<!-- eval:holdout.json:holdout.vertical.mae --> m i że wynik w próbie nie
+jest zawyżony. Nie mówi nic o dnie poniżej 192,9 m (żadnej sceny testowej tam nie ma). Nie wykrywa błędów systematycznych
+klasyfikacji: referencją jest ta sama maska RF ∧ Otsu, więc jeśli przy wysokiej wodzie zalana roślinność jest klasyfikowana jako ląd
+(hipoteza 1 z §5.2), to model i referencja mylą się tak samo. Pierścienia +1,43<!-- eval:bottom_vs_nmt.json:all_z_ge_196.bias --> m względem NMT ta kontrola nie może zobaczyć.
+
+### 5.6 Jak zmierzyliśmy i zakres błędu (bez terenu)
+
+Pomiary w terenie (echosonda, zdjęcia przy niskiej wodzie) i stare mapy są odłożone do następnego sezonu. Do tego czasu mamy pięć
+kontroli modelu dna. Trzy z nich używają danych niezależnych od satelity (LiDAR, mapa KŻ, tabela pojemności); dwie (hold-out,
+poziomy wody) w całości lub częściowo zależą od tych samych obrazów co model. Skrypt zestawienia: `pipeline/13_error_budget.py`
+(`make error-budget`), wynik `eval/error_budget.json`.
+
+**1. Hold-out roczny (§5.5).** Model bez danego roku vs linia wody na scenach tego roku przy poziomie z pomiaru (B/R). MAE
+0,94<!-- eval:holdout.json:holdout.vertical.mae --> m, bias −0,16<!-- eval:holdout.json:holdout.vertical.bias --> m. Nie pokrywa
+dna poniżej 192,9 m i nie widzi błędów wspólnych dla modelu i referencji (ta sama klasyfikacja). Dane zależne od satelity.
+
+**2. LiDAR (§5.2).** Model `all` vs NMT na odsłoniętym brzegu, piksele z bloków walidacyjnych, pasma wg rzędnej NMT. MAE
+1,11<!-- eval:error_budget.json:bands.[192.9-194.8].sources.lidar.mae --> m w paśmie 192,9–194,8 m i
+1,34<!-- eval:error_budget.json:bands.[194.8+].sources.lidar.mae --> m powyżej 194,8 m. Pokrywa tylko teren, który był suchy
+w czasie nalotu; pod wodą nic. Dane niezależne od satelity.
+
+**3. Mapa KŻ (§6.4).** Model `pre_flood` vs punkty głębokości amatorskiej mapy KŻ (2023), pasma wg rzędnej KŻ. W paśmie
+192,9–194,8 m MAE 0,65<!-- eval:error_budget.json:bands.[192.9-194.8].sources.kz.mae --> m (n = 27<!-- eval:error_budget.json:bands.[192.9-194.8].sources.kz.n -->).
+Model `all` nie był z KŻ porównywany, a poniżej 196 m pokrywa się z `pre_flood` (§5.2). Mapa jest amatorska, układ rzędnych
+nieznany. Dane niezależne od satelity.
+
+**4. Objętość (§5.4).** Przyrost objętości modelu między poziomami vs tabela pojemność ↔ rzędna. Stosunek model/tabela
+0,986<!-- eval:error_budget.json:bands.[192.9-194.8].volume.ratio --> dla 193,3–194,8 m i
+0,813<!-- eval:error_budget.json:bands.[194.8+].volume.ratio --> dla 194,8–197,8 m. Jedyna kontrola obejmująca cały akwen, ale
+mierzy powierzchnię warstwy, nie rzędną dna w metrach, i nie sięga poniżej 193,3 m. Tabela jest niezależna od satelity, ale ta sama
+tabela zamienia komunikaty RZGW na poziomy B, więc nie jest niezależna od poziomów.
+
+**5. Poziomy wody (§3.3, §3.5).** Poziom `h_t` wchodzi do każdej granicy dna. Niepewność poziomu B
+0,15<!-- eval:error_budget.json:level_context.h_sigma_median_m.B --> m (założenie), A − B: MAE
+0,47<!-- eval:error_budget.json:level_context.a_vs_b.mae --> m (n = 92<!-- eval:error_budget.json:level_context.a_vs_b.n -->),
+kontrola B przy piętrzeniu 2025: MAE 0,13<!-- eval:error_budget.json:level_context.control_r_2025_B.mae --> m
+(n = 2<!-- eval:error_budget.json:level_context.control_r_2025_B.n -->). To składnik błędu, nie kontrola dna. Częściowo zależne od
+satelity (C z powierzchni wody na scenie).
+
+**Zakres błędu dna wg pasm.** Pasmo to rzędna referencji danego źródła (hold-out: `h_t` sceny, LiDAR: NMT, KŻ: rzędna mapy), nie
+rzędna modelu. Zakres = od najmniejszego do największego MAE źródeł, które to pasmo widzą; źródło z n < 5 jest pokazane, ale do
+zakresu nie wchodzi. Objętość i poziomy to kontekst, nie składnik zakresu.
+
+| pasmo rzędnej dna | hold-out: MAE (bias, n) | LiDAR `all`: MAE (bias, n) | KŻ `pre_flood`: MAE (bias, n) | zakres MAE | dominuje | kontekst: objętość model/tabela |
+|---|---|---|---|---|---|---|
+| < 192,9 m | brak (n = 0<!-- eval:holdout.json:by_band.[<192.9].vertical.n -->) | brak (n = 0<!-- eval:bottom_vs_nmt.json:all_by_band.[<192.9].n -->) | 0,29<!-- eval:error_budget.json:bands.[<192.9].sources.kz.mae --> (+0,29<!-- eval:error_budget.json:bands.[<192.9].sources.kz.bias -->, n = 4<!-- eval:error_budget.json:bands.[<192.9].sources.kz.n -->), tylko kontekst | **brak danych** | — | — |
+| 192,9–194,8 m | 0,77<!-- eval:error_budget.json:bands.[192.9-194.8].sources.holdout.mae --> (+0,29<!-- eval:error_budget.json:bands.[192.9-194.8].sources.holdout.bias -->, 319 179<!-- eval:error_budget.json:bands.[192.9-194.8].sources.holdout.n -->) | 1,11<!-- eval:error_budget.json:bands.[192.9-194.8].sources.lidar.mae --> (+0,82<!-- eval:error_budget.json:bands.[192.9-194.8].sources.lidar.bias -->, 1 157<!-- eval:error_budget.json:bands.[192.9-194.8].sources.lidar.n -->) | 0,65<!-- eval:error_budget.json:bands.[192.9-194.8].sources.kz.mae --> (+0,30<!-- eval:error_budget.json:bands.[192.9-194.8].sources.kz.bias -->, 27<!-- eval:error_budget.json:bands.[192.9-194.8].sources.kz.n -->) | **0,65<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.0 -->–1,11<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.1 --> m** | LiDAR | 0,986<!-- eval:error_budget.json:bands.[192.9-194.8].volume.ratio --> (193,3<!-- eval:error_budget.json:bands.[192.9-194.8].volume.covered.0 -->–194,8<!-- eval:error_budget.json:bands.[192.9-194.8].volume.covered.1 --> m) |
+| ≥ 194,8 m | 1,04<!-- eval:error_budget.json:bands.[194.8+].sources.holdout.mae --> (−0,41<!-- eval:error_budget.json:bands.[194.8+].sources.holdout.bias -->, 577 551<!-- eval:error_budget.json:bands.[194.8+].sources.holdout.n -->) | 1,34<!-- eval:error_budget.json:bands.[194.8+].sources.lidar.mae --> (+1,21<!-- eval:error_budget.json:bands.[194.8+].sources.lidar.bias -->, 7 320<!-- eval:error_budget.json:bands.[194.8+].sources.lidar.n -->) | 0,64<!-- eval:error_budget.json:bands.[194.8+].sources.kz.mae --> (n = 1<!-- eval:error_budget.json:bands.[194.8+].sources.kz.n -->), poza zakresem | **1,04<!-- eval:error_budget.json:bands.[194.8+].range_m.0 -->–1,34<!-- eval:error_budget.json:bands.[194.8+].range_m.1 --> m** | LiDAR | 0,813<!-- eval:error_budget.json:bands.[194.8+].volume.ratio --> (194,8<!-- eval:error_budget.json:bands.[194.8+].volume.covered.0 -->–197,8<!-- eval:error_budget.json:bands.[194.8+].volume.covered.1 --> m) |
+
+MAE i bias w metrach; n to piksele (hold-out, LiDAR) albo punkty mapy (KŻ). Poziomy wody jako kontekst dla wszystkich pasm:
+`h_sigma` B 0,15<!-- eval:error_budget.json:level_context.h_sigma_median_m.B --> m, A − B MAE 0,47<!-- eval:error_budget.json:level_context.a_vs_b.mae --> m.
+
+**Dlaczego zestawienie, a nie suma.** Źródła nie są niezależne: hold-out i model używają tych samych masek i poziomów, a LiDAR i KŻ
+oceniają ten sam model, w którym błąd poziomu jest już zawarty. Pierwiastek z sumy kwadratów udawałby niezależność i liczyłby
+ten sam błąd kilka razy. Zakres min–max mówi tylko tyle: w tym paśmie każda kontrola, która ma dość danych, daje typowy błąd
+w tych granicach. Nie jest to przedział ufności.
+
+**LiDAR wprost.** Do zakresu wchodzi MAE modelu `all` bez odejmowania biasu. Bias względem NMT może zawierać przesunięcie
+układu RZGW ↔ EVRF2007 (NMT jest w EVRF2007, poziomy B w układzie nieznanym, §3.4). To hipoteza, niezmierzona; liczba MAE się
+przez nią nie zmienia. Zmniejszanie błędu o niezmierzone przesunięcie byłoby poprawianiem wyniku pod tezę.
+
+**Pasma wg referencji, a nie modelu.** LiDAR w paśmie 192,9–194,8 m ma bias +0,82<!-- eval:bottom_vs_nmt.json:all_by_band.[192.9-194.8].bias --> m, choć w §5.2 piksele z `z` modelu < 196 m mają
+bias −0,02<!-- eval:bottom_vs_nmt.json:all_z_lt_196.bias --> m. To nie sprzeczność, tylko inny podział: dzieląc wg niskiej rzędnej NMT, wybieramy piksele, na których model częściej
+jest za wysoko, a dzieląc wg rzędnej modelu, odwrotnie. Do budżetu bierzemy podział wg referencji, bo nie zależy od błędu modelu.
+
+**Pasmo ≥ 194,8 m: znaki biasu się różnią.** Hold-out ma −0,41<!-- eval:error_budget.json:bands.[194.8+].sources.holdout.bias --> m (dno modelu poniżej linii wody), LiDAR +1,21<!-- eval:error_budget.json:bands.[194.8+].sources.lidar.bias --> m (dno modelu powyżej
+terenu). Model nie ma więc jednego stałego przesunięcia, które dałoby się odjąć. Obie referencje widzą inne piksele: LiDAR
+suchy pierścień brzegu w dniu nalotu (często powyżej 196 m, §5.2), hold-out linię wody sceny testowej przy jej poziomie. Na linii
+wody bias zależy też od proporcji pikseli wody i lądu (§5.5), więc znak tego biasu jest słabą informacją. Objętość (0,813<!-- eval:error_budget.json:bands.[194.8+].volume.ratio -->) zgadza się
+z kierunkiem LiDAR-u: przy wysokiej wodzie modelowi brakuje zalanej powierzchni.
+
+**Pasmo < 192,9 m bez liczby.** Model nie ma tam dolnej granicy dna (najniższy obserwowany poziom to 192,90 m), żadna scena testowa
+nie ma tak niskiego poziomu, a NMT nie widzi dna pod wodą. Cztery punkty KŻ z modelem w pikselu to anegdota, nie zakres. Jedyną
+liczbą o głębokim środku jest średnie dno rdzenia z bilansu objętości (§5.4), ale to średnia dla całego rdzenia, nie mapa błędu.
+
+**Co zamknie walidacja terenowa (następny sezon).**
+
+1. **Echosonda** z GPS na profilach przez jezioro: jedyny sposób, żeby powiedzieć cokolwiek o dnie poniżej 192,9 m, i najlepszy
+   sposób na zawężenie zakresu w paśmie 192,9–194,8 m (dziś 0,65<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.0 -->–1,11<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.1 --> m z trzech kontroli o różnych zasięgach).
+2. **Messtischblatt** (mapy sprzed 1971 r., czyli sprzed napełnienia zbiornika): rzędne terenu dna niecki, niezależne od satelity i od KŻ.
+3. **Zdjęcia przy niskiej wodzie** (z brzegu lub drona) z datą i poziomem: kontrola linii wody w zarośniętych marginesach, czyli
+   tam, gdzie hold-out jest ślepy, a LiDAR pokazuje bias +1,21<!-- eval:error_budget.json:bands.[194.8+].sources.lidar.bias --> m.
 
 ---
 
@@ -571,6 +760,7 @@ make kz-qc-ui                      # RĘCZNIE: kontrola punktów KŻ (wynik w re
 make kz-contours kz-gravel variant-d
 uv run python 06_water_levels.py   # dopisuje D do scenes.json (h_t bez zmian; bez retreningu RF)
 make evaluate kz-compare kz-overlay volume
+make holdout error-budget            # hold-out roczny (§5.5), zakres błędu wg pasm (§5.6)
 uv run pytest -q                   # w tym test spójności liczb tego raportu
 ```
 
@@ -595,3 +785,7 @@ porównania, kontroli punktów KŻ, obrysu żwirowni, `config_kz.yaml` i wyniku 
 sam kod; `lidar/epochs.csv` jest wymagany tylko wtedy, gdy go brak), a `variant-d` od danych KŻ (punkty, poziomice, żwirownia, kontrola
 punktów, `config_kz.yaml`). `make -n kz-compare` nie uruchamia RF ani klasyfikacji. Po zmianie modelu trzeba je wymusić:
 `rm data/processed/eval/model_choice.json && make evaluate` (analogicznie `kz_compare.json`, `variant_d.json`).
+`holdout` zależy tylko od kodu hold-outu (`12_holdout.py`, `mielizna/holdout.py`, `mielizna/budget.py`) i od
+`eval/model_choice.json`; buduje 7<!-- eval:holdout.json:n_folds --> modeli fałd w pamięci (rastrów nie zapisuje) i nie uruchamia RF ani klasyfikacji. `error-budget`
+czyta tylko JSON-y oceny (`holdout.json`, `bottom_vs_nmt.json`, `kz_points.json`, `volume.json`, `levels.json`). Po zmianie modelu:
+`rm data/processed/eval/holdout.json && make holdout error-budget`.
