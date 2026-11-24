@@ -87,3 +87,27 @@ def test_shoreline_distance_shifted_square():
 
 def test_band_of_edges():
     assert budget.band_of(np.array([192.89, 192.9, 194.79, 194.8])).tolist() == ["<192.9", "192.9-194.8", "192.9-194.8", "194.8+"]
+
+
+def _scene(n_shore, errs, iou_zone=0.9):
+    e = np.array(errs, float)
+    return {"n_shore": n_shore, "err": e, "in_bounds": np.ones(len(e), bool), "iou_zone": iou_zone,
+            "iou_lake": iou_zone, "share_uncertain": 0.1, "shore_dist_median": 5.0, "shore_dist_p90": 9.0}
+
+
+def test_aggregate_skips_empty_scenes():
+    import json
+    out = holdout.aggregate([_scene(0, [], float("nan")), _scene(3, [0.1, -0.2, 0.3])])
+    assert out["n_skipped"] == 1 and out["n_test_scenes"] == 1
+    assert out["vertical"]["n"] == 3
+    assert out["iou_zone"]["median"] == pytest.approx(0.9)
+    json.dumps(out, allow_nan=False)  # brak NaN
+
+
+def test_aggregate_nan_iou_excluded_and_all_empty():
+    import json
+    out = holdout.aggregate([_scene(2, [0.1, 0.2], float("nan")), _scene(2, [0.0, 0.1], 0.5)])
+    assert out["iou_zone"]["median"] == pytest.approx(0.5)
+    out = holdout.aggregate([_scene(0, [])])
+    assert out["n_skipped"] == 1 and out["vertical"]["n"] == 0
+    json.dumps(out, allow_nan=False)

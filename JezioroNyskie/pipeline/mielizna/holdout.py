@@ -113,3 +113,49 @@ def summarize(err: np.ndarray, in_bounds: np.ndarray, n_shore: int) -> dict:
             "p90_abs": float(np.percentile(a, 90)) if n else nan,
             "share_in_bounds": float(np.mean(in_bounds)) if n else nan,
             "share_no_pred": float(1 - n / n_shore) if n_shore else nan}
+
+
+def jsonable(x):
+    """Rekurencyjnie zamienia NaN/inf na None, numpy na typy pythonowe (do `json.dump(..., allow_nan=False)`)."""
+    if isinstance(x, dict):
+        return {k: jsonable(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [jsonable(v) for v in x]
+    if isinstance(x, (np.floating, float)):
+        return float(x) if np.isfinite(x) else None
+    if isinstance(x, np.integer):
+        return int(x)
+    return x
+
+
+def _dist(values: list[float]) -> dict:
+    """Mediana, p10, p90 po scenach; NaN pomijane (nan-aware); brak wartości → None."""
+    v = np.asarray(values, float)
+    v = v[np.isfinite(v)]
+    if len(v) == 0:
+        return {"median": None, "p10": None, "p90": None}
+    return {"median": float(np.median(v)), "p10": float(np.percentile(v, 10)), "p90": float(np.percentile(v, 90))}
+
+
+def aggregate(per_scene: list[dict]) -> dict:
+    """Zbiera wyniki scen testowych w statystyki zbiorcze (JSON bez NaN).
+
+    Co robi: pomija sceny z `n_shore == 0` (liczy je w `n_skipped`), skleja `err`/`in_bounds` pozostałych w `summarize`
+      i liczy rozkłady (mediana, p10, p90) IoU, udziału niepewnych i odległości linii brzegowych po scenach.
+    Dlaczego tak: scena bez pikseli brzegowych nic nie mówi o błędzie pionowym; NaN IoU (pusty mianownik) nie może
+      zaniżać ani zawyżać rozkładu, więc jest wykluczany, a w JSON-ie nigdy nie pojawia się NaN.
+    Wejście → wyjście: lista słowników sceny (n_shore, err, in_bounds, iou_zone, iou_lake, share_uncertain,
+      shore_dist_median, shore_dist_p90) → słownik zbiorczy.
+    Jak to obronić: test z pustą sceną i NaN w IoU sprawdza liczniki oraz `json.dumps(allow_nan=False)`.
+    """
+    used = [s for s in per_scene if s["n_shore"] > 0]
+    err = np.concatenate([np.asarray(s["err"], float) for s in used]) if used else np.array([])
+    ib = np.concatenate([np.asarray(s["in_bounds"], bool) for s in used]) if used else np.array([], bool)
+    n_shore = int(sum(s["n_shore"] for s in used))
+    out = {"n_test_scenes": len(used), "n_skipped": len(per_scene) - len(used),
+           "vertical": summarize(err, ib, n_shore),
+           "iou_zone": _dist([s["iou_zone"] for s in used]), "iou_lake": _dist([s["iou_lake"] for s in used]),
+           "share_uncertain": _dist([s["share_uncertain"] for s in used]),
+           "shore_dist_m": {"median": _dist([s["shore_dist_median"] for s in used])["median"],
+                            "p90": _dist([s["shore_dist_p90"] for s in used])["median"]}}
+    return jsonable(out)

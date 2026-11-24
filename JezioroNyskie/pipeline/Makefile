@@ -36,12 +36,13 @@ EVALD   := $(PROC)/eval/variant_d.json
 EVALCH  := $(PROC)/eval/model_choice.json
 EVALKZ  := $(PROC)/eval/kz_compare.json
 EVALVOL := $(PROC)/eval/volume.json
+EVALHO  := $(PROC)/eval/holdout.json
 KZOVER  := ../docs/img/kz-overlay.png
 ZWIR    := $(REF)/zwirownia.gpkg
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate volume test check-locks clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate volume holdout test check-locks clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -179,6 +180,12 @@ $(EVALCH): 08_evaluate.py mielizna/evaluate.py mielizna/blocks.py
 volume: $(EVALVOL)
 $(EVALVOL): 11_volume.py mielizna/volume.py $(REF)/kz_pojemnosc_rzedna.csv $(EVALCH)
 	$(UV) 11_volume.py
+
+# holdout: roczny hold-out modelu dna (12_holdout.py). Jak evaluate/volume: zależy tylko od kodu i model_choice.json, nie od
+# łańcucha S2 -> klasyfikacja -> model (ma nieaktualne daty). Po zmianie modelu: rm $(EVALHO) && make holdout.
+holdout: $(EVALHO)
+$(EVALHO): 12_holdout.py mielizna/holdout.py mielizna/budget.py $(EVALCH)
+	$(UV) 12_holdout.py
 
 test:
 	uv run pytest -q
