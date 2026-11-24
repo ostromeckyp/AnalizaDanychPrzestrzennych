@@ -3,6 +3,7 @@ import { Footer } from '../components/chrome/Footer';
 import { AccuracyTiles } from '../components/method/AccuracyTiles';
 import { AreaLevelChart } from '../components/method/AreaLevelChart';
 import { SourcesTable } from '../components/method/SourcesTable';
+import { ValidationSection } from '../components/method/ValidationSection';
 import { MobileHeader } from '../components/mobile/MobileHeader';
 import { useMethodVm } from '../vm/useMethodVm';
 import { useViewport } from '../vm/useViewport';
@@ -55,6 +56,7 @@ export function MethodPage() {
           <h2 id="m-acc">Dokładność modelu</h2>
           <AccuracyTiles tiles={vm.tiles} />
         </section>
+        {vm.validation && <ValidationSection {...vm.validation} />}
         <section aria-labelledby="m-src">
           <h2 id="m-src">Źródła danych</h2>
           <SourcesTable rows={vm.sources} />

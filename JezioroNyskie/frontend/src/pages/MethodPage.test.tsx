@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Meta } from '../api/client';
 import { meta } from '../test/fixtures';
 import { createQueryClient } from '../vm/queryClient';
 import { MethodPage } from './MethodPage';
@@ -23,6 +24,22 @@ function renderPage() {
     </QueryClientProvider>,
   );
 }
+
+const validation: NonNullable<Meta['validation']> = {
+  checks: [
+    { name: 'Hold-out roczny', compared_with: 'linie wody tego roku', result: 'MAE 0,5 m' },
+    { name: 'NMT LiDAR', compared_with: 'teren odsłonięty', result: 'MAE 1,2 m' },
+    { name: 'Mapa KŻ', compared_with: 'model sprzed powodzi', result: 'MAE 0,8 m' },
+    { name: 'Tabela pojemności', compared_with: 'poziomy RZGW', result: 'zgodna' },
+    { name: 'Objętość', compared_with: 'komunikaty RZGW', result: 'rząd wielkości' },
+  ],
+  bands: [
+    { band: '≥ 194,8 m', range_m: [0.6, 1.3], dominant: 'NMT LiDAR', note: 'n1' },
+    { band: '192,9–194,8 m', range_m: [1.04, 1.34], dominant: 'mapa KŻ (model pre_flood)', note: 'n2' },
+    { band: '< 192,9 m', range_m: null, dominant: null, note: 'Brak pomiarów w tym paśmie.' },
+  ],
+  lidar_note: 'LiDAR obejmuje tylko odsłonięty teren.',
+};
 
 const tile = (name: string) => screen.getByRole('group', { name });
 
@@ -86,5 +103,44 @@ describe('MethodPage', () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Spróbuj ponownie' }));
     expect(await screen.findByRole('heading', { name: 'Jak powstaje mapa głębokości' })).toBeInTheDocument();
+  });
+
+  it('validation section: heading, five checks, bands with ranges and no-data row', async () => {
+    m.meta.mockResolvedValue({ ...meta, validation });
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Jak sprawdziliśmy model' })).toBeInTheDocument();
+    const list = screen.getByRole('list', { name: 'Kontrole modelu' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(5);
+    expect(list).toHaveTextContent('Hold-out roczny — linie wody tego roku');
+    const table = screen.getByRole('table', { name: 'Zakres błędu dna' });
+    expect(within(table).getByText('1,04–1,34 m')).toBeInTheDocument();
+    expect(within(table).getByText('mapa KŻ (model pre_flood)')).toBeInTheDocument();
+    const row = within(table).getByText('< 192,9 m').closest('tr')!;
+    expect(row).toHaveTextContent('brak danych');
+    expect(row).toHaveTextContent('Brak pomiarów w tym paśmie.');
+    expect(screen.getByText('LiDAR obejmuje tylko odsłonięty teren.')).toBeInTheDocument();
+  });
+
+  it('no validation: section hidden', async () => {
+    m.meta.mockResolvedValue({ ...meta, validation: null });
+    renderPage();
+    await screen.findByRole('heading', { name: 'Jak powstaje mapa głębokości' });
+    expect(screen.queryByRole('heading', { name: 'Jak sprawdziliśmy model' })).not.toBeInTheDocument();
+  });
+
+  it('hold-out tile only when holdout_mae is present', async () => {
+    m.meta.mockResolvedValue({ ...meta, accuracy: { ...meta.accuracy, holdout_mae: 0.52, holdout_n_scenes: 155 } });
+    renderPage();
+    await screen.findByRole('heading', { name: 'Jak powstaje mapa głębokości' });
+    expect(tile('Hold-out roczny (MAE)')).toHaveTextContent(
+      '0,52 mmodel bez danego roku vs linie wody tego roku, 155 scen',
+    );
+  });
+
+  it('no hold-out tile when holdout_mae is null', async () => {
+    m.meta.mockResolvedValue({ ...meta, accuracy: { ...meta.accuracy, holdout_mae: null } });
+    renderPage();
+    await screen.findByRole('heading', { name: 'Jak powstaje mapa głębokości' });
+    expect(screen.queryByRole('group', { name: 'Hold-out roczny (MAE)' })).not.toBeInTheDocument();
   });
 });

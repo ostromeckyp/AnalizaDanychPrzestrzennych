@@ -14,6 +14,13 @@ export type MethodChart = {
   legend: ChartLegend[];
 };
 
+export type MethodValidation = {
+  intro: string;
+  checks: { name: string; comparedWith: string; result: string }[];
+  bands: { label: string; range: string; dominant: string; note: string }[];
+  lidarNote: string;
+};
+
 export interface MethodVm {
   status: 'loading' | 'error' | 'ready';
   retry(): void;
@@ -21,6 +28,7 @@ export interface MethodVm {
   steps: MethodStep[];
   chart?: MethodChart;
   tiles: MethodTile[];
+  validation?: MethodValidation;
   sources: MethodSource[];
   credit: string;
 }
@@ -72,6 +80,10 @@ const PERIOD_LABELS: Record<string, string> = {
 
 // Obciążenie ze znakiem (+ dla dodatniego), polski przecinek i jednostka z fmtM.
 const signedM = (x: number) => `${x > 0 ? '+' : ''}${fmtM(x)}`;
+
+// Zakres błędu pasma: „1,04–1,34 m” (jedna jednostka na końcu); brak zakresu → „brak danych”.
+const fmtRange = (r: number[] | null | undefined) =>
+  r && r.length === 2 ? `${fmtNum(r[0], 2)}–${fmtNum(r[1], 2)}\u00a0m` : 'brak danych';
 
 const num = (x: number | null | undefined) => (typeof x === 'number' ? x : NaN);
 
@@ -188,6 +200,32 @@ export function useMethodVm(): MethodVm {
         },
   ];
 
+  // Kafelek hold-out tylko, gdy API podało MAE (brak holdout.json → null).
+  if (typeof acc.holdout_mae === 'number') {
+    const n = acc.holdout_n_scenes;
+    tiles.push({
+      label: 'Hold-out roczny (MAE)',
+      value: fmtM(acc.holdout_mae),
+      sub: `model bez danego roku vs linie wody tego roku${typeof n === 'number' ? `, ${plScenes(n)}` : ''}`,
+    });
+  }
+
+  const val = meta.validation;
+  const validation: MethodValidation | undefined = val
+    ? {
+        intro:
+          'Bez pomiarów w terenie zrobiliśmy pięć kontroli; trzy z nich używają danych niezależnych od satelity (LiDAR, mapa KŻ, tabela pojemności).',
+        checks: val.checks.map((c) => ({ name: c.name, comparedWith: c.compared_with, result: c.result })),
+        bands: val.bands.map((b) => ({
+          label: b.band,
+          range: fmtRange(b.range_m),
+          dominant: b.dominant ?? '—',
+          note: b.range_m ? '' : b.note,
+        })),
+        lidarNote: val.lidar_note,
+      }
+    : undefined;
+
   const al = meta.area_level;
   const points: ChartPoint[] = [];
   for (const p of al.points) {
@@ -218,6 +256,7 @@ export function useMethodVm(): MethodVm {
     ...base,
     steps,
     tiles,
+    validation,
     chart: { points, nodes, npp: meta.npp, maxPp: meta.max_pp, legend },
   };
 }

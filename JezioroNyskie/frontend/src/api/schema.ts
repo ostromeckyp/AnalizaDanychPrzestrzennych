@@ -276,6 +276,14 @@ export interface components {
             levels_mae_ab?: number | null;
             /** Variant D Within 0 2 */
             variant_d_within_0_2?: number | null;
+            /** Holdout Mae */
+            holdout_mae?: number | null;
+            /** Holdout Bias */
+            holdout_bias?: number | null;
+            /** Holdout In Bounds */
+            holdout_in_bounds?: number | null;
+            /** Holdout N Scenes */
+            holdout_n_scenes?: number | null;
         };
         /** AreaLevel */
         AreaLevel: {
@@ -561,6 +569,7 @@ export interface components {
             /** Z Max Floor */
             z_max_floor: number;
             accuracy: components["schemas"]["Accuracy"];
+            validation?: components["schemas"]["Validation"] | null;
             area_level: components["schemas"]["AreaLevel"];
             layers: components["schemas"]["Layers"];
         };
@@ -675,6 +684,38 @@ export interface components {
             ][];
             /** Min Unc */
             min_unc: number;
+        };
+        /** Validation */
+        Validation: {
+            /** Checks */
+            checks: components["schemas"]["ValidationCheck"][];
+            /** Bands */
+            bands: components["schemas"]["ValidationBand"][];
+            /** Lidar Note */
+            lidar_note: string;
+        };
+        /** ValidationBand */
+        ValidationBand: {
+            /** Band */
+            band: string;
+            /** Range M */
+            range_m: [
+                number,
+                number
+            ] | null;
+            /** Dominant */
+            dominant: string | null;
+            /** Note */
+            note: string;
+        };
+        /** ValidationCheck */
+        ValidationCheck: {
+            /** Name */
+            name: string;
+            /** Compared With */
+            compared_with: string;
+            /** Result */
+            result: string;
         };
         /** ValidationError */
         ValidationError: {
