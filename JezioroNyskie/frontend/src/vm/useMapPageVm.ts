@@ -1,13 +1,15 @@
 import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { type Gravel, type Marinas, type Meta, type Zones } from '../api/client';
+import { type Gravel, type Hazards, type Marinas, type Meta, type Zones } from '../api/client';
 import type { ParameterPanelProps } from '../components/panel/ParameterPanel';
+import type { HazardPopupModel } from '../components/popup/types';
 import type { LayerKey, LevelMode } from '../components/panel/types';
 import { round05 } from '../format';
 import { useBulletinVm } from './useBulletinVm';
 import { useCapacityVm } from './useCapacityVm';
 import { useCurrentLevelVm } from './useCurrentLevelVm';
 import { useGravelVm } from './useGravelVm';
+import { toHazardPopupModel, useHazardsVm } from './useHazardsVm';
 import { useMarinasVm } from './useMarinasVm';
 import { useMetaVm } from './useMetaVm';
 import { usePointVm, type PointVm } from './usePointVm';
@@ -22,6 +24,7 @@ const DEFAULT_VISIBLE: Record<LayerKey, boolean> = {
   shorelines: false,
   marinas: true,
   gravel: true,
+  hazards: true,
 };
 
 export interface MapPageVm {
@@ -36,6 +39,8 @@ export interface MapPageVm {
     marinas?: Marinas;
     gravel?: Gravel;
     gravelAttribution?: string;
+    hazards?: Hazards;
+    hazardsAttribution?: string;
     bottomLayer?: { url: string; coordinates: [number, number][] };
     uncertaintyLayer?: { url: string; coordinates: [number, number][] };
     visible: Record<LayerKey, boolean>;
@@ -52,7 +57,10 @@ export interface MapPageVm {
   /** Zanurzenie wpisane przez użytkownika (także jeszcze nieprzeliczone). */
   draft: number;
   point: PointVm;
+  /** Popup wybranej przeszkody z locji (zamiast popupu punktu); h = bieżący poziom z suwaka. */
+  hazardPopup?: HazardPopupModel;
   onMapClick(lon: number, lat: number): void;
+  onHazardClick(id: string): void;
   closePopup(): void;
 }
 
@@ -73,6 +81,7 @@ export function useMapPageVm(): MapPageVm {
   const level = useCurrentLevelVm();
   const { marinas } = useMarinasVm();
   const { gravel, attribution: gravelAttribution } = useGravelVm();
+  const { hazards, attribution: hazardsAttribution } = useHazardsVm();
 
   const [hUser, setHUser] = useState<number>();
   const [draftUser, setDraftUser] = useState<number>();
@@ -82,6 +91,7 @@ export function useMapPageVm(): MapPageVm {
   const [userVisible, setUserVisible] = useState(DEFAULT_VISIBLE);
   const [basemap, setBasemap] = useState<Basemap>('osm');
   const [pin, setPin] = useState<{ lon: number; lat: number }>();
+  const [hazardId, setHazardId] = useState<string>();
 
   // Poziom początkowy ustalamy raz: ?h= > bieżący poziom > domyślny z meta. Czekamy na bieżący poziom
   // tylko do czasu, aż jego zapytanie się rozstrzygnie (sukces lub błąd).
@@ -109,7 +119,8 @@ export function useMapPageVm(): MapPageVm {
   const params = { h, draft, margin };
 
   const zonesVm = useZonesVm(params);
-  const point = usePointVm(pin, params);
+  const hazard = hazardId ? hazards?.features.find((f) => f.properties.id === hazardId) : undefined;
+  const point = usePointVm(hazard ? undefined : pin, params); // przeszkoda zastępuje popup punktu, bez zapytania o punkt
 
   // Ostrzeżenie z API wymusza warstwę niepewności, ale nie przestawia wyboru użytkownika.
   const forceUnc = zonesVm.warnings.length > 0;
@@ -185,6 +196,8 @@ export function useMapPageVm(): MapPageVm {
       marinas,
       gravel,
       gravelAttribution,
+      hazards,
+      hazardsAttribution,
       bottomLayer: layer(meta?.layers.bottom),
       uncertaintyLayer: layer(meta?.layers.uncertainty),
       visible,
@@ -200,7 +213,21 @@ export function useMapPageVm(): MapPageVm {
     },
     draft,
     point,
-    onMapClick: (lon, lat) => setPin({ lon, lat }),
-    closePopup: () => setPin(undefined),
+    hazardPopup: hazard && toHazardPopupModel(hazard, h),
+    onMapClick: (lon, lat) => {
+      setHazardId(undefined);
+      setPin({ lon, lat });
+    },
+    onHazardClick: (id) => {
+      const f = hazards?.features.find((x) => x.properties.id === id);
+      const c = f?.geometry.coordinates as number[] | undefined;
+      if (!f || !c) return;
+      setHazardId(id);
+      setPin({ lon: c[0], lat: c[1] });
+    },
+    closePopup: () => {
+      setHazardId(undefined);
+      setPin(undefined);
+    },
   };
 }

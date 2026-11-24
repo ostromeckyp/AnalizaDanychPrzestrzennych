@@ -1,5 +1,5 @@
 import type { LayerSpecification, StyleSpecification } from 'maplibre-gl';
-import { LEVEL_SCALE, POI_COLORS, UNC_DOT, ZONE_COLORS, type ThemeName } from '../../theme';
+import { HAZARD_COLORS, LEVEL_SCALE, POI_COLORS, UNC_DOT, ZONE_COLORS, type ThemeName } from '../../theme';
 
 // Stałe nazwy źródeł i warstw (kontrakt z testami i resztą UI).
 export const IDS = {
@@ -16,6 +16,7 @@ export const IDS = {
   marinas: 'marinas',
   marinasLetters: 'marinas-letters',
   gravel: 'gravel',
+  hazards: 'hazards',
   pin: 'pin',
 } as const;
 
@@ -89,6 +90,21 @@ export const gravelLayer = (theme: ThemeName): LayerSpecification => ({
   type: 'line',
   source: IDS.gravel,
   paint: { 'line-color': ZONE_COLORS[theme].danger, 'line-width': 2.5, 'line-dasharray': [3, 2] },
+});
+
+// Przeszkody z locji: pomarańczowe kółka z ciemną obwódką (kolory z theme.ts), nad przystaniami, pod pinezką.
+export const hazardPaint = (theme: ThemeName) => ({
+  'circle-radius': 8,
+  'circle-color': HAZARD_COLORS[theme].fill,
+  'circle-stroke-color': HAZARD_COLORS[theme].stroke,
+  'circle-stroke-width': 2.5,
+});
+
+export const hazardLayer = (theme: ThemeName): LayerSpecification => ({
+  id: IDS.hazards,
+  type: 'circle',
+  source: IDS.hazards,
+  paint: hazardPaint(theme),
 });
 
 export const marinaLayers = (theme: ThemeName): LayerSpecification[] => [

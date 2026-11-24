@@ -11,6 +11,8 @@ import {
   POI_IMAGE,
   baseStyle,
   gravelLayer,
+  hazardLayer,
+  hazardPaint,
   marinaLayers,
   pinLayer,
   pinPaint,
@@ -33,6 +35,10 @@ export interface MapViewProps {
   gravel?: GeoJsonData;
   /** Atrybucja obrysu (z API), dopisywana do kontrolki atrybucji przez źródło warstwy. */
   gravelAttribution?: string;
+  /** Przeszkody z locji; warstwa powstaje dopiero z danymi (pusta odpowiedź = brak warstwy). */
+  hazards?: GeoJsonData;
+  /** Atrybucja przeszkód (z API), dopisywana do kontrolki atrybucji przez źródło warstwy. */
+  hazardsAttribution?: string;
   visible: Visible;
   basemap: 'osm' | 'orto';
   npp?: number;
@@ -40,6 +46,8 @@ export interface MapViewProps {
   /** Treść zakotwiczona nad pinezką (popup); mapa nie zna jej zawartości. */
   pinOverlay?: ReactNode;
   onMapClick: (lon: number, lat: number) => void;
+  /** Klik w znacznik przeszkody (id z właściwości cechy); nie wywołuje onMapClick. */
+  onHazardClick?: (id: string) => void;
 }
 
 const ATTRIBUTION = '© OpenStreetMap contributors · Copernicus Sentinel-2 · GUGiK';
@@ -86,9 +94,19 @@ export function MapView(props: MapViewProps) {
     map.fitBounds([[w, s], [e, n]], { padding, animate: false });
     map.addControl(new maplibregl.AttributionControl({ compact: false, customAttribution: ATTRIBUTION }), 'bottom-right');
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 100 }), 'bottom-left');
-    map.on('click', (ev: { lngLat: { lng: number; lat: number } }) =>
-      propsRef.current.onMapClick(ev.lngLat.lng, ev.lngLat.lat),
-    );
+    map.on('click', (ev: { lngLat: { lng: number; lat: number }; point: { x: number; y: number } }) => {
+      const cur = propsRef.current;
+      // Znacznik przeszkody ma pierwszeństwo przed zwykłym kliknięciem w mapę (tylko gdy warstwa jest widoczna).
+      if (cur.visible.hazards && map.getLayer(IDS.hazards)) {
+        const hit = map.queryRenderedFeatures(ev.point as never, { layers: [IDS.hazards] })[0];
+        const id = hit?.properties?.id;
+        if (typeof id === 'string' && cur.onHazardClick) {
+          cur.onHazardClick(id);
+          return;
+        }
+      }
+      cur.onMapClick(ev.lngLat.lng, ev.lngLat.lat);
+    });
     map.on('load', () => {
       const t = propsRef.current.theme;
       appliedTheme.current = t;
@@ -162,6 +180,21 @@ export function MapView(props: MapViewProps) {
     setVis(map, [IDS.gravel], propsRef.current.visible.gravel);
   }, [ready, gravel, gravelAttribution]);
 
+  // Przeszkody z locji: tak jak żwirownia, źródło z atrybucją powstaje przy pierwszych danych.
+  const { hazards, hazardsAttribution } = props;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map || !hazards) return;
+    const src = map.getSource(IDS.hazards) as GeoJSONSource | undefined;
+    if (src) {
+      src.setData(hazards as never);
+      return;
+    }
+    map.addSource(IDS.hazards, { type: 'geojson', data: hazards as never, attribution: hazardsAttribution });
+    map.addLayer(hazardLayer(propsRef.current.theme), IDS.pin);
+    setVis(map, [IDS.hazards], propsRef.current.visible.hazards);
+  }, [ready, hazards, hazardsAttribution]);
+
   // Linie poniżej NPP rysujemy przerywane.
   useEffect(() => {
     const map = mapRef.current;
@@ -199,6 +232,7 @@ export function MapView(props: MapViewProps) {
     map.setPaintProperty(IDS.zonesSafe, 'fill-color', c.safe);
     map.setPaintProperty(IDS.zonesDanger, 'fill-color', c.danger);
     if (map.getLayer(IDS.gravel)) map.setPaintProperty(IDS.gravel, 'line-color', c.danger);
+    if (map.getLayer(IDS.hazards)) for (const [k, v] of Object.entries(hazardPaint(theme))) map.setPaintProperty(IDS.hazards, k, v);
     map.updateImage(HATCH_IMAGE, makeHatch(theme));
     const letters = poiLetters(theme);
     map.updateImage(POI_IMAGE.marina, letters.P);
@@ -217,7 +251,8 @@ export function MapView(props: MapViewProps) {
     setVis(map, [IDS.shorelines, IDS.shorelinesDashed], visible.shorelines);
     setVis(map, [IDS.marinas, IDS.marinasLetters], visible.marinas);
     setVis(map, [IDS.gravel], visible.gravel);
-  }, [ready, visible.zones, visible.bottom, visible.uncertainty, visible.shorelines, visible.marinas, visible.gravel, props.bottomLayer, props.uncertaintyLayer, props.gravel]);
+    setVis(map, [IDS.hazards], visible.hazards);
+  }, [ready, visible.zones, visible.bottom, visible.uncertainty, visible.shorelines, visible.marinas, visible.gravel, visible.hazards, props.bottomLayer, props.uncertaintyLayer, props.gravel, props.hazards]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -25,6 +25,7 @@ const h = vi.hoisted(() => {
     zoomOut: vi.fn(),
     resetNorth: vi.fn(),
     getSource: vi.fn((id: string) => sources[id]),
+    queryRenderedFeatures: vi.fn((): unknown[] => []),
     getLayer: vi.fn((id: string) => (layers.has(id) ? {} : undefined)),
     hasImage: vi.fn(() => true),
     on: vi.fn((ev: string, cb: (e?: unknown) => void) => {
@@ -80,7 +81,7 @@ const base: MapViewProps = {
   zones: fc(1),
   bottomLayer: { url: '/api/layers/bottom.png', coordinates: [[17, 50.5], [17.1, 50.5], [17.1, 50.4], [17, 50.4]] },
   uncertaintyLayer: { url: '/api/layers/unc.png?v=1', coordinates: [[17, 50.5], [17.1, 50.5], [17.1, 50.4], [17, 50.4]] },
-  visible: { zones: true, bottom: true, uncertainty: true, shorelines: true, marinas: true, gravel: true },
+  visible: { zones: true, bottom: true, uncertainty: true, shorelines: true, marinas: true, gravel: true, hazards: true },
   basemap: 'osm',
   npp: 195.91,
   onMapClick: vi.fn(),
@@ -160,6 +161,47 @@ describe('MapView', () => {
     );
     rerender(<MapView {...base} gravel={g} visible={{ ...base.visible, gravel: false }} />);
     expect(h.fns.setLayoutProperty).toHaveBeenCalledWith('gravel', 'visibility', 'none');
+  });
+
+  it('warstwa przeszkód: źródło z atrybucją, kółka z ciemną obwódką, widoczność przez layout; bez danych brak warstwy', () => {
+    mount();
+    expect(h.layers.has('hazards')).toBe(false);
+    cleanup();
+    const hz = { type: 'FeatureCollection', features: [], n: 5 };
+    const { rerender } = mount({ hazards: hz, hazardsAttribution: 'Klub Żeglarski NYSA' });
+    expect(h.fns.addSource).toHaveBeenCalledWith(
+      'hazards',
+      expect.objectContaining({ type: 'geojson', attribution: 'Klub Żeglarski NYSA' }),
+    );
+    expect(h.fns.addLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'hazards', type: 'circle', paint: expect.objectContaining({ 'circle-stroke-color': '#0e2433' }) }),
+      'pin',
+    );
+    rerender(<MapView {...base} hazards={hz} visible={{ ...base.visible, hazards: false }} />);
+    expect(h.fns.setLayoutProperty).toHaveBeenCalledWith('hazards', 'visibility', 'none');
+  });
+
+  it('kliknięcie w znacznik przeszkody zgłasza id i nie zgłasza kliknięcia w mapę', () => {
+    const onMapClick = vi.fn();
+    const onHazardClick = vi.fn();
+    mount({ hazards: fc(1), onMapClick, onHazardClick });
+    h.fns.queryRenderedFeatures.mockReturnValueOnce([{ properties: { id: 'rafa' } }]);
+    h.handlers.click({ lngLat: { lng: 17.29, lat: 50.45 }, point: { x: 10, y: 10 } });
+    expect(h.fns.queryRenderedFeatures).toHaveBeenCalledWith({ x: 10, y: 10 }, { layers: ['hazards'] });
+    expect(onHazardClick).toHaveBeenCalledWith('rafa');
+    expect(onMapClick).not.toHaveBeenCalled();
+    h.handlers.click({ lngLat: { lng: 17.3, lat: 50.4 }, point: { x: 50, y: 50 } }); // nic pod kursorem
+    expect(onMapClick).toHaveBeenCalledWith(17.3, 50.4);
+  });
+
+  it('ukryta warstwa przeszkód nie przechwytuje kliknięć', () => {
+    const onMapClick = vi.fn();
+    const onHazardClick = vi.fn();
+    mount({ hazards: fc(1), onMapClick, onHazardClick, visible: { ...base.visible, hazards: false } });
+    h.fns.queryRenderedFeatures.mockReturnValue([{ properties: { id: 'rafa' } }]);
+    h.handlers.click({ lngLat: { lng: 17.29, lat: 50.45 }, point: { x: 10, y: 10 } });
+    expect(onHazardClick).not.toHaveBeenCalled();
+    expect(onMapClick).toHaveBeenCalledWith(17.29, 50.45);
   });
 
   it('widoczność przez layout visibility', () => {

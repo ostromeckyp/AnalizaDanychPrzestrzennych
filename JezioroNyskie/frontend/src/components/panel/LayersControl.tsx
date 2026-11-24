@@ -17,6 +17,7 @@ const LAYERS: [LayerKey, string][] = [
   ['shorelines', 'Historyczne linie brzegowe'],
   ['marinas', 'Przystanie i slipy (OSM)'],
   ['gravel', 'Dno zmienne (eksploatacja kruszywa)'],
+  ['hazards', 'Przeszkody z locji'],
 ];
 
 export function LayersControl({ visible, basemap, variant, onToggle, onBasemap }: LayersControlProps) {

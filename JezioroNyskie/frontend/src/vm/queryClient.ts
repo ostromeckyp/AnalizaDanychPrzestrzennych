@@ -23,6 +23,7 @@ export const queryKeys = {
   shoreline: (date: string) => ['shoreline', date] as const,
   marinas: () => ['marinas'] as const,
   gravel: () => ['gravel'] as const,
+  hazards: () => ['hazards'] as const,
   currentLevel: () => ['current-level'] as const,
   bulletinLatest: () => ['bulletin-latest'] as const,
   capacity: (v: number) => ['capacity', v] as const,

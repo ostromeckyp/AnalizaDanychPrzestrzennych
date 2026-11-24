@@ -56,8 +56,8 @@ const SOURCES: MethodSource[] = [
     license: 'źródło: Wody Polskie / RZGW Wrocław (archiwum komunikatów z Wayback Machine)',
   },
   {
-    name: 'Mapa KŻ Nysa (Wiktor Wróblewski)',
-    use: 'tabela pojemność ↔ rzędna (wariant B); obrys żwirowni i porównanie dna',
+    name: 'Mapa i locja KŻ Nysa (Wiktor Wróblewski)',
+    use: 'tabela pojemność ↔ rzędna (wariant B); obrys żwirowni i porównanie dna; współrzędne i rzędne przeszkód z podpisów zdjęć w locji (https://kz.nysa.pl/jezioro-nyskie/locja/)',
     license:
       'bezpłatna, niekomercyjna; dane mogą zawierać błędy; źródło: Wiktor Wróblewski, KŻ Nysa, aktualizacja 23.05.2023',
   },

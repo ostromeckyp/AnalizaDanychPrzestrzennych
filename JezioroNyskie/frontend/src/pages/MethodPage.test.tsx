@@ -89,7 +89,7 @@ describe('MethodPage', () => {
     renderPage();
     await screen.findByRole('heading', { name: 'Jak powstaje mapa głębokości' });
     const table = screen.getByRole('table', { name: 'Źródła danych' });
-    for (const s of ['Copernicus Sentinel-2', 'Wody Polskie \\(RZGW\\)', 'Wiktor Wróblewski', 'OpenStreetMap', 'GUGiK']) {
+    for (const s of ['Copernicus Sentinel-2', 'Wody Polskie \\(RZGW\\)', 'Wiktor Wróblewski', 'locja', 'OpenStreetMap', 'GUGiK']) {
       expect(within(table).getAllByText(new RegExp(s)).length).toBeGreaterThan(0);
     }
     expect(

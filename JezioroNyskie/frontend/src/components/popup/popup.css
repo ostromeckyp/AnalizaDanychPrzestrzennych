@@ -119,3 +119,18 @@
   font-size: 13px;
   color: var(--danger);
 }
+.popup__title--hazard {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 15px;
+}
+.popup__text {
+  margin: 0;
+  font-size: 14px;
+}
+.popup__body > .popup__note {
+  margin: 0;
+}
+.popup__caveat a {
+  color: var(--accent);
+}

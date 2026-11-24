@@ -5,6 +5,7 @@ import { BottomSheet } from '../components/mobile/BottomSheet';
 import { MobileHeader } from '../components/mobile/MobileHeader';
 import { MapView } from '../components/map/MapView';
 import { ParameterPanel } from '../components/panel/ParameterPanel';
+import { HazardPopup } from '../components/popup/HazardPopup';
 import { PointPopup } from '../components/popup/PointPopup';
 import { ErrorOverlay } from '../components/states/ErrorOverlay';
 import { LoadingSkeleton } from '../components/states/LoadingSkeleton';
@@ -38,16 +39,22 @@ export function MapPage() {
             marinas={map.marinas}
             gravel={map.gravel}
             gravelAttribution={map.gravelAttribution}
+            hazards={map.hazards}
+            hazardsAttribution={map.hazardsAttribution}
             visible={map.visible}
             basemap={map.basemap}
             npp={meta.data.npp}
             pin={map.pin}
             pinOverlay={
-              map.pin && (
+              map.pin &&
+              (vm.hazardPopup ? (
+                <HazardPopup model={vm.hazardPopup} onClose={vm.closePopup} />
+              ) : (
                 <PointPopup model={point.popup} state={point.status === 'error' ? 'error' : 'loading'} onClose={vm.closePopup} />
-              )
+              ))
             }
             onMapClick={vm.onMapClick}
+            onHazardClick={vm.onHazardClick}
           />
         )}
       </div>

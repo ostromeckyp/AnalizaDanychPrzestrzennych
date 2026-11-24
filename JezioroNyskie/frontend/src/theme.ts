@@ -29,6 +29,12 @@ export const POI_COLORS: Record<ThemeName, { fg: string; bg: string }> = {
   dark: { fg: '#6fb3e0', bg: '#12191f' },
 };
 
+// Znaczniki przeszkód z locji: pomarańcz (odróżnia od różu strefy „danger") z ciemną obwódką, widoczny na obu podkładach.
+export const HAZARD_COLORS: Record<ThemeName, { fill: string; stroke: string }> = {
+  light: { fill: '#e8590c', stroke: '#0e2433' },
+  dark: { fill: '#ff8a4c', stroke: '#12191f' },
+};
+
 // Skala linii brzegowych wg poziomu wody (m n.p.m.): jasny błękit -> granat, z obcięciem.
 export const LEVEL_SCALE = { h0: 190, c0: '#9cc9e4', h1: 195.5, c1: '#143f66' } as const;
 

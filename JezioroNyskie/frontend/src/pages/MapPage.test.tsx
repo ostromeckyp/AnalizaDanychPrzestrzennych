@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Meta } from '../api/client';
 import {
   currentLevel,
+  hazards,
   meta,
   pointLand,
   pointModel,
@@ -18,12 +19,14 @@ import { MapPage } from './MapPage';
 // Atrapa mapy: zapamiętuje ostatnie propsy i pozwala „kliknąć” w mapę.
 const mapProps = vi.hoisted(() => ({ last: undefined as Record<string, unknown> | undefined }));
 vi.mock('../components/map/MapView', () => ({
-  MapView: (props: { onMapClick: (lon: number, lat: number) => void; pin?: unknown } & Record<string, unknown>) => {
+  MapView: (props: { onMapClick: (lon: number, lat: number) => void; onHazardClick: (id: string) => void; pin?: unknown } & Record<string, unknown>) => {
     mapProps.last = props;
     return (
       <div data-testid="map">
         <button onClick={() => props.onMapClick(17.05, 50.45)}>klik-mapa</button>
         <button onClick={() => props.onMapClick(17.07, 50.43)}>klik-mapa-2</button>
+        <button onClick={() => props.onHazardClick('rafa')}>klik-rafa</button>
+        <button onClick={() => props.onHazardClick('grzbiet')}>klik-grzbiet</button>
         {props.pin ? (props.pinOverlay as React.ReactNode) : null}
       </div>
     );
@@ -42,6 +45,7 @@ vi.mock('../api/client', async (orig) => {
       currentLevel: vi.fn(),
       marinas: vi.fn(),
       gravel: vi.fn(),
+      hazards: vi.fn(),
       bulletinLatest: vi.fn(),
       capacityToLevel: vi.fn(),
       levelToCapacity: vi.fn(),
@@ -74,6 +78,7 @@ beforeEach(() => {
   m.currentLevel.mockResolvedValue({ ...currentLevel, h: 195.6 });
   m.marinas.mockResolvedValue({ type: 'FeatureCollection', features: [] });
   m.gravel.mockRejectedValue(new Error('404'));
+  m.hazards.mockResolvedValue({ type: 'FeatureCollection', features: [], source: '', source_url: '' });
   m.capacityToLevel.mockResolvedValue({ h: 195, in_table: true } as never);
   m.levelToCapacity.mockResolvedValue({ v: 45.6, in_table: true } as never);
 });
@@ -198,6 +203,50 @@ describe('MapPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'klik-mapa-2' }));
     expect(await screen.findByText('Poza obszarem modelu')).toBeInTheDocument();
     expect(screen.getByText('Bez oceny strefy')).toBeInTheDocument();
+  });
+
+  describe('hazards from locja', () => {
+    it('no layer data when the endpoint returns an empty collection; toggle still listed and on', async () => {
+      renderPage();
+      await screen.findByRole('region', { name: 'Parametry' });
+      expect(screen.getByLabelText('Przeszkody z locji')).toBeChecked();
+      expect(mapProps.last!.hazards).toBeUndefined();
+      expect(visibleNow().hazards).toBe(true);
+    });
+
+    it('toggle flips visibility of the hazards layer', async () => {
+      renderPage();
+      await userEvent.click(await screen.findByLabelText('Przeszkody z locji'));
+      expect(visibleNow().hazards).toBe(false);
+    });
+
+    it('click on a hazard under the current water level shows "pod wodą" with a decimal comma, no point request', async () => {
+      m.hazards.mockResolvedValue(hazards);
+      renderPage('/?h=195.25');
+      await waitFor(() => expect(mapProps.last!.hazards).toBeDefined());
+      await userEvent.click(screen.getByRole('button', { name: 'klik-rafa' }));
+      const dlg = await screen.findByRole('dialog', { name: 'Przeszkoda z locji' });
+      expect(dlg).toHaveTextContent('Miedniki – żelbetowa rafa');
+      expect(dlg.textContent).toContain(`Rzędna wierzchołek: 193,7${NB}m n.p.m.`);
+      expect(dlg.textContent).toContain(`pod wodą: 1,55${NB}m`);
+      expect(m.point).not.toHaveBeenCalled();
+      expect(mapProps.last!.pin).toEqual({ lon: 17.296333, lat: 50.453667 });
+      await userEvent.click(within(dlg).getByRole('button', { name: 'Zamknij' }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('hazard above the water shows "nad wodą"; the relation follows the slider; a map click returns to the point popup', async () => {
+      m.hazards.mockResolvedValue(hazards);
+      renderPage('/?h=195.25');
+      await waitFor(() => expect(mapProps.last!.hazards).toBeDefined());
+      await userEvent.click(screen.getByRole('button', { name: 'klik-grzbiet' }));
+      const dlg = await screen.findByRole('dialog', { name: 'Przeszkoda z locji' });
+      expect(dlg.textContent).toContain(`nad wodą: 0,25${NB}m`);
+      fireEvent.change(screen.getByRole('slider'), { target: { value: '196' } });
+      await waitFor(() => expect(dlg.textContent).toContain(`pod wodą: 0,50${NB}m`));
+      await userEvent.click(screen.getByRole('button', { name: 'klik-mapa' }));
+      expect(await screen.findByRole('dialog', { name: 'Informacje o punkcie' })).toBeInTheDocument();
+    });
   });
 
   it('popup shows an error message when the point request fails', async () => {

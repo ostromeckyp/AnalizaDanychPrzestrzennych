@@ -1,5 +1,5 @@
 // Wspólne dane testowe zgodne ze schematem API (wartości punktów jak w fixture backendu).
-import type { CurrentLevel, Gravel, Meta, Point, Scene, Zones, ZoneFeature } from '../api/client';
+import type { CurrentLevel, Gravel, Hazards, Meta, Point, Scene, Zones, ZoneFeature } from '../api/client';
 
 const corners: [number, number][] = [
   [17.0, 50.5],
@@ -215,6 +215,25 @@ export const gravel: Gravel = {
       type: 'Feature',
       geometry: { type: 'Polygon', coordinates: square(17.03, 50.47) },
       properties: { source: 'mapa KŻ Nysa, W. Wróblewski 2023', attribution: 'Obrys wg mapy KŻ Nysa (W. Wróblewski, 2023)' },
+    },
+  ],
+};
+
+const hazardProps = { coords_as_published: '50°27,00\'N ; 017°17,00\'E', source_url: 'https://kz.nysa.pl/jezioro-nyskie/locja/' };
+export const hazards: Hazards = {
+  type: 'FeatureCollection',
+  source: 'Klub Żeglarski NYSA, Locja Jeziora Nyskiego',
+  source_url: 'https://kz.nysa.pl/jezioro-nyskie/locja/',
+  features: [
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [17.296333, 50.453667] },
+      properties: { ...hazardProps, id: 'rafa', name: 'Miedniki – żelbetowa rafa', kind: 'przeszkoda', z: 193.7, z_kind: 'wierzchołek', description: 'Betonowa rafa tuż pod lustrem.', note: 'Rzędna z podpisu zdjęcia.' },
+    },
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [17.285333, 50.466667] },
+      properties: { ...hazardProps, id: 'grzbiet', name: 'Grzbiet testowy', kind: 'spłycenie', z: 195.5, z_kind: 'grzbiet', description: 'Spłycenie przy niskim stanie.', note: '' },
     },
   ],
 };

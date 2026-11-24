@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { LayersControl } from './LayersControl';
 
-const visible = { zones: true, bottom: false, uncertainty: false, shorelines: false, marinas: true, gravel: true };
+const visible = { zones: true, bottom: false, uncertainty: false, shorelines: false, marinas: true, gravel: true, hazards: true };
 
 describe('LayersControl', () => {
   it('list variant: checkboxes with labels', async () => {
@@ -37,6 +37,19 @@ describe('LayersControl', () => {
     unmount();
     render(<LayersControl visible={visible} basemap="map" variant="chips" onToggle={onToggle} onBasemap={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Dno zmienne (eksploatacja kruszywa)' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('hazards toggle, on by default state reflected, in list and chips', async () => {
+    const onToggle = vi.fn();
+    const { unmount } = render(
+      <LayersControl visible={visible} basemap="map" variant="list" onToggle={onToggle} onBasemap={vi.fn()} />,
+    );
+    expect(screen.getByLabelText('Przeszkody z locji')).toBeChecked();
+    await userEvent.click(screen.getByLabelText('Przeszkody z locji'));
+    expect(onToggle).toHaveBeenCalledWith('hazards');
+    unmount();
+    render(<LayersControl visible={visible} basemap="map" variant="chips" onToggle={onToggle} onBasemap={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Przeszkody z locji' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('basemap switch', async () => {

@@ -18,3 +18,18 @@ export type PopupModel = {
   /** `warning`: wiersz ostrzeżenia, rysowany poza listą jako `role="note"`. */
   rows: { term: string; desc: string; warning?: boolean }[];
 };
+
+/** Model popupu przeszkody z locji; budowany w vm/useHazardsVm, komponent tylko go wyświetla. */
+export type HazardPopupModel = {
+  title: string;
+  /** „Rzędna wierzchołek: 193,7 m n.p.m.” */
+  level: string;
+  /** Położenie względem bieżącego lustra wody; brak, gdy poziom jeszcze nieznany. */
+  relation?: { kind: 'under' | 'over'; text: string };
+  description: string;
+  /** Uwaga z podpisu zdjęcia (mały, wyciszony tekst); brak, gdy pusta. */
+  note?: string;
+  sourceLabel: string;
+  sourceUrl: string;
+  disclaimer: string;
+};
