@@ -161,7 +161,7 @@ $(EVALD): $(KZSPOTS) $(KZCONT) $(ZWIR) $(wildcard $(REF)/kz_spot_qc.csv) config_
 # prerekwizyty, a regula epochs.csv ciagnie 02 (pobieranie z GUGiK); gdy plik istnieje, jego data i regula nie maja znaczenia.
 # Po zmianie modelu/QC: rm $(EVALKZ) && make kz-compare.  Nie dotyka variant_d.json.
 kz-compare: $(EVALKZ)
-$(EVALKZ): 10_kz_compare.py mielizna/kz_compare.py $(wildcard $(REF)/kz_spot_qc.csv) $(ZWIR) config_kz.yaml $(EVALCH) \
+$(EVALKZ): 10_kz_compare.py mielizna/kz_compare.py mielizna/budget.py $(wildcard $(REF)/kz_spot_qc.csv) $(ZWIR) config_kz.yaml $(EVALCH) \
            | $(filter-out $(wildcard $(EPOCHS)),$(EPOCHS))
 	$(UV) 10_kz_compare.py compare
 
@@ -173,7 +173,7 @@ $(KZOVER): 10_kz_compare.py mielizna/kz_compare.py $(wildcard $(REF)/kz_spot_qc.
 # Makefile reguly, a ich lancuch ma nieaktualne daty (make wymusilby retrening RF/klasyfikacje), wiec nie sa prerekwizytami.
 # Po zmianie modelu/poziomow: rm $(EVALCH) && make evaluate (albo uv run python 08_evaluate.py). NIE dotyka eval/variant_d.json.
 evaluate: $(EVALCH)
-$(EVALCH): 08_evaluate.py mielizna/evaluate.py mielizna/blocks.py
+$(EVALCH): 08_evaluate.py mielizna/evaluate.py mielizna/blocks.py mielizna/budget.py
 	$(UV) 08_evaluate.py
 
 # volume: ΔV warstw z modelu vs tabela pojemności KŻ i szacunek dna rdzenia (mielizna/volume.py). Jak evaluate: zależy tylko

@@ -84,7 +84,7 @@ def plot(recs_h, recs_s, bands_of_scene, path):
     for patch, c in zip(bp["boxes"], cols):
         patch.set_facecolor(c)
     ax.axhline(0, color="k", lw=0.6)
-    ax.set_xticks([k * 3 + 0.5 for k in range(len(names))], [f"h sceny {b} m" for b in names])
+    ax.set_xticks([k * 3 + 0.5 for k in range(len(names))], [f"h sceny {budget.BAND_LABELS[b]}" for b in names])
     ax.set_ylabel("błąd pionowy z − h [m]")
     ax.set_title("Błąd rzędnej dna na linii brzegowej: hold-out (niebieski) vs w próbie (szary)")
     fig.tight_layout()

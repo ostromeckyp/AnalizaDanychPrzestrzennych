@@ -19,13 +19,25 @@ from mielizna import budget
 from mielizna.config import data_path
 
 log = logging.getLogger("13")
-NO_DATA_NOTE = "brak danych: model nie ma dolnej granicy dna; sprawdzi to echosonda"
+NO_DATA_NOTE = "model nie ma dolnej granicy dna; sprawdzi to echosonda"
+LIDAR_NOTE = ("Obciążenie względem LiDAR może zawierać przesunięcie układów wysokościowych RZGW↔EVRF2007 "
+              "(hipoteza, niezmierzona). MAE bierzemy bez korekty o to przesunięcie.")
 SOURCE_PL = {"holdout": "hold-out", "lidar": "LiDAR", "kz": "mapa KŻ"}
 
 
 def fmt(x: float, nd: int = 2) -> str:
     """Liczba z przecinkiem dziesiętnym i prawdziwym minusem (U+2212)."""
     return f"{x:.{nd}f}".replace(".", ",").replace("-", "−")
+
+
+def sfmt(x: float, nd: int = 2) -> str:
+    """Liczba ze znakiem: plus dla dodatnich, U+2212 dla ujemnych."""
+    return ("+" if x > 0 else "") + fmt(x, nd)
+
+
+def nfmt(n: int) -> str:
+    """Liczba całkowita z wąską nierozdzielającą spacją (U+202F) jako separatorem tysięcy."""
+    return f"{int(n):,}".replace(",", "\u202f")
 
 
 def _stat(st: dict) -> dict:
@@ -41,7 +53,7 @@ def _note(band: str, comb: dict) -> str:
         return NO_DATA_NOTE
     if comb["range_m"] is None:
         return "brak źródeł z wystarczającą liczbą punktów"
-    parts = [f"{SOURCE_PL[k]}: MAE {fmt(v['mae'])} m (n={v['n']})" for k, v in srcs.items() if "excluded" not in v]
+    parts = [f"{SOURCE_PL[k]}: MAE {fmt(v['mae'])} m (n = {nfmt(v['n'])})" for k, v in srcs.items() if "excluded" not in v]
     note = "Zakres z MAE źródeł: " + "; ".join(parts) + "."
     small = [SOURCE_PL[k] for k, v in srcs.items() if "excluded" in v]
     if small:
@@ -49,7 +61,7 @@ def _note(band: str, comb: dict) -> str:
     signs = {k: v["bias"] > 0 for k, v in srcs.items() if "excluded" not in v and v.get("bias")}
     if len(set(signs.values())) > 1:
         note += " Znaki obciążenia źródeł się różnią (" + ", ".join(
-            f"{SOURCE_PL[k]} {fmt(srcs[k]['bias'])} m" for k in signs) + ")."
+            f"{SOURCE_PL[k]} {sfmt(srcs[k]['bias'])} m" for k in signs) + ")."
     return note
 
 
@@ -68,14 +80,14 @@ def build(ho: dict, bvn: dict, kz: dict, vol: dict, lv: dict) -> dict:
 
     hv = ho["holdout"]["vertical"]
     lid = bvn["all_by_band"]
-    lid_parts = [f"{b}: MAE {fmt(v['mae'])} m, obciążenie {fmt(v['bias'])} m" for b, v in lid.items()
-                 if v.get("n", 0) > 0]
+    lid_parts = [f"{budget.BAND_LABELS[b]}: MAE {fmt(v['mae'])} m, obciążenie {sfmt(v['bias'])} m "
+                 f"(n = {nfmt(v['n'])})" for b, v in lid.items() if v.get("n", 0) > 0]
     kzb = {b: v for b, v in kz["budget_bands"].items() if v.get("n", 0) >= budget.MIN_N}
-    kz_parts = [f"{b}: MAE {fmt(v['mae'])} m (n={v['n']})" for b, v in kzb.items()]
+    kz_parts = [f"{budget.BAND_LABELS[b]}: MAE {fmt(v['mae'])} m (n = {nfmt(v['n'])})" for b, v in kzb.items()]
     ratios = [(b, d["volume"]["ratio"]) for b, d in bands.items() if d["volume"]]
-    vol_all = budget.volume_context(vol["layers"], float("-inf"), float("inf"))
-    vol_txt = (f"stosunek objętości model/tabela {fmt(vol_all['ratio'], 3)} dla rzędnych "
-               f"{fmt(vol_all['covered'][0], 1)}–{fmt(vol_all['covered'][1], 1)} m") if vol_all else "brak warstw"
+    vol_parts = [f"{fmt(d['volume']['ratio'], 3)} dla {fmt(d['volume']['covered'][0], 1)}–"
+                 f"{fmt(d['volume']['covered'][1], 1)} m" for d in bands.values() if d["volume"]]
+    vol_txt = ("model/tabela: " + "; ".join(vol_parts)) if vol_parts else "brak warstw"
     sig = lv["h_sigma_by_method"]
     rb = lv["control_r_2025"]["by_method"].get("B", {})
     avb = lv["a_vs_b"]
@@ -88,19 +100,21 @@ def build(ho: dict, bvn: dict, kz: dict, vol: dict, lv: dict) -> dict:
         lvl_txt += f"; kontrola R 2025 dla B: MAE {fmt(rb['mae'])} m"
     checks = [
         {"name": "Roczny hold-out", "compared_with": "poziom wody sceny testowej (pomiar B/R), model bez roku sceny",
-         "result": f"MAE {fmt(hv['mae'])} m, obciążenie {fmt(hv['bias'])} m (n={hv['n']} pikseli, "
-                   f"{ho['n_test_scenes']} scen)"},
-        {"name": "LiDAR", "compared_with": "NMT z lotniczego skanowania, model `all` na pikselach dna",
+         "result": f"MAE {fmt(hv['mae'])} m, obciążenie {sfmt(hv['bias'])} m (zależy od proporcji stron linii "
+                   f"brzegowej; n = {nfmt(hv['n'])} pikseli, {ho['n_test_scenes']} scen)"},
+        {"name": "LiDAR", "compared_with": "NMT z lotniczego skanowania: teren odsłonięty przy brzegu "
+                                          "(suchy w dniu nalotu), model z całego okresu",
          "result": "; ".join(lid_parts) if lid_parts else "brak danych"},
-        {"name": "Mapa KŻ", "compared_with": "punkty głębokości z mapy batymetrycznej (pasma z n>=5)",
-         "result": "; ".join(kz_parts) if kz_parts else "brak pasm z n>=5"},
+        {"name": "Mapa KŻ", "compared_with": "punkty głębokości z mapy KŻ (2023), model sprzed powodzi; poniżej "
+                                             "196 m praktycznie równy modelowi z całego okresu "
+                                             "(pasma z co najmniej 5 punktami)",
+         "result": "; ".join(kz_parts) if kz_parts else "brak pasm z co najmniej 5 punktami"},
         {"name": "Objętość", "compared_with": "tabela pojemności KŻ", "result": vol_txt},
         {"name": "Poziomy wody", "compared_with": "poziomy z metod A/B/C i kontrola R", "result": lvl_txt},
     ]
     return {"bands": bands, "level_context": level_ctx, "checks": checks,
             "leakage_note": ho["leakage_note"],
-            "lidar_note": ("Obciążenie względem LiDAR może zawierać przesunięcie RZGW<->EVRF2007 "
-                           "(hipoteza, niezmierzona): " + bvn["datum_note"] + ". Liczba MAE się przez to nie zmienia.")}
+            "lidar_note": LIDAR_NOTE}
 
 
 def main() -> int:

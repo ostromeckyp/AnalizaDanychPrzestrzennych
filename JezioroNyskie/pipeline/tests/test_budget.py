@@ -59,3 +59,23 @@ def test_budget_json_has_no_nan():
     res = mod.build(ho, bvn, kz, vol, lv)
     json.dumps(res, allow_nan=False)
     assert res["bands"]["<192.9"]["range_m"] is None
+
+
+def test_user_facing_text_has_no_raw_tokens():
+    import re
+    mod = importlib.import_module("13_error_budget")
+    st = {"n": 896730, "bias": 0.31, "mae": 0.77}
+    ho = {"leakage_note": "x", "n_test_scenes": 3, "holdout": {"vertical": {"n": 1234567, "bias": -0.16, "mae": 0.9}},
+          "by_band": {b: {"vertical": st} for b in budget.BANDS}}
+    bvn = {"datum_note": "d", "all_by_band": {b: {"n": 7320, "mae": 1.34, "bias": 1.21} for b in budget.BANDS}}
+    kz = {"budget_bands": {b: {"n": 27, "mae": 0.65, "bias": 0.3} for b in budget.BANDS}}
+    vol = {"layers": [{"h1": 193.3, "h2": 194.3, "dv_table": 1.0, "dv_model": 0.986}]}
+    lv = {"h_sigma_by_method": {"B": {"median": 0.15}}, "a_vs_b": {"mae": 0.4, "bias": 0.0},
+          "control_r_2025": {"by_method": {"B": {"n": 2, "mae": 0.1, "bias": -0.1}}}}
+    res = mod.build(ho, bvn, kz, vol, lv)
+    texts = [res["lidar_note"]] + [b["note"] for b in res["bands"].values()]
+    for c in res["checks"]:
+        texts += [c["name"], c["compared_with"], c["result"]]
+    for t in texts:
+        assert "`" not in t and "<->" not in t and ">=" not in t, t
+        assert not re.search(r"\d\.\d", t), t

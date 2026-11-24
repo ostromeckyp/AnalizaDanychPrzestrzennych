@@ -18,6 +18,13 @@ BANDS: dict[str, tuple[float, float]] = {
     "194.8+": (194.8, np.inf),
 }
 
+# etykiety pasm dla użytkownika (przecinek dziesiętny, półpauza); jedno miejsce dla skryptów 12 i 13
+BAND_LABELS: dict[str, str] = {
+    "<192.9": "< 192,9 m",
+    "192.9-194.8": "192,9–194,8 m",
+    "194.8+": "≥ 194,8 m",
+}
+
 
 def band_of(z: np.ndarray) -> np.ndarray:
     """Etykieta pasma dla każdej rzędnej `z` [m]; pasmo = [dół, góra), więc 192,9 należy do „192.9-194.8”."""
