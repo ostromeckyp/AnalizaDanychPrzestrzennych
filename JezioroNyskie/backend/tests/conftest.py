@@ -199,7 +199,7 @@ def dataset_kz(tmp_path) -> Path:
 
 @pytest.fixture
 def products_kz(dataset_kz):
-    return load_products(dataset_kz, "all")
+    return load_products(dataset_kz, "all", use_kz=True)   # jawnie: suita przechodzi też przy MIELIZNA_NO_KZ=1
 
 
 @pytest.fixture

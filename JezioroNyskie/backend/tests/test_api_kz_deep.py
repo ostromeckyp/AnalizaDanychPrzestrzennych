@@ -66,10 +66,10 @@ def test_kz_deep_outline(client_kz):
 
 
 def test_version_and_etag_change_with_kz_loo(dataset_kz):
-    a = load_products(dataset_kz, "all")
+    a = load_products(dataset_kz, "all", use_kz=True)
     assert "-kz" in a.version
     (dataset_kz / "processed" / "eval" / "kz_loo.json").write_text('{"n": 11}', encoding="utf-8")
-    b = load_products(dataset_kz, "all")
+    b = load_products(dataset_kz, "all", use_kz=True)
     assert a.version != b.version and a.version.split("-kz")[0] == b.version.split("-kz")[0]
 
 
@@ -84,7 +84,7 @@ def test_no_kz_env_disables_loading(dataset_kz, monkeypatch):
 
 
 def test_z_max_floor_from_raw_satellite(dataset, dataset_kz):
-    sat, kz = load_products(dataset, "all"), load_products(dataset_kz, "all")
+    sat, kz = load_products(dataset, "all"), load_products(dataset_kz, "all", use_kz=True)
     assert kz.z_max_floor == sat.z_max_floor
     assert (kz.bounds.source == 1).any() and not np.array_equal(kz.z_lo, sat.z_lo, equal_nan=True)
 
