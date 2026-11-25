@@ -13,6 +13,9 @@ Wejście → wyjście: model/<okres>/*, eval/{model_choice,calibration}.json, kz
   kz_spot_ocr.gpkg, kz_spot_qc.csv (jeśli jest), kz_contours.gpkg, zwirownia.gpkg.
 Jak to obronić: P5/P95 z LOO (poza próbą), maska LOO = dokładnie piksele z z_lo = −∞ (zawsze woda).
   Udziały stref: „przed” = surowe granice satelity, „po” = skalibrowane + KŻ; osobno w modelu i w „zawsze woda”.
+  „po, tylko dwustronne” (`zones_after_two_sided_only`, tylko do raportu, nie trafia do rastrów) = kalibracja wyłącznie
+  pikseli z obiema granicami skończonymi (tam, gdzie δ zmierzono), potem ta sama reguła KŻ. Wariant serwowany
+  kalibruje też granice jednostronne (decyzja użytkownika, ekstrapolacja); raport pokazuje oba.
   Użycie: uv run python 14_kz_deep.py
 """
 import hashlib
@@ -79,6 +82,13 @@ def sat_bounds(arrays: dict):
     return z_lo, z_hi, in_model
 
 
+def calibrate_two_sided_only(z_lo, z_hi, deltas: dict):
+    """Kalibracja tylko pikseli z obiema granicami skończonymi; granice jednostronne i ±∞ zostają surowe."""
+    lo_c, hi_c = calibration.apply(z_lo, z_hi, deltas)
+    both = np.isfinite(z_lo) & np.isfinite(z_hi)
+    return np.where(both, lo_c, z_lo), np.where(both, hi_c, z_hi)
+
+
 def zones(z_lo, z_hi, in_model, always):
     out = {}
     for h in LEVELS:
@@ -139,6 +149,9 @@ def main() -> dict:
                "draft": DRAFT, "margin": MARGIN,
                "zones_before": zones(z_lo0, z_hi0, in_model, always),
                "zones_after": zones(z_lo, z_hi, in_model, always)}
+    lo2, hi2 = calibrate_two_sided_only(z_lo0, z_hi0, deltas)
+    lo2, hi2, _, _ = combine.merge_kz(lo2, hi2, surf, p5, p95)
+    summary["zones_after_two_sided_only"] = zones(lo2, hi2, in_model, always)
     _dump(ev / "kz_deep.json", summary)
     return summary
 
