@@ -201,8 +201,9 @@ $(EVALHL): 12a_holdout_levels.py 12_holdout.py mielizna/holdout.py mielizna/budg
 	$(UV) 12a_holdout_levels.py
 
 # error-budget: budżet błędu wg pasm rzędnej (13_error_budget.py). Czyta tylko JSON-y oceny, nie dotyka łańcucha S2.
+# $(EVALKD) (14_kz_deep.py) pisze też kz_loo.json, który budżet czyta dla pasma < 192,9 m.
 error-budget: $(EVALEB)
-$(EVALEB): 13_error_budget.py mielizna/budget.py $(EVALHO) $(EVALCH) $(EVALKZ) $(EVALVOL)
+$(EVALEB): 13_error_budget.py mielizna/budget.py $(EVALHO) $(EVALCH) $(EVALKZ) $(EVALVOL) $(EVALKD)
 	$(UV) 13_error_budget.py
 
 # kz-deep: rastry łączone model/<okres>_kz (kalibracja + głęboka powierzchnia KŻ) i eval/kz_deep.json, kz_loo.json.
