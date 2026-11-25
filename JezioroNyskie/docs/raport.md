@@ -630,6 +630,8 @@ piksele, którym mapa KŻ obniża górną granicę. Wariant „tylko dwustronne�
 Przy 193,6 m oba warianty dają to samo: wszystkie nowe piksele bezpieczne pochodzą z mapy KŻ (przed: 0 %). Wybraliśmy wariant
 ostrożniejszy (więcej stref ryzykownych); ceną jest to, że przy 194,5 m więcej niż połowa strefy „zawsze woda” jest ryzykowna
 tylko z powodu niezmierzonego poszerzenia.
+Na granicach skalibrowanych liczą się w aplikacji także „% akwenu” i powierzchnia wody: `δ_lo` obniża `z_lo`, więc powierzchnia
+wody rośnie, np. przy 194,5 m z 13,18 do 13,97 km² (policzone w przeglądzie końcowym planu 6, bez pliku oceny).
 
 **Co zamknie walidacja terenowa (następny sezon).**
 
@@ -789,11 +791,18 @@ sprzeczności według reguły łączenia: 0<!-- eval:kz_deep.json:n_conflict -->
 z surowym `z_max`, a reguła porównuje `kz − P95` (o 3 m niżej) ze skalibrowanym `z_hi`. Zmianę stref przy 194,5 i 193,6 m (razem
 z kalibracją) pokazuje tabela w §5.6: przy 193,6 m (typowa zima) wszystkie piksele bezpieczne pochodzą z mapy KŻ
 (32,2 %<!-- eval:kz_deep.json:zones_after.[193.6].always_water.safe --> strefy „zawsze woda”, przed: 0 %<!-- eval:kz_deep.json:zones_before.[193.6].always_water.safe -->).
+Zero sprzeczności to skutek decyzji o poszerzaniu granic jednostronnych (§5.6): skalibrowane `z_hi` pikseli „zawsze woda” leży
+o ok. 2,23<!-- eval:calibration.json:bands.[192.9-194.8].delta_hi --> m wyżej niż surowe, a względem surowej granicy satelity 59 % pikseli KŻ by ją
+przekroczyło (policzone w przeglądzie końcowym planu 6, bez pliku oceny).
 
 **W aplikacji.** Backend wczytuje rastry `model/all_kz/` zamiast granic satelitarnych (`backend/app/depth.py:combined_bounds`);
-strefy i popup liczą się tą samą regułą. Popup pokazuje źródło dna („Dno: mapa KŻ 2023 (orientacyjne; błąd interpolacji …)”
-albo „model satelitarny”), przy sprzeczności informację, że pokazujemy tylko satelitę, a przy dnie z KŻ zastrzeżenie: mapa opisuje
-dno z 2023 r., poniżej 192,5 m jest orientacyjna, jest amatorska, a ryzyko korzystania ponosi użytkownik. Warstwa „Dno wg mapy
+strefy i popup liczą się tą samą regułą. Popup pokazuje źródło dna („Dno: mapa KŻ 2023 (orientacyjne): dno do 3,0 m głębiej albo
+do 2,0 m płycej niż na mapie (błąd interpolacji)” albo „model satelitarny”), przy sprzeczności informację, że pokazujemy tylko satelitę,
+a przy dnie z KŻ zastrzeżenie: przedział dna z mapy KŻ obejmuje 90 % błędów interpolacji ze sprawdzianu (z definicji P5–P95, nie
+pokrycie kalibracji satelity), mapa opisuje dno z 2023 r., poniżej 192,5 m jest orientacyjna, jest amatorska, a ryzyko korzystania
+ponosi użytkownik. Piksel „zawsze woda” bez dna z KŻ, którego skalibrowana górna granica sięga `h − d` albo wyżej, dostaje w popupie
+„Głębokość nieoceniona” z obiema granicami (surowe `z_max` i po poszerzeniu), w żwirowni zdanie o wyrobisku, a poza nią najbliższy
+punkt mapy KŻ z odległością; ten punkt to tylko informacja, strefy go nie używają. Warstwa „Dno wg mapy
 KŻ” pokazuje obszar ze źródłem KŻ (`/api/kz-deep`) z atrybucją mapy; warunki „UWAGA” są w opisie źródeł na stronie „O metodzie”
 i w `data/reference/KZ_ZRODLO_I_WARUNKI.md`. Ostrzeżenie „dno poniżej obserwacji” (`z_max_floor`) liczy się z surowego `z_max`
 satelity. Kontrole (08, 10, 12, 12a, 13) nie czytają rastrów łączonych (test `test_independence`): mapa KŻ nie może oceniać
@@ -818,7 +827,11 @@ podaje obciążenie bez przypisywania go układowi wysokości („przyczyna nieu
 Od planu 6 backend liczy strefy i popup na granicach łączonych z `model/all_kz/`: przedziały satelity po kalibracji (§5.6) i dno
 z mapy KŻ w strefie „zawsze woda” (§6.6); popup podaje źródło dna, a strona „O metodzie” ma akapit o obu poprawkach i wiersz
 źródeł z warunkami „UWAGA” dla warstwy „Dno wg mapy KŻ”. Zastrzeżenie przy zakresie głębokości podaje pokrycie kalibracji
-(„Przedział obejmuje dno w ok. 90 % sprawdzonych przypadków.”).
+(„Przedział obejmuje dno w ok. 90 % sprawdzonych przypadków.”) tylko wtedy, gdy backend serwuje granice łączone (`/api/meta`:
+`accuracy.combined_bounds`); bez nich (np. `MIELIZNA_NO_KZ=1`) popup ma dopisek ogólny, a strona „O metodzie” nie ma akapitu o KŻ
+i kalibracji. Dla dna z mapy KŻ zastrzeżenie mówi o błędzie interpolacji, nie o kalibracji. Popup „zawsze woda” bez dna z KŻ
+(„Głębokość nieoceniona”) może pokazać najbliższy punkt mapy KŻ (`kz_nearest` z `/api/point`) wyłącznie jako informację, bez wpływu
+na strefy.
 Uruchomienie: `docker compose up --build` (README, „Uruchomienie”); `/api/zones` przez nginx: mediana 0,09 s (pomiar Task 11, M7 §8),
 więc kryterium BRIEF §11 (≤ 2 s) i M5 (< 1 s) jest spełnione.
 

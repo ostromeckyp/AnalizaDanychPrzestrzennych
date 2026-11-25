@@ -80,7 +80,11 @@ Zaraz potem `load_products` wywołuje `combined_bounds` (ten sam plik `depth.py`
 `data/processed/model/<okres>_kz/`, granice z satelity są **zastępowane** granicami z tego katalogu: po kalibracji
 i z dnem z mapy KŻ (kroki 6–7). Maska „w modelu” zostaje satelitarna. Bez tego katalogu (albo ze zmienną
 `MIELIZNA_NO_KZ`) backend liczy na samych granicach satelitarnych. Ostrzeżenie „dno poniżej obserwacji”
-(`z_max_floor`) zawsze pochodzi z surowych granic satelity.
+(`z_max_floor`) zawsze pochodzi z surowych granic satelity; surową górną granicę (`Products.z_hi_sat`) backend trzyma też
+dla popupu. Flaga `Products.combined` (w `/api/meta` jako `accuracy.combined_bounds`) mówi, czy granice łączone są
+wczytane; tylko wtedy `/api/meta` podaje pokrycie kalibracji (`calibration_coverage`), a strona „O metodzie” akapit o KŻ
+i kalibracji. Wersja modelu dostaje wtedy przyrostek `-kz<sha>` z odcisku bajtów rastrów łączonych, `meta.json`,
+`kz_spots.csv`, `kz_loo.json` i `calibration.json` (`data.kz_version_suffix`), więc każda zmiana tych plików zmienia ETagi.
 
 ### Krok 4. Głębokość i strefa: `depth.depth_range`, potem `depth.classify`
 
@@ -100,7 +104,12 @@ Po kliknięciu w mapę `point_info` znajduje piksel, składa z jego `z_lo`, `z_h
 i wywołuje po kolei `classify`, `depth_range` i `point_kind`. `point_kind` rozróżnia: `land` (gdy `h ≤ z_lo`,
 dno nad wodą), `always_water` (gdy `z_lo = −∞`) i `model` (zwykły piksel). Z tego powstaje to, co widzisz
 w okienku: strefa, głębokość od–do i rezerwa pod stępką. Piksel z dnem z mapy KŻ ma skończone `z_lo`, więc
-dostaje `model`, a pole `bottom_source = "kz"` mówi, skąd jest dno (okienko pisze wtedy „Dno: mapa KŻ 2023”).
+dostaje `model`, a pole `bottom_source = "kz"` mówi, skąd jest dno (okienko pisze wtedy „Dno: mapa KŻ 2023 (orientacyjne):
+dno do P95 m głębiej albo do |P5| m płycej niż na mapie (błąd interpolacji)”). `z_max_sat` to surowa górna granica satelity
+(przed kalibracją), obok skalibrowanej `z_max`. Dla piksela „zawsze woda” bez dna z KŻ, którego skalibrowana górna granica
+sięga `h − d` albo wyżej, okienko (`frontend/src/vm/usePointVm.ts`, funkcja `unassessedAlwaysWater`) pisze „Głębokość
+nieoceniona” i podaje obie granice; strefa się nie zmienia. Poza żwirownią i bez sprzeczności z KŻ backend dokłada
+`kz_nearest`: najbliższy punkt mapy KŻ (`kz_spots.csv`) z odległością. To tylko informacja, strefy go nie używają.
 
 ### Krok 6. Kalibracja przedziałów: `pipeline/mielizna/calibration.py`, uruchamiana w `pipeline/14_kz_deep.py`
 
@@ -138,7 +147,8 @@ jak głęboko jest. Tam bierzemy dno z amatorskiej mapy KŻ Nysa (2023).
    i dostaje znacznik sprzeczności (`kz_conflict`). Pozostałe piksele są bez zmian.
 
 Wynik zapisuje `14_kz_deep.py` w `data/processed/model/<okres>_kz/` (`bottom_zlo.tif`, `bottom_zhi.tif`,
-`bottom_source.tif`: bit 0 = KŻ, bit 1 = sprzeczność; `meta.json` z P5/P95). Te rastry wczytuje backend w kroku 3
+`bottom_source.tif`: bit 0 = KŻ, bit 1 = sprzeczność; `meta.json` z P5/P95; `kz_spots.csv`: punkty KŻ użyte do powierzchni,
+dla popupu). Te rastry wczytuje backend w kroku 3
 (`depth.combined_bounds`). Kontrole modelu (hold-out, LiDAR, KŻ, budżet) ich **nie** czytają, żeby mapa KŻ nie
 oceniała modelu, którego jest częścią.
 
@@ -192,6 +202,7 @@ Sprzeczności nie ma (186,98 nie leży wyżej niż 195,28), więc źródło to K
 
 **Ten sam piksel bez mapy KŻ** (powierzchnia KŻ go nie obejmuje): po kroku 6 zostaje `z_lo = −∞`, `z_hi = 195,28`.
 Wtedy `D_lo = 194,5 − 195,28 = −0,78` m (granica dna może leżeć nad wodą), a `D_hi = +∞`. Ani bezpiecznie, ani na
-pewno za płytko: strefa **RISK**, a `point_kind` zwraca `always_water`. Bez kalibracji (`z_hi = 193,05`) ten piksel
+pewno za płytko: strefa **RISK**, a `point_kind` zwraca `always_water`. Okienko pisze wtedy „Głębokość nieoceniona”:
+dno poniżej 193,05 m n.p.m. według satelity, a górna granica po poszerzeniu to 195,28 m. Bez kalibracji (`z_hi = 193,05`) ten piksel
 byłby bezpieczny (`D_lo = 1,45` m). Tak działa ekstrapolacja kalibracji na granice jednostronne (krok 6).
 
