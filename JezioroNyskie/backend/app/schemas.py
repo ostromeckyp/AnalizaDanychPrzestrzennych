@@ -237,7 +237,7 @@ class PointResponse(BaseModel):
     bottom_source: Literal["satellite", "kz"]   # skąd pochodzi dno piksela: satelita (skalibrowany) albo mapa KŻ
     kz_conflict: bool               # mapa KŻ przeczy satelicie w tym pikselu (dno zostaje satelitarne)
     kz_interp: "KzInterp | None"    # percentyle błędu interpolacji mapy KŻ [m]; tylko gdy bottom_source = kz
-    kz_nearest: KzNearest | None = None   # „zawsze woda” z dnem satelitarnym, poza żwirownią, gdy wczytano mapę KŻ
+    kz_nearest: KzNearest | None = None   # „zawsze woda” z dnem satelitarnym (bez sprzeczności z KŻ), poza żwirownią, gdy wczytano mapę KŻ
     z_max_sat: float | None = None  # surowa górna granica dna z satelity [m n.p.m.] (przed kalibracją); null dla +∞ i poza modelem
 
 

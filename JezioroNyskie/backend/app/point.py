@@ -10,7 +10,8 @@ Wejście → wyjście: `point_info(products, lon, lat, h, draft, margin)` → s�
   `always_water`; inaczej `model`. Pola `bottom_source`, `kz_conflict`, `kz_interp` mówią, czy dno piksela
   pochodzi z mapy KŻ (`kz_interp` = p5/p95 błędu interpolacji), czy KŻ przeczy satelicie. `z_max_sat` to surowa
   górna granica satelity (przed kalibracją); `z_max` to granica serwowana (po kalibracji, gdy wczytano rastry łączone).
-  `kz_nearest` = najbliższy punkt mapy KŻ dla „zawsze woda” z dnem satelitarnym poza żwirownią (tylko informacja).
+  `kz_nearest` = najbliższy punkt mapy KŻ dla „zawsze woda” z dnem satelitarnym, bez sprzeczności z KŻ, poza żwirownią
+  (tylko informacja).
 Jak to obronić: D_lo = h − z_hi (najpłycej), D_hi = h − z_lo (najgłębiej); prześwit to głębokość minus
   zanurzenie. Piksel wybiera `rasterio.transform.rowcol` na współrzędnych siatki (EPSG:2180).
 """
@@ -105,8 +106,9 @@ def point_info(products: Products, lon: float, lat: float, h: float, draft: floa
                z_min=_r(z_lo), z_max=_r(z_hi), z=_r(products.z[r, c]), unc=_r(products.unc[r, c]))
     if products.z_hi_sat is not None:                  # surowa górna granica satelity (przed kalibracją), np. „zawsze woda"
         out["z_max_sat"] = _r(products.z_hi_sat[r, c])
-    if out["kind"] == "always_water" and out["bottom_source"] == "satellite" and not out["gravel"]:
-        out["kz_nearest"] = nearest_kz_spot(products, lon, lat)     # poza zasięgiem interpolacji KŻ: tylko informacja
+    if (out["kind"] == "always_water" and out["bottom_source"] == "satellite" and not out["kz_conflict"]
+            and not out["gravel"]):                                 # poza zasięgiem interpolacji KŻ (sprzeczność jest w zasięgu)
+        out["kz_nearest"] = nearest_kz_spot(products, lon, lat)     # tylko informacja, strefy jej nie używają
     if out["kind"] == "land":
         out.update(bottom_above_water_min=_r(z_lo - h), bottom_above_water_max=_r(z_hi - h))
     return out

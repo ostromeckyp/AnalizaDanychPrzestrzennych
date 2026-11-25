@@ -146,8 +146,8 @@ def test_point_kz_nearest_for_always_water_outside_kz_reach(client_kz, products_
     b = _point(client_kz, products_kz, (12, 11), 195.0)       # środek piksela: x 375115, y 289875
     assert b["kz_nearest"] == {"z": 190.0, "distance_m": round(float(np.hypot(20.0, 80.0)), 1)}
     assert b["zone"] == "risk"
-    c = _point(client_kz, products_kz, KZ_CONFLICT_PIXEL, 195.0)   # sprzeczność: dno satelitarne, też podajemy
-    assert c["kz_nearest"] is not None
+    c = _point(client_kz, products_kz, KZ_CONFLICT_PIXEL, 195.0)   # sprzeczność: piksel w zasięgu mapy KŻ, więc nie
+    assert c["kz_conflict"] is True and c["kz_nearest"] is None
     assert _point(client_kz, products_kz, (3, 13), 195.0)["kz_nearest"] is None   # piksel KŻ
     assert _point(client_kz, products_kz, (5, 3), 195.0)["kz_nearest"] is None    # zwykły piksel modelu
 
