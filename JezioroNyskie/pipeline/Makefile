@@ -40,12 +40,13 @@ EVALHO  := $(PROC)/eval/holdout.json
 EVALCAL := $(PROC)/eval/calibration.json
 EVALHL  := $(PROC)/eval/holdout_level_sources.json
 EVALEB  := $(PROC)/eval/error_budget.json
+EVALKD  := $(PROC)/eval/kz_deep.json
 KZOVER  := ../docs/img/kz-overlay.png
 ZWIR    := $(REF)/zwirownia.gpkg
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate volume holdout holdout-levels error-budget test check-locks clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate volume holdout holdout-levels error-budget kz-deep test check-locks clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -203,6 +204,13 @@ $(EVALHL): 12a_holdout_levels.py 12_holdout.py mielizna/holdout.py mielizna/budg
 error-budget: $(EVALEB)
 $(EVALEB): 13_error_budget.py mielizna/budget.py $(EVALHO) $(EVALCH) $(EVALKZ) $(EVALVOL)
 	$(UV) 13_error_budget.py
+
+# kz-deep: rastry łączone model/<okres>_kz (kalibracja + głęboka powierzchnia KŻ) i eval/kz_deep.json, kz_loo.json.
+# Zależy od kalibracji (holdout), kodu i kontroli punktów KŻ. Pliki KŻ (kz_spot_ocr, kz_contours, zwirownia) i model mają reguły
+# z nieaktualnym łańcuchem (make uruchomiłby georef/OCR, który zmienia id punktów), więc NIE są prerekwizytami (jak kz-compare) (po zmianie modelu: rm $(EVALKD) && make kz-deep). 08/10/12/12a/13 NIE czytają tych rastrów.
+kz-deep: $(EVALKD)
+$(EVALKD): 14_kz_deep.py mielizna/combine.py mielizna/kz_deep.py mielizna/calibration.py $(EVALCAL) $(EVALCH) $(wildcard $(REF)/kz_spot_qc.csv)
+	$(UV) 14_kz_deep.py
 
 test:
 	uv run pytest -q
