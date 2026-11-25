@@ -38,7 +38,7 @@ from app.cache import TTLStore
 from app.data import Products, capacity_to_level, level_to_capacity, load_products, short_hash
 from app.layers import RENDER_VERSION, UNC_MIN, layer_coordinates, bottom_breaks, render_bottom_png, render_uncertainty_png
 from app.point import point_info
-from app.schemas import (BulletinLatest, CapacityToLevel, CurrentLevelResponse, GravelResponse, HazardsResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
+from app.schemas import (BulletinLatest, CapacityToLevel, CurrentLevelResponse, GravelResponse, HazardsResponse, KzDeepResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
                          SceneOut, ShorelineFeature, Validation, ValidationBand, ValidationCheck, ZonesResponse)
 from app.settings import Settings, get_settings
 from app.zones import (round_param, zone_classes, zone_stats, zone_warnings, zones_geojson)
@@ -115,6 +115,9 @@ def build_layers(products: Products) -> Layers:
 
 
 HAZARDS_SOURCE_URL = "https://kz.nysa.pl/jezioro-nyskie/locja/"
+KZ_DEEP_ATTRIBUTION = "Mapa KŻ Nysa (W. Wróblewski, 2023)"
+KZ_DEEP_NOTE = ("Dno orientacyjne: interpolacja z amatorskiej mapy izobat KŻ, bez gwarancji dokładności. "
+                "Nie służy do nawigacji. Warunki użycia: data/reference/KZ_ZRODLO_I_WARUNKI.md.")
 GRAVEL_ATTRIBUTION = "Obrys wg mapy KŻ Nysa (W. Wróblewski, 2023)"
 
 
@@ -141,7 +144,8 @@ def eval_accuracy(products: Products) -> dict:
             "holdout_mae": _num(ev.get("holdout"), "holdout", "vertical", "mae"),
             "holdout_bias": _num(ev.get("holdout"), "holdout", "vertical", "bias"),
             "holdout_in_bounds": _num(ev.get("holdout"), "holdout", "vertical", "share_in_bounds"),
-            "holdout_n_scenes": _int(ev.get("holdout"), "n_test_scenes")}
+            "holdout_n_scenes": _int(ev.get("holdout"), "n_test_scenes"),
+            "calibration_coverage": _num(ev.get("calibration"), "coverage_after", "overall")}
 
 
 def _int(d, *keys) -> int | None:
@@ -249,7 +253,7 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if app.state.products is None:           # leniwe ładowanie: tylko gdy nie podano produktów
-            app.state.products = load_products(settings.data_dir, settings.period)
+            app.state.products = load_products(settings.data_dir, settings.period, use_kz=not settings.no_kz)
         if app.state.current is None:
             app.state.current = build_service()
         task = (asyncio.create_task(refresh_loop(app.state.current, settings.refresh_hours * 3600))
@@ -371,6 +375,18 @@ def create_app(settings: Settings | None = None, products: Products | None = Non
                       "properties": {"source": "; ".join(sources), "attribution": GRAVEL_ATTRIBUTION}}]
             return json.dumps({"type": "FeatureCollection", "features": feats}, ensure_ascii=False).encode()
         return static_json(request, f"-gravel-{p.gravel_hash}", build)
+
+    @app.get("/api/kz-deep", response_model=KzDeepResponse)
+    def kz_deep(request: Request):
+        """Obszar dna wyznaczonego z mapy KŻ (GeoJSON, EPSG:4326, jeden obiekt); pusta kolekcja bez rastrów łączonych."""
+        p: Products = request.app.state.products
+
+        def build() -> bytes:
+            feats = [] if p.kz_outline is None else [{
+                "type": "Feature", "geometry": p.kz_outline,
+                "properties": {"attribution": KZ_DEEP_ATTRIBUTION, "note": KZ_DEEP_NOTE}}]
+            return json.dumps({"type": "FeatureCollection", "features": feats}, ensure_ascii=False).encode()
+        return static_json(request, "-kzdeep", build)    # wersja produktów zawiera już odcisk wejść KŻ
 
     @app.get("/api/hazards", response_model=HazardsResponse)
     def hazards(request: Request):

@@ -14,6 +14,7 @@ Jak to obronić: NaN w z_min = zawsze woda (−∞), NaN w z_max = zawsze ląd (
   stref to brief §6.4, a przy sprzeczności wygrywa „zbyt płytka".
 """
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -30,6 +31,13 @@ class Bounds:
     in_model: np.ndarray    # bool
     source: np.ndarray      # uint8: 0 = satelita, 1 = KŻ
     kz_conflict: np.ndarray  # bool: KŻ przeczy satelicie
+
+    @classmethod
+    def from_arrays(cls, z_lo, z_hi, in_model) -> "Bounds":
+        """Granice samego satelity z gotowych tablic (dowolny kształt, np. 1×1): źródło 0, brak sprzeczności."""
+        z_lo = np.asarray(z_lo, np.float64)
+        return cls(z_lo=z_lo, z_hi=np.asarray(z_hi, np.float64), in_model=np.asarray(in_model, bool),
+                   source=np.zeros(z_lo.shape, np.uint8), kz_conflict=np.zeros(z_lo.shape, bool))
 
 
 def satellite_bounds(z_min: np.ndarray, z_max: np.ndarray, obs_count: np.ndarray, flags: np.ndarray) -> Bounds:
@@ -89,3 +97,27 @@ def point_kind(h: float, z_lo: float) -> str:
     Przykład: h = 195, z_lo = 196 → `land`; z_lo = −∞ → `always_water`; z_lo = 193 → `model`.
     """
     return "land" if h <= z_lo else "always_water" if z_lo == -np.inf else "model"
+
+
+def combined_bounds(sat: Bounds, kz_dir: Path) -> Bounds:
+    """Granice łączone (kalibracja satelity + mapa KŻ) z `model/<okres>_kz/`; bez katalogu zwraca `sat`.
+
+    Co: czyta `bottom_zlo.tif`, `bottom_zhi.tif` (float32, ±∞ zachowane) i `bottom_source.tif` (uint8: bit 0 =
+      KŻ, bit 1 = sprzeczność). Maska modelu zostaje satelitarna.
+    Dlaczego: łączenie robi pipeline (`14_kz_deep.py`); backend tylko wczytuje, więc strefy i punkt liczą
+      się tą samą funkcją `classify` na innych granicach.
+    Przykład: piksel z bitem 0 → `source` 1 (KŻ), z bitem 1 → `kz_conflict` True.
+    """
+    kz_dir = Path(kz_dir)
+    if not (kz_dir / "bottom_zlo.tif").exists():
+        return sat
+    import rasterio
+    out = []
+    for name in ("bottom_zlo", "bottom_zhi", "bottom_source"):
+        with rasterio.open(kz_dir / f"{name}.tif") as ds:
+            out.append(ds.read(1))
+    z_lo, z_hi, src = out
+    if z_lo.shape != sat.z_lo.shape:
+        raise ValueError(f"raster łączony {z_lo.shape} nie pasuje do siatki satelitarnej {sat.z_lo.shape}")
+    return Bounds(z_lo=z_lo.astype(np.float64), z_hi=z_hi.astype(np.float64), in_model=sat.in_model,
+                  source=(src & 1).astype(np.uint8), kz_conflict=(src & 2) > 0)

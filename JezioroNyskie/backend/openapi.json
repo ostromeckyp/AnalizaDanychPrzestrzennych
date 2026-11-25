@@ -276,6 +276,25 @@
     }
    }
   },
+  "/api/kz-deep": {
+   "get": {
+    "summary": "Kz Deep",
+    "description": "Obszar dna wyznaczonego z mapy KŻ (GeoJSON, EPSG:4326, jeden obiekt); pusta kolekcja bez rastrów łączonych.",
+    "operationId": "kz_deep_api_kz_deep_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/KzDeepResponse"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/hazards": {
    "get": {
     "summary": "Hazards",
@@ -680,6 +699,17 @@
        }
       ],
       "title": "Holdout N Scenes"
+     },
+     "calibration_coverage": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Calibration Coverage"
      }
     },
     "type": "object",
@@ -1391,6 +1421,116 @@
     ],
     "title": "HazardsResponse"
    },
+   "KzDeepFeature": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "Feature",
+      "title": "Type"
+     },
+     "geometry": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Geometry"
+     },
+     "id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "bbox": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "number"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bbox"
+     },
+     "properties": {
+      "$ref": "#/components/schemas/KzDeepProperties"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "geometry",
+     "properties"
+    ],
+    "title": "KzDeepFeature"
+   },
+   "KzDeepProperties": {
+    "properties": {
+     "attribution": {
+      "type": "string",
+      "title": "Attribution"
+     },
+     "note": {
+      "type": "string",
+      "title": "Note"
+     }
+    },
+    "type": "object",
+    "required": [
+     "attribution",
+     "note"
+    ],
+    "title": "KzDeepProperties"
+   },
+   "KzDeepResponse": {
+    "properties": {
+     "type": {
+      "type": "string",
+      "const": "FeatureCollection",
+      "title": "Type"
+     },
+     "features": {
+      "items": {
+       "$ref": "#/components/schemas/KzDeepFeature"
+      },
+      "type": "array",
+      "title": "Features"
+     }
+    },
+    "type": "object",
+    "required": [
+     "type",
+     "features"
+    ],
+    "title": "KzDeepResponse"
+   },
+   "KzInterp": {
+    "properties": {
+     "p5": {
+      "type": "number",
+      "title": "P5"
+     },
+     "p95": {
+      "type": "number",
+      "title": "P95"
+     }
+    },
+    "type": "object",
+    "required": [
+     "p5",
+     "p95"
+    ],
+    "title": "KzInterp"
+   },
    "Layers": {
     "properties": {
      "bottom": {
@@ -1964,6 +2104,28 @@
      "gravel": {
       "type": "boolean",
       "title": "Gravel"
+     },
+     "bottom_source": {
+      "type": "string",
+      "enum": [
+       "satellite",
+       "kz"
+      ],
+      "title": "Bottom Source"
+     },
+     "kz_conflict": {
+      "type": "boolean",
+      "title": "Kz Conflict"
+     },
+     "kz_interp": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/KzInterp"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     },
     "type": "object",
@@ -1986,7 +2148,10 @@
      "bottom_above_water_min",
      "bottom_above_water_max",
      "obs_count",
-     "gravel"
+     "gravel",
+     "bottom_source",
+     "kz_conflict",
+     "kz_interp"
     ],
     "title": "PointResponse"
    },

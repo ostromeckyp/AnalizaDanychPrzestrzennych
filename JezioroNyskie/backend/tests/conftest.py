@@ -16,6 +16,7 @@ import pytest
 from affine import Affine
 from shapely.geometry import MultiLineString, Point, box
 
+from mielizna import bottom
 from mielizna.bottom import write_model
 from mielizna.grid import Grid
 from mielizna.levels import AreaLevelCurve, save_area_level_curve
@@ -118,6 +119,36 @@ def make_dataset(root: Path, with_eval: bool = True) -> Path:
     return root
 
 
+KZ_PIXELS = (slice(0, 10), slice(12, 15))     # wiersze 0-9, kolumny 12-14: dno z mapy KŻ (zawsze woda w satelicie)
+KZ_CONFLICT_PIXEL = (15, 16)                  # wiersz, kolumna: KŻ przeczy satelicie (źródło = satelita, bit 1)
+KZ_META = {"period": "all", "p5": -2.0, "p95": 3.0, "deltas": {}, "inputs": [], "inputs_sha1": "abc123"}
+
+
+def write_kz(root: Path, period: str = "all") -> None:
+    """Syntetyczne rastry łączone `model/<okres>_kz/` w kształcie z `pipeline/14_kz_deep.py` plus pliki oceny KŻ."""
+    import rasterio
+    grid = Grid("EPSG:2180", Affine(10, 0, 375000, 0, -10, 290000), W, H)
+    sat, _ = bottom.read_model(Path(root) / "processed" / "model" / period)
+    z_lo = np.where(np.isnan(sat["z_min"]), -np.inf, sat["z_min"]).astype(np.float32)
+    z_hi = np.where(np.isnan(sat["z_max"]), np.inf, sat["z_max"]).astype(np.float32)
+    outside = (sat["obs_count"] == 0) | (sat["obs_count"] == 65535) | (sat["flags"] == 255)
+    z_lo[outside] = z_hi[outside] = np.nan
+    src = np.zeros((H, W), np.uint8)
+    z_lo[KZ_PIXELS], z_hi[KZ_PIXELS], src[KZ_PIXELS] = 193.0, 194.0, 1
+    src[KZ_CONFLICT_PIXEL] = 2
+    out = Path(root) / "processed" / "model" / f"{period}_kz"
+    out.mkdir(parents=True, exist_ok=True)
+    profile = {"driver": "GTiff", "height": H, "width": W, "count": 1, "crs": grid.crs, "transform": grid.transform}
+    for name, arr in (("zlo", z_lo), ("zhi", z_hi), ("source", src)):
+        with rasterio.open(out / f"bottom_{name}.tif", "w", dtype=str(arr.dtype), **profile) as ds:
+            ds.write(arr, 1)
+    (out / "meta.json").write_text(json.dumps({**KZ_META, "period": period}), encoding="utf-8")
+    ev = Path(root) / "processed" / "eval"
+    ev.mkdir(parents=True, exist_ok=True)
+    (ev / "kz_loo.json").write_text(json.dumps({"n": 10}), encoding="utf-8")
+    (ev / "calibration.json").write_text(json.dumps({"coverage_after": {"overall": 0.9, "bands": {}}}), encoding="utf-8")
+
+
 @pytest.fixture
 def dataset(tmp_path) -> Path:
     return make_dataset(tmp_path)
@@ -157,3 +188,23 @@ def client_no_eval(dataset_no_eval):
     from app.main import create_app
     from app.settings import Settings
     return TestClient(create_app(Settings(data_dir=dataset_no_eval, live=False), load_products(dataset_no_eval, "all")))
+
+
+@pytest.fixture
+def dataset_kz(tmp_path) -> Path:
+    root = make_dataset(tmp_path / "kz")
+    write_kz(root)
+    return root
+
+
+@pytest.fixture
+def products_kz(dataset_kz):
+    return load_products(dataset_kz, "all")
+
+
+@pytest.fixture
+def client_kz(dataset_kz, products_kz):
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.settings import Settings
+    return TestClient(create_app(Settings(data_dir=dataset_kz, live=False), products_kz))

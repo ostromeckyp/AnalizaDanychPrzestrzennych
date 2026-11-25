@@ -23,7 +23,9 @@ import numpy as np
 import pandas as pd
 from affine import Affine
 
-from app.depth import Bounds, satellite_bounds
+from app.depth import SOURCE_KZ, Bounds, combined_bounds, satellite_bounds
+from app.settings import get_settings
+from app.zones import mask_geometry
 from mielizna import bottom, capacity, levels
 from mielizna.capacity import MAX_PP_MLN_M3, NPP_MLN_M3  # brief §4, wspólne z pipeline'em (kz_compare)
 from mielizna.levels import AreaLevelCurve
@@ -59,6 +61,8 @@ class Products:
     hazards: dict | None = None                       # przeszkody z locji KŻ ({"source", "features"}) albo None, gdy brak pliku
     hazards_hash: str = ""                            # odcisk bajtów pliku przeszkód (część ETagu /api/hazards)
     gravel_geom: object | None = None                 # suma obrysów jako przygotowana geometria do testu „punkt w obrysie"
+    kz_interp: dict | None = None                     # {"p5", "p95"} z meta.json rastrów łączonych albo None, gdy ich nie wczytano
+    kz_outline: dict | None = None                    # geometria GeoJSON (4326) obszaru dna z mapy KŻ, liczona raz przy starcie
 
     @property
     def z_lo(self) -> np.ndarray:
@@ -87,7 +91,7 @@ def level_to_capacity(p: Products, h: float) -> float:
 
 
 EVAL_FILES = ("bottom_vs_nmt", "levels", "bottom_change", "model_choice", "variant_d", "kz_compare",
-              "holdout", "error_budget")
+              "holdout", "error_budget", "calibration", "kz_loo", "kz_deep", "holdout_level_sources")
 
 
 def load_eval(data_dir: Path) -> dict:
@@ -152,8 +156,23 @@ def load_hazards(data_dir: Path) -> dict | None:
     return {"source": source if isinstance(source, str) else "", "features": out}
 
 
-def load_products(data_dir: Path, period: str = "all") -> Products:
-    """Wczytuje wszystkie produkty z `data_dir/processed` (okres modelu `period`)."""
+def kz_version_suffix(data_dir: Path, kz_meta: dict) -> str:
+    """Przyrostek wersji `-kz<sha>`: odcisk wejść łączenia (meta.json) oraz bajtów `kz_loo.json` i `calibration.json`.
+
+    Dlaczego: ETagi i klucze cache wynikają z wersji, więc zmiana kalibracji albo oceny KŻ musi ją zmienić.
+    """
+    h = hashlib.sha1(str(kz_meta.get("inputs_sha1", "")).encode())
+    for name in ("kz_loo", "calibration"):
+        f = Path(data_dir) / "processed" / "eval" / f"{name}.json"
+        h.update(f.read_bytes() if f.exists() else b"")
+    return f"-kz{h.hexdigest()[:10]}"
+
+
+def load_products(data_dir: Path, period: str = "all", use_kz: bool | None = None) -> Products:
+    """Wczytuje wszystkie produkty z `data_dir/processed` (okres modelu `period`).
+
+    `use_kz` None → decyduje `MIELIZNA_NO_KZ`; bez katalogu `model/<okres>_kz/` wynik jest jak dla samego satelity.
+    """
     data_dir = Path(data_dir)
     proc = data_dir / "processed"
     arrays, meta = bottom.read_model(proc / "model" / period)
@@ -164,7 +183,16 @@ def load_products(data_dir: Path, period: str = "all") -> Products:
 
     obs, flags = arrays["obs_count"], arrays["flags"]
     bounds = satellite_bounds(arrays["z_min"], arrays["z_max"], obs, flags)
-    finite_max = bounds.z_hi[bounds.in_model & np.isfinite(bounds.z_hi)]
+    finite_max = bounds.z_hi[bounds.in_model & np.isfinite(bounds.z_hi)]   # próg ostrzeżenia z SUROWEGO satelity, nie z połączonych granic
+    z_max_floor = float(finite_max.min())
+    kz_dir = proc / "model" / f"{period}_kz"
+    version_suffix, kz_interp, kz_outline = "", None, None
+    if (use_kz if use_kz is not None else not get_settings().no_kz) and (kz_dir / "bottom_zlo.tif").exists():
+        kz_meta = json.loads((kz_dir / "meta.json").read_text(encoding="utf-8"))
+        bounds = combined_bounds(bounds, kz_dir)
+        version_suffix = kz_version_suffix(data_dir, kz_meta)
+        kz_interp = {"p5": float(kz_meta["p5"]), "p95": float(kz_meta["p95"])}
+        kz_outline = mask_geometry(bounds.in_model & (bounds.source == SOURCE_KZ), transform, crs)
 
     scenes = [s for s in json.loads((proc / "scenes.json").read_text(encoding="utf-8"))
               if s["qc_ok"] and s["h_t"] is not None]
@@ -198,9 +226,9 @@ def load_products(data_dir: Path, period: str = "all") -> Products:
     return Products(
         transform=transform, crs=crs, shape=obs.shape, bounds=bounds, z=arrays["z"],
         unc=arrays["unc"], obs_count=obs, meta=meta,
-        version=f"{period}-{meta['version']}", scenes=scenes, shorelines=shorelines, marinas=marinas,
-        curve=curve, rf_metrics=rf_metrics, z_max_floor=float(finite_max.min()), npp=npp, max_pp=max_pp,
+        version=f"{period}-{meta['version']}{version_suffix}", scenes=scenes, shorelines=shorelines, marinas=marinas,
+        curve=curve, rf_metrics=rf_metrics, z_max_floor=z_max_floor, npp=npp, max_pp=max_pp,
         capacity_table=capacity_table, eval=ev, eval_hash=short_hash(json.dumps(ev, sort_keys=True).encode()),
         gravel_hash=gravel_hash, gravel=gravel, gravel_geom=gravel_geom,
-        hazards=load_hazards(data_dir), hazards_hash=hazards_hash,
+        hazards=load_hazards(data_dir), hazards_hash=hazards_hash, kz_interp=kz_interp, kz_outline=kz_outline,
     )

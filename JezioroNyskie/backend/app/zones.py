@@ -35,9 +35,7 @@ def round_param(x: float, step: float = 0.05) -> float:
 def zone_classes(h: float, draft: float, margin: float, z_lo: np.ndarray, z_hi: np.ndarray,
                  in_model: np.ndarray) -> np.ndarray:
     """Klasyfikuje piksele wg reguły §6.4; poza modelem (in_model False) zwraca NONE. Cienka nakładka na `depth.classify`."""
-    bounds = Bounds(z_lo, z_hi, np.asarray(in_model, bool), np.zeros(np.shape(z_lo), np.uint8),
-                    np.zeros(np.shape(z_lo), bool))
-    return classify(h, draft, margin, bounds)
+    return classify(h, draft, margin, Bounds.from_arrays(z_lo, z_hi, in_model))
 
 
 def zone_stats(classes: np.ndarray, h: float, z_lo: np.ndarray, in_model: np.ndarray) -> dict:
@@ -85,3 +83,17 @@ def zones_geojson(classes: np.ndarray, transform: Affine, crs: str, simplify_m: 
     gdf["order"] = gdf["zone"].map(["safe", "risk", "danger"].index)
     gdf = gdf.sort_values("order").drop(columns="order")
     return gdf.__geo_interface__
+
+
+def mask_geometry(mask: np.ndarray, transform: Affine, crs: str, simplify_m: float = 5.0) -> dict | None:
+    """Jedna geometria GeoJSON (EPSG:4326) sumy pikseli maski albo None, gdy maska pusta.
+
+    Te same kroki co `zones_geojson`: poligonizacja → scalenie → uproszczenie w metrach → reprojekcja →
+    siatka 1e-6° → `make_valid`.
+    """
+    mask = np.asarray(mask, bool)
+    if not mask.any():
+        return None
+    polys = [shape(g) for g, _ in features.shapes(mask.astype(np.uint8), mask=mask, transform=transform, connectivity=4)]
+    gs = gpd.GeoSeries([shapely.union_all(polys)], crs=crs).simplify(simplify_m, preserve_topology=True).to_crs(4326)
+    return make_valid(shapely.set_precision(gs.iloc[0], 1e-6)).__geo_interface__

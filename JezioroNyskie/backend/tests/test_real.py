@@ -27,7 +27,7 @@ pytestmark = [pytest.mark.real,
 
 @pytest.fixture(scope="module")
 def real_products():
-    return load_products(DATA, "all")
+    return load_products(DATA, "all", use_kz=False)   # liczby z planu 1 dotyczą samego satelity
 
 
 @pytest.fixture

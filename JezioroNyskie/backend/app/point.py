@@ -7,19 +7,19 @@ Dlaczego tak: strefa pochodzi z `depth.classify` liczonego na tablicach 1×1, wi
   górnej głębokości, zawsze ląd → brak górnej rzędnej dna) oddajemy jako `None`, bo JSON nie zna ∞.
 Wejście → wyjście: `point_info(products, lon, lat, h, draft, margin)` → słownik zgodny z `PointResponse`.
   Wariant (kolejno): poza siatką lub poza modelem → `outside`; h ≤ z_lo → `land`; z_lo = −∞ →
-  `always_water`; inaczej `model`.
+  `always_water`; inaczej `model`. Pola `bottom_source`, `kz_conflict`, `kz_interp` mówią, czy dno piksela
+  pochodzi z mapy KŻ (`kz_interp` = p5/p95 błędu interpolacji), czy KŻ przeczy satelicie.
 Jak to obronić: D_lo = h − z_hi (najpłycej), D_hi = h − z_lo (najgłębiej); prześwit to głębokość minus
   zanurzenie. Piksel wybiera `rasterio.transform.rowcol` na współrzędnych siatki (EPSG:2180).
 """
 import math
 import threading
 
-import numpy as np
 import rasterio.transform
 from pyproj import Transformer
 
 from app.data import Products
-from app.depth import Bounds, classify, depth_range, point_kind
+from app.depth import SOURCE_KZ, Bounds, classify, depth_range, point_kind
 from app.zones import ZONE_NAMES
 
 
@@ -66,7 +66,8 @@ def point_info(products: Products, lon: float, lat: float, h: float, draft: floa
            "zone": None, "depth_min": None, "depth_max": None, "clearance_min": None,
            "clearance_max": None, "z_min": None, "z_max": None, "z": None, "unc": None,
            "bottom_above_water_min": None, "bottom_above_water_max": None, "obs_count": None,
-           "gravel": in_gravel(products, lon, lat)}
+           "gravel": in_gravel(products, lon, lat),
+           "bottom_source": "satellite", "kz_conflict": False, "kz_interp": None}
     px = _pixel(products, lon, lat)
     if px is None:
         return out
@@ -76,8 +77,10 @@ def point_info(products: Products, lon: float, lat: float, h: float, draft: floa
     out["obs_count"] = int(products.obs_count[r, c])
 
     z_lo, z_hi = float(products.z_lo[r, c]), float(products.z_hi[r, c])
-    one = Bounds(np.array([[z_lo]]), np.array([[z_hi]]), np.array([[True]]),
-                 np.zeros((1, 1), np.uint8), np.zeros((1, 1), bool))
+    one = Bounds.from_arrays([[z_lo]], [[z_hi]], [[True]])
+    if products.bounds.source[r, c] == SOURCE_KZ:       # dno z mapy KŻ: podajemy też parametry interpolacji (p5, p95)
+        out.update(bottom_source="kz", kz_interp=products.kz_interp)
+    out["kz_conflict"] = bool(products.bounds.kz_conflict[r, c])
     out["zone"] = ZONE_NAMES[int(classify(h, draft, margin, one)[0, 0])]
     out["kind"] = point_kind(h, z_lo)
 

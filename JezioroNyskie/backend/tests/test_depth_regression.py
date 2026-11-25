@@ -8,6 +8,7 @@ Wejście → wyjście: produkty z `load_products(DATA, "all")` + fixture → ró
 Jak to obronić: ten sam kod i dane dają wynik identyczny co do bitu, więc nie potrzeba tolerancji.
 """
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,17 @@ BASELINE = json.loads(FIXTURE.read_text())
 
 @pytest.fixture(scope="module")
 def products():
-    return load_products(DATA, "all")
+    """Referencja dotyczy samego satelity: bez nadpisania z zewnątrz wyłączamy rastry łączone (`MIELIZNA_NO_KZ=1`).
+
+    Uruchomienie z `MIELIZNA_NO_KZ=0` pokazuje, co zmienia mapa KŻ (testy mają wtedy zawieść).
+    """
+    mp = pytest.MonkeyPatch()
+    if "MIELIZNA_NO_KZ" not in os.environ:
+        mp.setenv("MIELIZNA_NO_KZ", "1")
+    try:
+        yield load_products(DATA, "all")
+    finally:
+        mp.undo()
 
 
 @pytest.mark.parametrize("key", list(BASELINE["zones"]))
@@ -37,4 +48,9 @@ def test_zones_match_baseline(products, key):
 
 @pytest.mark.parametrize("case", BASELINE["points"], ids=lambda c: f"{c['lon']:.5f},{c['lat']:.5f}@{c['h']}")
 def test_point_info_matches_baseline(products, case):
-    assert compute_point(products, case["lon"], case["lat"], case["h"], case["draft"], case["margin"]) == case["out"]
+    out = compute_point(products, case["lon"], case["lat"], case["h"], case["draft"], case["margin"])
+    # pola KŻ doszły po zamrożeniu referencji; przy wyłączonym KŻ muszą mieć wartości „tylko satelita"
+    new = {k: out.pop(k) for k in ("bottom_source", "kz_conflict", "kz_interp")}
+    if os.environ.get("MIELIZNA_NO_KZ", "0") not in ("", "0"):
+        assert new == {"bottom_source": "satellite", "kz_conflict": False, "kz_interp": None}
+    assert out == case["out"]

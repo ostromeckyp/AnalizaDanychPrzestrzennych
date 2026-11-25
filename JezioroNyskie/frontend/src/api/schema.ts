@@ -126,6 +126,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/kz-deep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Kz Deep
+         * @description Obszar dna wyznaczonego z mapy KŻ (GeoJSON, EPSG:4326, jeden obiekt); pusta kolekcja bez rastrów łączonych.
+         */
+        get: operations["kz_deep_api_kz_deep_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/hazards": {
         parameters: {
             query?: never;
@@ -304,6 +324,8 @@ export interface components {
             holdout_in_bounds?: number | null;
             /** Holdout N Scenes */
             holdout_n_scenes?: number | null;
+            /** Calibration Coverage */
+            calibration_coverage?: number | null;
         };
         /** AreaLevel */
         AreaLevel: {
@@ -535,6 +557,47 @@ export interface components {
             /** Source Url */
             source_url: string;
         };
+        /** KzDeepFeature */
+        KzDeepFeature: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "Feature";
+            /** Geometry */
+            geometry: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id?: string | number | null;
+            /** Bbox */
+            bbox?: number[] | null;
+            properties: components["schemas"]["KzDeepProperties"];
+        };
+        /** KzDeepProperties */
+        KzDeepProperties: {
+            /** Attribution */
+            attribution: string;
+            /** Note */
+            note: string;
+        };
+        /** KzDeepResponse */
+        KzDeepResponse: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "FeatureCollection";
+            /** Features */
+            features: components["schemas"]["KzDeepFeature"][];
+        };
+        /** KzInterp */
+        KzInterp: {
+            /** P5 */
+            p5: number;
+            /** P95 */
+            p95: number;
+        };
         /** Layers */
         Layers: {
             bottom: components["schemas"]["BottomLayer"];
@@ -706,6 +769,14 @@ export interface components {
             obs_count: number | null;
             /** Gravel */
             gravel: boolean;
+            /**
+             * Bottom Source
+             * @enum {string}
+             */
+            bottom_source: "satellite" | "kz";
+            /** Kz Conflict */
+            kz_conflict: boolean;
+            kz_interp: components["schemas"]["KzInterp"] | null;
         };
         /** SceneOut */
         SceneOut: {
@@ -1068,6 +1139,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    kz_deep_api_kz_deep_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KzDeepResponse"];
+                };
             };
         };
     };

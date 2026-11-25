@@ -111,6 +111,7 @@ class Accuracy(BaseModel):
     holdout_bias: float | None = None
     holdout_in_bounds: float | None = None   # udział pikseli brzegowych, dla których predykcja mieści się w granicach
     holdout_n_scenes: int | None = None
+    calibration_coverage: float | None = None   # pokrycie granic dna po kalibracji (udział pikseli kontrolnych w granicach), null bez `eval/calibration.json`
 
 
 class ValidationCheck(BaseModel):
@@ -192,6 +193,11 @@ class MetaResponse(BaseModel):
     layers: Layers
 
 
+class KzInterp(BaseModel):
+    p5: float       # 5. percentyl błędu interpolacji mapy KŻ [m]
+    p95: float      # 95. percentyl
+
+
 class PointResponse(BaseModel):
     kind: Literal["model", "always_water", "land", "outside"]
     lon: float
@@ -212,6 +218,9 @@ class PointResponse(BaseModel):
     bottom_above_water_max: float | None
     obs_count: int | None
     gravel: bool                    # punkt w obrysie żwirowni: dno zmienne, model może być nieaktualny
+    bottom_source: Literal["satellite", "kz"]   # skąd pochodzi dno piksela: satelita (skalibrowany) albo mapa KŻ
+    kz_conflict: bool               # mapa KŻ przeczy satelicie w tym pikselu (dno zostaje satelitarne)
+    kz_interp: "KzInterp | None"    # percentyle błędu interpolacji mapy KŻ [m]; tylko gdy bottom_source = kz
 
 
 class GravelProperties(BaseModel):
@@ -221,6 +230,20 @@ class GravelProperties(BaseModel):
 
 class GravelFeature(GeoFeature):
     properties: GravelProperties
+
+
+class KzDeepProperties(BaseModel):
+    attribution: str
+    note: str
+
+
+class KzDeepFeature(GeoFeature):
+    properties: KzDeepProperties
+
+
+class KzDeepResponse(BaseModel):
+    type: Literal["FeatureCollection"]
+    features: list[KzDeepFeature]
 
 
 class GravelResponse(BaseModel):
