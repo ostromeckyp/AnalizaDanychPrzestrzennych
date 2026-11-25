@@ -72,6 +72,32 @@ def scene_record(model, ev_i, h, zone, lake_zone, transform, with_res=False):
             "shore_dist_median": sd["median"], "shore_dist_p90": sd["p90"]}
 
 
+def TRAIN_ALL(sel, train_idx):
+    """Filtr treningu „wszystkie sceny" (serwowany wariant): nic nie wycina."""
+    return train_idx
+
+
+def run_folds(sel, ev, h, sig, is_c, train_filter, *, zone, lake_zone, transform, served=None, t0=None):
+    """Roczne foldy: model z scen treningowych (po `train_filter`) i rekordy scen testowych.
+
+    `train_filter(sel, train_idx) -> idx` zawęża tylko sceny budujące model; sceny testowe (B/R) są zawsze te same.
+    Rekordy modelu foldu niosą reszty kalibracyjne (`with_res=True`); rekordy serwowanego modelu tylko gdy `served`.
+    Zwraca listę słowników: year, n_train, test (indeksy), rec_h, rec_s (None bez `served`).
+    """
+    out = []
+    for f in holdout.year_folds(sel):
+        tr = np.asarray(train_filter(sel, f.train), dtype=int)
+        res = bottom.compute_bounds(ev[tr], h[tr], sig[tr], is_c=is_c[tr], k_sigma=1.0)
+        log.info("fold %d: train %d, test %d%s", f.year, len(tr), len(f.test),
+                 "" if t0 is None else " (%.0f s)" % (time.time() - t0))
+        rec_h = [scene_record(res, ev[i], float(h[i]), zone, lake_zone, transform, with_res=True) for i in f.test]
+        rec_s = None if served is None else [scene_record(served, ev[i], float(h[i]), zone, lake_zone, transform)
+                                             for i in f.test]
+        out.append({"year": f.year, "n_train": len(tr), "test": f.test, "rec_h": rec_h, "rec_s": rec_s})
+        del res
+    return out
+
+
 def subset_vertical(recs, idx):
     return holdout.aggregate([recs[i] for i in idx])["vertical"]
 
@@ -124,13 +150,10 @@ def main() -> int:
     n = len(sel)
     rec_h, rec_s = [None] * n, [None] * n
     year_of = sel.date.astype(str).str[:4].astype(int).to_numpy()
-    for f in folds:
-        res = bottom.compute_bounds(ev[f.train], h[f.train], sig[f.train], is_c=is_c[f.train], k_sigma=1.0)
-        log.info("fold %d: train %d, test %d (%.0f s)", f.year, len(f.train), len(f.test), time.time() - t0)
-        for i in f.test:
-            rec_h[i] = scene_record(res, ev[i], float(h[i]), zone, aoi, grid.transform, with_res=True)
-            rec_s[i] = scene_record(served, ev[i], float(h[i]), zone, aoi, grid.transform)
-        del res
+    for fr in run_folds(sel, ev, h, sig, is_c, TRAIN_ALL, zone=zone, lake_zone=aoi, transform=grid.transform,
+                        served=served, t0=t0):
+        for i, rh_i, rs_i in zip(fr["test"], fr["rec_h"], fr["rec_s"]):
+            rec_h[i], rec_s[i] = rh_i, rs_i
     test_idx = [i for i in range(n) if rec_h[i] is not None]
     rh, rs = [rec_h[i] for i in test_idx], [rec_s[i] for i in test_idx]
     ah, as_ = holdout.aggregate(rh), holdout.aggregate(rs)

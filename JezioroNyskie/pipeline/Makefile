@@ -38,13 +38,14 @@ EVALKZ  := $(PROC)/eval/kz_compare.json
 EVALVOL := $(PROC)/eval/volume.json
 EVALHO  := $(PROC)/eval/holdout.json
 EVALCAL := $(PROC)/eval/calibration.json
+EVALHL  := $(PROC)/eval/holdout_level_sources.json
 EVALEB  := $(PROC)/eval/error_budget.json
 KZOVER  := ../docs/img/kz-overlay.png
 ZWIR    := $(REF)/zwirownia.gpkg
 MIN_HUMAN_LABELS := 150
 
 .PHONY: help all osm nmt s2 labels label-candidates label-ui check-labels rf classify shorelines \
-        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate volume holdout error-budget test check-locks clean-model
+        bulletins lidar-epochs levels-a levels bottom kz-georef kz-spots kz-qc-ui kz-contours kz-gravel variant-d kz-compare kz-overlay evaluate volume holdout holdout-levels error-budget test check-locks clean-model
 .DEFAULT_GOAL := help
 
 help:
@@ -191,6 +192,12 @@ $(EVALHO): 12_holdout.py mielizna/holdout.py mielizna/budget.py mielizna/calibra
 # calibration.json powstaje w tym samym przebiegu co holdout.json (kalibracja z reszt foldów)
 $(EVALCAL): $(EVALHO)
 	@test -f $@ || $(UV) 12_holdout.py
+
+# holdout-levels: eksperyment źródeł poziomu wody (12a_holdout_levels.py): hold-out bez scen C i tylko z B/R. Tylko mierzy,
+# nie zmienia holdout.json ani modelu; ok. 3 x czas holdout.
+holdout-levels: $(EVALHL)
+$(EVALHL): 12a_holdout_levels.py 12_holdout.py mielizna/holdout.py mielizna/budget.py $(EVALCH)
+	$(UV) 12a_holdout_levels.py
 
 # error-budget: budżet błędu wg pasm rzędnej (13_error_budget.py). Czyta tylko JSON-y oceny, nie dotyka łańcucha S2.
 error-budget: $(EVALEB)
