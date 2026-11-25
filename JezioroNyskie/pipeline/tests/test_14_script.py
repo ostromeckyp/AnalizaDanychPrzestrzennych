@@ -33,3 +33,18 @@ def test_kz_above_zmax_counts_only_covered_always_water():
     assert r["n_covered"] == 2
     assert r["coverage"] == 2 / 3
     assert r["kz_above_zmax_share"] == 0.5
+
+
+def test_write_spots_csv_in_grid_crs(tmp_path):
+    """Punkty KŻ użyte do powierzchni/LOO trafiają do `kz_spots.csv` (id, x, y, z) w układzie siatki."""
+    import geopandas as gpd
+    import pandas as pd
+    from shapely.geometry import Point
+    spots = gpd.GeoDataFrame({"id": [7, 3], "z": [190.5, 188.25], "px": [1, 2]},
+                             geometry=[Point(17.25, 50.46), Point(375100.0, 289900.0)], crs="EPSG:4326")
+    spots.loc[1, "geometry"] = gpd.GeoSeries([Point(375100.0, 289900.0)], crs="EPSG:2180").to_crs(4326).iloc[0]
+    s14.write_spots(tmp_path / "kz_spots.csv", spots, "EPSG:2180")
+    df = pd.read_csv(tmp_path / "kz_spots.csv")
+    assert list(df.columns) == ["id", "x", "y", "z"]
+    assert df["id"].tolist() == [7, 3] and df["z"].tolist() == [190.5, 188.25]
+    assert abs(df["x"][1] - 375100.0) < 0.01 and abs(df["y"][1] - 289900.0) < 0.01

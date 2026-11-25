@@ -3,12 +3,13 @@
 Co robi: czyta model satelitarny okresu z eval/model_choice.json, liczy granice z semantyką ±∞ (jak
   backend/app/depth.py:satellite_bounds), stosuje kalibrację (calibration.json), buduje głęboką powierzchnię KŻ
   (bez poziomicy 195,0 m), mierzy jej błąd metodą LOO w pikselach „zawsze woda” (z_lo = −∞) i łączy: `merge_kz`.
-  Zapisuje model/<okres>_kz/{bottom_zlo,bottom_zhi,bottom_source}.tif + meta.json oraz eval/{kz_loo,kz_deep}.json.
+  Zapisuje model/<okres>_kz/{bottom_zlo,bottom_zhi,bottom_source}.tif + meta.json + kz_spots.csv (punkty KŻ użyte
+  do powierzchni, id/x/y/z w EPSG:2180; backend: najbliższy punkt w popupie) oraz eval/{kz_loo,kz_deep}.json.
 Dlaczego tak: kolejność kalibracja → KŻ (sprzeczność liczona względem skalibrowanego z_hi). Skrypty oceny
   (08, 10, 12, 12a, 13) NIE czytają tych rastrów (test_independence): KŻ nie może oceniać modelu, którego jest częścią.
 Wejście → wyjście: model/<okres>/*, eval/{model_choice,calibration}.json, kz/{kz_spot_ocr.gpkg,kz_contours.gpkg},
   reference/{kz_spot_qc.csv,zwirownia.gpkg} → rastry float32 (±inf zachowane, NaN poza modelem), uint8 source
-  (bit 0 = KŻ, bit 1 = sprzeczność), meta.json (period, p5, p95, deltas, inputs_sha1), kz_loo.json, kz_deep.json.
+  (bit 0 = KŻ, bit 1 = sprzeczność), meta.json (period, p5, p95, deltas, inputs_sha1, inputs, outputs), kz_loo.json, kz_deep.json.
   `inputs_sha1` = SHA-1 po bajtach kolejno: rastry satelitarne okresu (z_min, z_max, obs_count, flags), calibration.json,
   kz_spot_ocr.gpkg, kz_spot_qc.csv (jeśli jest), kz_contours.gpkg, zwirownia.gpkg.
 Jak to obronić: P5/P95 z LOO (poza próbą), maska LOO = dokładnie piksele z z_lo = −∞ (zawsze woda).
@@ -73,6 +74,17 @@ def _sha1(paths) -> str:
     for p in paths:
         h.update(Path(p).read_bytes())
     return h.hexdigest()
+
+
+def write_spots(path: Path, spots, crs: str) -> None:
+    """Punkty rzędnych KŻ (ten sam zbiór co powierzchnia i LOO) jako CSV `id,x,y,z` w układzie siatki `crs`.
+
+    Dlaczego: backend pokazuje w popupie „zawsze woda” poza zasięgiem interpolacji najbliższy punkt mapy (tylko
+      informacja, nie wchodzi do stref).
+    """
+    g = spots.to_crs(crs)
+    pd.DataFrame({"id": g["id"].to_numpy(), "x": g.geometry.x.round(2).to_numpy(), "y": g.geometry.y.round(2).to_numpy(),
+                  "z": g["z"].to_numpy(float)}).to_csv(path, index=False)
 
 
 def sat_bounds(arrays: dict):
@@ -145,10 +157,12 @@ def main() -> dict:
     _write_cog(out / "bottom_zlo.tif", z_lo.astype(np.float32), grid, np.nan)
     _write_cog(out / "bottom_zhi.tif", z_hi.astype(np.float32), grid, np.nan)
     _write_cog(out / "bottom_source.tif", src, grid, None)
+    write_spots(out / "kz_spots.csv", spots, grid.crs)
     inputs = [p for p in (mdir / f"{bottom._RASTERS[k][0]}.tif" for k in SAT_RASTERS)]
     inputs += [cal_path, ocr_path] + ([qc_path] if qc_path.exists() else []) + [cont_path, grav_path]
     _dump(out / "meta.json", {"period": period, "p5": p5, "p95": p95, "deltas": deltas,
-                              "inputs_sha1": _sha1(inputs), "inputs": [p.name for p in inputs]})
+                              "inputs_sha1": _sha1(inputs), "inputs": [p.name for p in inputs],
+                              "outputs": ["bottom_zlo.tif", "bottom_zhi.tif", "bottom_source.tif", "kz_spots.csv"]})
 
     ev = proc / "eval"
     _dump(ev / "kz_loo.json", {k: v for k, v in res.items()})
