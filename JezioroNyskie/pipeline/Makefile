@@ -37,6 +37,7 @@ EVALCH  := $(PROC)/eval/model_choice.json
 EVALKZ  := $(PROC)/eval/kz_compare.json
 EVALVOL := $(PROC)/eval/volume.json
 EVALHO  := $(PROC)/eval/holdout.json
+EVALCAL := $(PROC)/eval/calibration.json
 EVALEB  := $(PROC)/eval/error_budget.json
 KZOVER  := ../docs/img/kz-overlay.png
 ZWIR    := $(REF)/zwirownia.gpkg
@@ -184,9 +185,12 @@ $(EVALVOL): 11_volume.py mielizna/volume.py $(REF)/kz_pojemnosc_rzedna.csv $(EVA
 
 # holdout: roczny hold-out modelu dna (12_holdout.py). Jak evaluate/volume: zależy tylko od kodu i model_choice.json, nie od
 # łańcucha S2 -> klasyfikacja -> model (ma nieaktualne daty). Po zmianie modelu: rm $(EVALHO) && make holdout.
-holdout: $(EVALHO)
-$(EVALHO): 12_holdout.py mielizna/holdout.py mielizna/budget.py $(EVALCH)
+holdout: $(EVALHO) $(EVALCAL)
+$(EVALHO): 12_holdout.py mielizna/holdout.py mielizna/budget.py mielizna/calibration.py $(EVALCH)
 	$(UV) 12_holdout.py
+# calibration.json powstaje w tym samym przebiegu co holdout.json (kalibracja z reszt foldów)
+$(EVALCAL): $(EVALHO)
+	@test -f $@ || $(UV) 12_holdout.py
 
 # error-budget: budżet błędu wg pasm rzędnej (13_error_budget.py). Czyta tylko JSON-y oceny, nie dotyka łańcucha S2.
 error-budget: $(EVALEB)

@@ -120,3 +120,12 @@ def test_shore_pixels_sides():
     assert holdout.shore_pixels(ev, "land").tolist() == [[F, F, T], [F, F, F]]
     assert holdout.shore_pixels(ev, "both").tolist() == [[F, T, T], [F, F, F]]
     assert holdout.shore_pixels(ev).tolist() == holdout.shore_pixels(ev, "both").tolist()
+
+
+def test_bound_residuals_below_in_above():
+    m = _model([[1, 2, 3]], [[1.0, 1.5, 3.5]], [[1.9, 2.5, 4.0]])
+    lo, hi = holdout.bound_residuals(m, np.ones((1, 3), bool), 2.0)
+    assert np.allclose(lo, [0, 0, 1.5]) and np.allclose(hi, [0.1, 0, 0])
+    m = _model([[1, 2]], [[np.nan, 1.0]], [[2.0, np.inf]])  # granica nieskończona/NaN: piksel pomijany
+    lo, hi = holdout.bound_residuals(m, np.ones((1, 2), bool), 2.0)
+    assert len(lo) == 0 and len(hi) == 0

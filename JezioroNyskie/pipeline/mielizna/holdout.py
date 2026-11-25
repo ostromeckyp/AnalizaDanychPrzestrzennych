@@ -92,6 +92,17 @@ def vertical_errors(model: dict, shore: np.ndarray, h: float) -> dict:
             "n_shore": int(shore.sum()), "n_pred": int(ok.sum())}
 
 
+def bound_residuals(model: dict, shore: np.ndarray, h: float) -> tuple[np.ndarray, np.ndarray]:
+    """Reszty poza przedziałem na pikselach brzegowych z obiema granicami skończonymi: (max(0, z_min − h), max(0, h − z_max)).
+
+    Dlaczego tak: na linii brzegowej dno ≈ h, więc o ile h wychodzi poza [z_min, z_max], o tyle przedział trzeba poszerzyć
+      (jednostronnie) do kalibracji. Reszta 0 = piksel w przedziale.
+    """
+    zmin, zmax = np.asarray(model["z_min"], float), np.asarray(model["z_max"], float)
+    ok = shore & np.isfinite(zmin) & np.isfinite(zmax)
+    return np.maximum(0.0, zmin[ok] - h), np.maximum(0.0, h - zmax[ok])
+
+
 def iou(pred: np.ndarray, ref: np.ndarray, zone: np.ndarray) -> float:
     """IoU wody na pikselach `zone`, w których obie maski ≠ 255; pusty mianownik → NaN."""
     valid = zone & (pred != 255) & (ref != 255)

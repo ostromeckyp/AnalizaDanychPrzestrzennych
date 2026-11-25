@@ -24,7 +24,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from mielizna import bottom, budget, holdout
+from mielizna import bottom, budget, calibration, holdout
 from mielizna.config import data_path, load_config
 from mielizna.grid import reference_grid
 from mielizna.osm import aoi_mask
@@ -39,6 +39,11 @@ METHOD = ("Roczny hold-out: dla każdego roku 2020-2026 model dna z scen pozosta
           "linii brzegowych względem obserwacji RF∧Otsu. In-sample = serwowany model `all` na tych samych scenach.")
 LEAKAGE = ("RF i krzywa C (poziomy wariantu C) nie są trenowane od nowa na foldach: maski scen i poziomy treningowe "
            "pochodzą z potoku, który widział też scenę testową, więc hold-out jest optymistyczny w tym zakresie.")
+CAL_METHOD = ("Kalibracja z rocznego hold-outu (modele foldów, poza próbą): na pikselach brzegowych z obiema granicami "
+              "skończonymi reszty max(0, z_min − h) i max(0, h − z_max), pasmo wg poziomu h sceny testowej; δ_lo i δ_hi = "
+              "P95 reszt w paśmie. Poszerzenie: z_min − δ_lo, z_max + δ_hi tylko dla granic skończonych; pasmo piksela wg "
+              "środka przedziału, poniżej 192,9 m δ pasma 192.9-194.8 (brak pikseli hold-outu). Pokrycie = udział pikseli "
+              "brzegowych hold-outu z dnem w przedziale, przed i po poszerzeniu.")
 
 
 def load_ev(sel, aoi):
@@ -60,6 +65,7 @@ def scene_record(model, ev_i, h, zone, lake_zone, transform):
     valid = zone & (ev_i != 255)
     sd = holdout.shoreline_distance(pred, ev_i, transform)
     return {"side": {"water": vw, "land": vl},
+            "res": holdout.bound_residuals(model, holdout.shore_pixels(ev_i, "both"), h),
             "n_shore": ve["n_shore"], "err": ve["err"], "in_bounds": ve["in_bounds"],
             "iou_zone": holdout.iou(pred, ev_i, zone), "iou_lake": holdout.iou(pred, ev_i, lake_zone),
             "share_uncertain": float(unc[valid].mean()) if valid.any() else float("nan"),
@@ -164,9 +170,25 @@ def main() -> int:
     out = {"method": METHOD, "leakage_note": LEAKAGE, "n_folds": len(folds), "n_test_scenes": ah["n_test_scenes"],
            "n_skipped": ah["n_skipped"], "holdout": block(ah, rh), "in_sample": block(as_, rs), "by_fold": by_fold,
            "by_period": by_period, "by_band": by_band}
+    # kalibracja: reszty poza przedziałem z modeli foldów (poza próbą), per pasmo poziomu sceny testowej
+    res_lo = {b: np.concatenate([rh[j]["res"][0] for j in range(len(test_idx)) if band_lbl[j] == b] or [np.array([])])
+              for b in budget.BANDS}
+    res_hi = {b: np.concatenate([rh[j]["res"][1] for j in range(len(test_idx)) if band_lbl[j] == b] or [np.array([])])
+              for b in budget.BANDS}
+    dl = calibration.deltas(res_lo, res_hi)
+    cov = calibration.coverage(res_lo, res_hi, dl)
+    cal = {"bands": dl, "coverage_before": {"overall": cov["overall"]["before"],
+                                            "bands": {b: v["before"] for b, v in cov["bands"].items()}},
+           "coverage_after": {"overall": cov["overall"]["after"],
+                              "bands": {b: v["after"] for b, v in cov["bands"].items()}},
+           "n_pixels": cov["overall"]["n"], "method": CAL_METHOD}
     path = proc / "eval" / "holdout.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(holdout.jsonable(out), ensure_ascii=False, indent=1, allow_nan=False), encoding="utf-8")
+    (path.parent / "calibration.json").write_text(
+        json.dumps(holdout.jsonable(cal), ensure_ascii=False, indent=1, allow_nan=False), encoding="utf-8")
+    log.info("kalibracja: %s | pokrycie %.3f -> %.3f", {b: (round(v["delta_lo"], 3), round(v["delta_hi"], 3)) for b, v in dl.items()},
+             cov["overall"]["before"], cov["overall"]["after"])
     IMG.mkdir(parents=True, exist_ok=True)
     plot(rh, rs, band_lbl, IMG / "eval-holdout.png")
     hv, sv = out["holdout"]["vertical"], out["in_sample"]["vertical"]
