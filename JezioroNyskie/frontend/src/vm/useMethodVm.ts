@@ -219,8 +219,9 @@ export function useMethodVm(): MethodVm {
         checks: val.checks.map((c) => ({ name: c.name, comparedWith: c.compared_with, result: c.result })),
         bands: val.bands.map((b) => ({
           label: b.band,
-          range: fmtRange(b.range_m),
-          dominant: b.dominant ?? '—',
+          // pasmo głębokie: bez zakresu modelu, ale z błędem interpolacji mapy KŻ (nie modelu), gdy jest
+          range: b.range_m || !b.kz_loo ? fmtRange(b.range_m) : '—',
+          dominant: b.dominant ?? (!b.range_m && b.kz_loo ? `błąd interpolacji KŻ: MAE ${fmtM(b.kz_loo.mae)}` : '—'),
           note: b.range_m ? '' : b.note,
         })),
         bandsNote: 'Główne źródło = kontrola z największym błędem w paśmie.',

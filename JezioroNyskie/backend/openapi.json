@@ -1531,6 +1531,35 @@
     ],
     "title": "KzInterp"
    },
+   "KzLoo": {
+    "properties": {
+     "n": {
+      "type": "integer",
+      "title": "N"
+     },
+     "mae": {
+      "type": "number",
+      "title": "Mae"
+     },
+     "p5": {
+      "type": "number",
+      "title": "P5"
+     },
+     "p95": {
+      "type": "number",
+      "title": "P95"
+     }
+    },
+    "type": "object",
+    "required": [
+     "n",
+     "mae",
+     "p5",
+     "p95"
+    ],
+    "title": "KzLoo",
+    "description": "Błąd interpolacji mapy KŻ (punkt odłożony) w paśmie głębokim; to błąd mapy względem samej siebie."
+   },
    "Layers": {
     "properties": {
      "bottom": {
@@ -2445,6 +2474,16 @@
      "note": {
       "type": "string",
       "title": "Note"
+     },
+     "kz_loo": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/KzLoo"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     },
     "type": "object",

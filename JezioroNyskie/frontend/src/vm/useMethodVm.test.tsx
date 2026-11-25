@@ -168,4 +168,31 @@ describe('useMethodVm', () => {
     act(() => result.current.retry());
     await waitFor(() => expect(result.current.status).toBe('ready'));
   });
+
+  it('deep band: KŻ interpolation error instead of "brak danych" when kz_loo present, else unchanged', async () => {
+    const mk = (kz_loo: { n: number; mae: number; p5: number; p95: number } | null) => ({
+      ...meta,
+      validation: {
+        checks: [],
+        lidar_note: 'x',
+        bands: [
+          { band: '< 192,9 m', range_m: null, dominant: null, note: 'nota głęboka', ...(kz_loo ? { kz_loo } : {}) },
+        ],
+      },
+    });
+    metaMock.mockResolvedValue(mk({ n: 93, mae: 1.034, p5: -1.59, p95: 3.05 }));
+    const a = setup();
+    await waitFor(() => expect(a.result.current.status).toBe('ready'));
+    const withLoo = a.result.current.validation!.bands[0];
+    expect(withLoo.range).toBe('—');
+    expect(withLoo.dominant).toBe('błąd interpolacji KŻ: MAE 1,03\u00a0m');
+    expect(withLoo.note).toBe('nota głęboka');
+
+    metaMock.mockResolvedValue(mk(null));
+    const b = setup();
+    await waitFor(() => expect(b.result.current.status).toBe('ready'));
+    const without = b.result.current.validation!.bands[0];
+    expect(without.range).toBe('brak danych');
+    expect(without.dominant).toBe('—');
+  });
 });

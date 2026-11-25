@@ -39,7 +39,7 @@ from app.data import Products, capacity_to_level, level_to_capacity, load_produc
 from app.layers import RENDER_VERSION, UNC_MIN, layer_coordinates, bottom_breaks, render_bottom_png, render_uncertainty_png
 from app.point import point_info
 from app.schemas import (BulletinLatest, CapacityToLevel, CurrentLevelResponse, GravelResponse, HazardsResponse, KzDeepResponse, Layers, LevelToCapacity, MarinasResponse, MetaResponse, PointResponse,
-                         SceneOut, ShorelineFeature, Validation, ValidationBand, ValidationCheck, ZonesResponse)
+                         KzLoo, SceneOut, ShorelineFeature, Validation, ValidationBand, ValidationCheck, ZonesResponse)
 from app.settings import Settings, get_settings
 from app.zones import (round_param, zone_classes, zone_stats, zone_warnings, zones_geojson)
 
@@ -170,7 +170,8 @@ def build_validation(products: Products) -> Validation | None:
             b = eb["bands"][key]
             dom = b["dominant"]
             bands.append(ValidationBand(band=label, range_m=b["range_m"],
-                                        dominant=DOMINANT_LABELS.get(dom, dom), note=b["note"]))
+                                        dominant=DOMINANT_LABELS.get(dom, dom), note=b["note"],
+                                        kz_loo=KzLoo(**b["kz_loo"]) if b.get("kz_loo") else None))
         return Validation(checks=[ValidationCheck(**c) for c in eb["checks"]], bands=bands,
                           lidar_note=eb["lidar_note"])
     except (KeyError, TypeError, ValueError):       # ValidationError dziedziczy po ValueError

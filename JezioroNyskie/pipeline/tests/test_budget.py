@@ -79,3 +79,35 @@ def test_user_facing_text_has_no_raw_tokens():
     for t in texts:
         assert "`" not in t and "<->" not in t and ">=" not in t, t
         assert not re.search(r"\d\.\d", t), t
+
+
+def _inputs():
+    vert = {"n": 100, "bias": -0.1, "mae": 0.5}
+    ho = {"leakage_note": "x", "n_test_scenes": 3, "holdout": {"vertical": vert},
+          "by_band": {b: {"vertical": vert} for b in budget.BANDS}}
+    bvn = {"datum_note": "d", "all_by_band": {b: {"n": 0} for b in budget.BANDS}}
+    kz = {"budget_bands": {b: {"n": 0} for b in budget.BANDS}}
+    lv = {"h_sigma_by_method": {"B": {"median": 0.15}}, "a_vs_b": {"mae": 0.4, "bias": 0.0},
+          "control_r_2025": {"by_method": {"B": {"n": 2, "mae": 0.1, "bias": -0.1}}}}
+    return ho, bvn, kz, {"layers": []}, lv
+
+
+def test_kz_loo_in_deep_band_only_as_separate_field():
+    mod = importlib.import_module("13_error_budget")
+    loo = {"n": 200, "below_192_9": {"n": 93, "mae": 1.0339, "bias": 0.5, "p5": -1.586, "p95": 3.052, "p90_abs": 2.6}}
+    res = mod.build(*_inputs(), kz_loo=loo)
+    deep = res["bands"]["<192.9"]
+    assert deep["kz_loo"] == {"n": 93, "mae": 1.0339, "p5": -1.586, "p95": 3.052}
+    assert deep["range_m"] is None and deep["dominant"] is None
+    assert deep["note"].startswith("Błąd interpolacji mapy KŻ (punkt odłożony, n = 93): MAE 1,03 m; "
+                                   "to błąd mapy względem samej siebie, nie modelu.")
+    assert all("kz_loo" not in b for k, b in res["bands"].items() if k != "<192.9")
+    json.dumps(res, allow_nan=False)
+
+
+def test_without_kz_loo_output_unchanged():
+    mod = importlib.import_module("13_error_budget")
+    a = mod.build(*_inputs())
+    b = mod.build(*_inputs(), kz_loo=None)
+    assert a == b and "kz_loo" not in a["bands"]["<192.9"]
+    assert a["bands"]["<192.9"]["note"] == mod.NO_DATA_NOTE

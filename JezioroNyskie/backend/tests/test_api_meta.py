@@ -169,3 +169,12 @@ def test_meta_holdout_malformed_is_null(dataset, body):
     assert r.status_code == 200
     a = r.json()["accuracy"]
     assert a["holdout_mae"] is None and a["holdout_n_scenes"] is None
+
+
+def test_meta_validation_kz_loo_passthrough(dataset):
+    b = _budget()
+    b["bands"]["<192.9"]["kz_loo"] = {"n": 93, "mae": 1.03, "p5": -1.59, "p95": 3.05}
+    _write_eval(dataset, "error_budget", b)
+    bands = _client(dataset).get("/api/meta").json()["validation"]["bands"]
+    assert bands[2]["kz_loo"] == {"n": 93, "mae": 1.03, "p5": -1.59, "p95": 3.05}
+    assert bands[2]["range_m"] is None and bands[0]["kz_loo"] is None

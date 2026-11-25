@@ -6,7 +6,7 @@ Co robi: zestawia w trzech pasmach (<192,9; 192,9-194,8; 194,8+) błąd modelu d
 Dlaczego tak: żadne pojedyncze źródło nie pokrywa całego zakresu; zakres [min MAE, max MAE] z dostępnych źródeł jest
   uczciwszy niż jedna liczba. Pasmo <192,9 nie dostaje liczby: model nie ma tam dolnej granicy dna (sprawdzi to echosonda).
   Pięć kontroli to nie pięć niezależnych źródeł: trzy są na danych niezależnych od satelity (LiDAR, KŻ, objętość).
-Wejście → wyjście: eval/{holdout,bottom_vs_nmt,kz_points,volume,levels}.json → eval/error_budget.json.
+Wejście → wyjście: eval/{holdout,bottom_vs_nmt,kz_points,volume,levels}.json (+ opcjonalnie kz_loo.json) → eval/error_budget.json.
   Użycie: uv run python 13_error_budget.py (sekundy; nie czyta rastrów).
 Jak to obronić: wszystkie liczby pochodzą z JSON-ów wejściowych; `lidar_note` mówi, że bias LiDAR może zawierać
   przesunięcie RZGW<->EVRF2007 i że liczba się przez to nie zmienia (MAE wprost).
@@ -65,8 +65,24 @@ def _note(band: str, comb: dict) -> str:
     return note
 
 
-def build(ho: dict, bvn: dict, kz: dict, vol: dict, lv: dict) -> dict:
-    """Składa error_budget.json z już wczytanych JSON-ów oceny (czysta funkcja, bez dysku)."""
+def _kz_loo_deep(kz_loo: dict | None) -> dict | None:
+    """Wycina {n, mae, p5, p95} z kz_loo.below_192_9; None, gdy brak pliku albo pasmo puste."""
+    d = (kz_loo or {}).get("below_192_9")
+    if not d or d.get("n", 0) == 0:
+        return None
+    return {k: d[k] for k in ("n", "mae", "p5", "p95")}
+
+
+def _loo_note(loo: dict) -> str:
+    return (f"Błąd interpolacji mapy KŻ (punkt odłożony, n = {nfmt(loo['n'])}): MAE {fmt(loo['mae'])} m; "
+            "to błąd mapy względem samej siebie, nie modelu. " + NO_DATA_NOTE[0].upper() + NO_DATA_NOTE[1:] + ".")
+
+
+def build(ho: dict, bvn: dict, kz: dict, vol: dict, lv: dict, kz_loo: dict | None = None) -> dict:
+    """Składa error_budget.json z już wczytanych JSON-ów oceny (czysta funkcja, bez dysku).
+
+    `kz_loo` (opcjonalny): pasmo <192,9 dostaje osobne pole `kz_loo`; nie wchodzi do `combine_band`
+    (to błąd interpolacji mapy względem samej siebie, nie modelu względem odniesienia)."""
     bands = {}
     for band, (lo, hi) in budget.BANDS.items():
         src = {"holdout": _stat(ho["by_band"][band]["vertical"]),
@@ -77,6 +93,10 @@ def build(ho: dict, bvn: dict, kz: dict, vol: dict, lv: dict) -> dict:
             comb["range_m"] = None
             comb["dominant"] = None
         bands[band] = {**comb, "volume": budget.volume_context(vol["layers"], lo, hi), "note": _note(band, comb)}
+        loo = _kz_loo_deep(kz_loo) if band == "<192.9" else None
+        if loo:
+            bands[band]["kz_loo"] = loo
+            bands[band]["note"] = _loo_note(loo)
 
     hv = ho["holdout"]["vertical"]
     lid = bvn["all_by_band"]
@@ -121,8 +141,10 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     ev = data_path("processed") / "eval"
     load = lambda n: json.loads((ev / n).read_text(encoding="utf-8"))  # noqa: E731
+    loo_path = ev / "kz_loo.json"
+    kz_loo = json.loads(loo_path.read_text(encoding="utf-8")) if loo_path.exists() else None
     res = build(load("holdout.json"), load("bottom_vs_nmt.json"), load("kz_points.json"), load("volume.json"),
-                load("levels.json"))
+                load("levels.json"), kz_loo)
     out = ev / "error_budget.json"
     out.write_text(json.dumps(res, ensure_ascii=False, indent=1, allow_nan=False), encoding="utf-8")
     for b, d in res["bands"].items():

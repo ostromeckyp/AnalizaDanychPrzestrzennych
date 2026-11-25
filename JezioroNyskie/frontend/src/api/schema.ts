@@ -598,6 +598,20 @@ export interface components {
             /** P95 */
             p95: number;
         };
+        /**
+         * KzLoo
+         * @description Błąd interpolacji mapy KŻ (punkt odłożony) w paśmie głębokim; to błąd mapy względem samej siebie.
+         */
+        KzLoo: {
+            /** N */
+            n: number;
+            /** Mae */
+            mae: number;
+            /** P5 */
+            p5: number;
+            /** P95 */
+            p95: number;
+        };
         /** Layers */
         Layers: {
             bottom: components["schemas"]["BottomLayer"];
@@ -859,6 +873,7 @@ export interface components {
             dominant: string | null;
             /** Note */
             note: string;
+            kz_loo?: components["schemas"]["KzLoo"] | null;
         };
         /** ValidationCheck */
         ValidationCheck: {

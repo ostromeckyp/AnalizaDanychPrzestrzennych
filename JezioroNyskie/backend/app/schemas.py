@@ -120,11 +120,20 @@ class ValidationCheck(BaseModel):
     result: str
 
 
+class KzLoo(BaseModel):
+    """Błąd interpolacji mapy KŻ (punkt odłożony) w paśmie głębokim; to błąd mapy względem samej siebie."""
+    n: int
+    mae: float
+    p5: float
+    p95: float
+
+
 class ValidationBand(BaseModel):
     band: str                                       # etykieta pasma rzędnych, np. „≥ 194,8 m"
     range_m: tuple[float, float] | None             # zakres błędu w metrach; null = brak liczby dla pasma
     dominant: str | None                            # źródło o największym błędzie (etykieta do wyświetlenia)
     note: str
+    kz_loo: KzLoo | None = None                     # tylko pasmo < 192,9 m, gdy jest kz_loo.json
 
 
 class Validation(BaseModel):
