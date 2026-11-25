@@ -139,3 +139,33 @@ def test_point_z_max_sat_other_variants(client_kz, products_kz, client, products
     assert _point(client_kz, products_kz, (5, 28), 195.0)["z_max_sat"] is None     # poza modelem
     b = _point(client, products, (5, 3), 195.0)                                    # bez rastrów łączonych: równe z_max
     assert b["z_max_sat"] == b["z_max"] == 194.0
+
+
+def test_point_kz_nearest_for_always_water_outside_kz_reach(client_kz, products_kz):
+    """Najbliższy punkt mapy KŻ: tylko informacja w popupie „zawsze woda” bez dna z KŻ (strefy bez zmian)."""
+    b = _point(client_kz, products_kz, (12, 11), 195.0)       # środek piksela: x 375115, y 289875
+    assert b["kz_nearest"] == {"z": 190.0, "distance_m": round(float(np.hypot(20.0, 80.0)), 1)}
+    assert b["zone"] == "risk"
+    c = _point(client_kz, products_kz, KZ_CONFLICT_PIXEL, 195.0)   # sprzeczność: dno satelitarne, też podajemy
+    assert c["kz_nearest"] is not None
+    assert _point(client_kz, products_kz, (3, 13), 195.0)["kz_nearest"] is None   # piksel KŻ
+    assert _point(client_kz, products_kz, (5, 3), 195.0)["kz_nearest"] is None    # zwykły piksel modelu
+
+
+def test_point_kz_nearest_none_in_gravel_and_without_combined(dataset_kz, client, products):
+    from shapely.geometry import box
+    from shapely.prepared import prep
+    from app.point import point_info
+    p = load_products(dataset_kz, "all", use_kz=True)
+    lon, lat = _lonlat(p, 12, 11)
+    p.gravel_geom = prep(box(375100, 289860, 375130, 289890))
+    out = point_info(p, lon, lat, 195.0, 0.5, 0.3)
+    assert out["gravel"] is True and out["kind"] == "always_water" and out["kz_nearest"] is None
+    assert _point(client, products, (12, 11), 195.0)["kz_nearest"] is None        # bez model/all_kz
+
+
+def test_version_changes_with_kz_spots(dataset_kz):
+    a = load_products(dataset_kz, "all", use_kz=True)
+    f = dataset_kz / "processed" / "model" / "all_kz" / "kz_spots.csv"
+    f.write_text(f.read_text(encoding="utf-8") + "9,375000.0,289800.0,189.0\n", encoding="utf-8")
+    assert load_products(dataset_kz, "all", use_kz=True).version != a.version

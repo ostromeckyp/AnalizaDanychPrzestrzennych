@@ -617,6 +617,16 @@ export interface components {
             /** P95 */
             p95: number;
         };
+        /**
+         * KzNearest
+         * @description Najbliższy punkt rzędnej mapy KŻ (tylko informacja w popupie; strefy go nie używają).
+         */
+        KzNearest: {
+            /** Z */
+            z: number;
+            /** Distance M */
+            distance_m: number;
+        };
         /** Layers */
         Layers: {
             bottom: components["schemas"]["BottomLayer"];
@@ -796,6 +806,7 @@ export interface components {
             /** Kz Conflict */
             kz_conflict: boolean;
             kz_interp: components["schemas"]["KzInterp"] | null;
+            kz_nearest?: components["schemas"]["KzNearest"] | null;
             /** Z Max Sat */
             z_max_sat?: number | null;
         };

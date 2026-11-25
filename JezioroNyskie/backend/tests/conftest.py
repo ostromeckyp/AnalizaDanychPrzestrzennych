@@ -121,6 +121,7 @@ def make_dataset(root: Path, with_eval: bool = True) -> Path:
 
 KZ_PIXELS = (slice(0, 10), slice(12, 15))     # wiersze 0-9, kolumny 12-14: dno z mapy KŻ (zawsze woda w satelicie)
 KZ_CONFLICT_PIXEL = (15, 16)                  # wiersz, kolumna: KŻ przeczy satelicie (źródło = satelita, bit 1)
+KZ_SPOTS = ((375135.0, 289955.0, 190.0), (375290.0, 289810.0, 191.5))   # punkty mapy KŻ (EPSG:2180): x, y, z
 KZ_DELTA_HI = 2.0                             # testowe poszerzenie górnej granicy „zawsze woda" (jak δ_hi kalibracji)
 KZ_META = {"period": "all", "p5": -2.0, "p95": 3.0, "deltas": {}, "inputs": [], "inputs_sha1": "abc123"}
 
@@ -145,6 +146,8 @@ def write_kz(root: Path, period: str = "all") -> None:
         with rasterio.open(out / f"bottom_{name}.tif", "w", dtype=str(arr.dtype), **profile) as ds:
             ds.write(arr, 1)
     (out / "meta.json").write_text(json.dumps({**KZ_META, "period": period}), encoding="utf-8")
+    (out / "kz_spots.csv").write_text("id,x,y,z\n" + "".join(f"{i},{x},{y},{z}\n" for i, (x, y, z) in enumerate(KZ_SPOTS)),
+                                      encoding="utf-8")
     ev = Path(root) / "processed" / "eval"
     ev.mkdir(parents=True, exist_ok=True)
     (ev / "kz_loo.json").write_text(json.dumps({"n": 10}), encoding="utf-8")

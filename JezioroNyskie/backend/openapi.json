@@ -1565,6 +1565,25 @@
     "title": "KzLoo",
     "description": "Błąd interpolacji mapy KŻ (punkt odłożony) w paśmie głębokim; to błąd mapy względem samej siebie."
    },
+   "KzNearest": {
+    "properties": {
+     "z": {
+      "type": "number",
+      "title": "Z"
+     },
+     "distance_m": {
+      "type": "number",
+      "title": "Distance M"
+     }
+    },
+    "type": "object",
+    "required": [
+     "z",
+     "distance_m"
+    ],
+    "title": "KzNearest",
+    "description": "Najbliższy punkt rzędnej mapy KŻ (tylko informacja w popupie; strefy go nie używają)."
+   },
    "Layers": {
     "properties": {
      "bottom": {
@@ -2155,6 +2174,16 @@
       "anyOf": [
        {
         "$ref": "#/components/schemas/KzInterp"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "kz_nearest": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/KzNearest"
        },
        {
         "type": "null"

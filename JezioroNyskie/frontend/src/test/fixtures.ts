@@ -102,7 +102,7 @@ export function zones(h: number, draft: number, margin: number): Zones {
 }
 
 const base = { lon: 17.05, lat: 50.45, h: 195.0, draft: 1.2, margin: 0.3, gravel: false,
-  bottom_source: "satellite" as const, kz_conflict: false, kz_interp: null, z_max_sat: null };
+  bottom_source: "satellite" as const, kz_conflict: false, kz_interp: null, z_max_sat: null, kz_nearest: null };
 
 export const pointModel: Point = {
   ...base,

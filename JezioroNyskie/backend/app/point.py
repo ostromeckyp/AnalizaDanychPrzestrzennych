@@ -10,12 +10,14 @@ Wejście → wyjście: `point_info(products, lon, lat, h, draft, margin)` → s�
   `always_water`; inaczej `model`. Pola `bottom_source`, `kz_conflict`, `kz_interp` mówią, czy dno piksela
   pochodzi z mapy KŻ (`kz_interp` = p5/p95 błędu interpolacji), czy KŻ przeczy satelicie. `z_max_sat` to surowa
   górna granica satelity (przed kalibracją); `z_max` to granica serwowana (po kalibracji, gdy wczytano rastry łączone).
+  `kz_nearest` = najbliższy punkt mapy KŻ dla „zawsze woda” z dnem satelitarnym poza żwirownią (tylko informacja).
 Jak to obronić: D_lo = h − z_hi (najpłycej), D_hi = h − z_lo (najgłębiej); prześwit to głębokość minus
   zanurzenie. Piksel wybiera `rasterio.transform.rowcol` na współrzędnych siatki (EPSG:2180).
 """
 import math
 import threading
 
+import numpy as np
 import rasterio.transform
 from pyproj import Transformer
 
@@ -62,13 +64,25 @@ def in_gravel(products: Products, lon: float, lat: float) -> bool:
     return bool(math.isfinite(x) and math.isfinite(y) and products.gravel_geom.contains(Point(x, y)))
 
 
+def nearest_kz_spot(products: Products, lon: float, lat: float) -> dict | None:
+    """Najbliższy punkt rzędnej mapy KŻ do lon/lat: {"z", "distance_m"} albo None (brak punktów). Tylko informacja."""
+    spots = products.kz_spots
+    if spots is None or not len(spots):
+        return None
+    x, y = _to_grid(products.crs).transform(lon, lat)
+    d = np.hypot(spots[:, 0] - x, spots[:, 1] - y)
+    i = int(np.argmin(d))
+    return {"z": round(float(spots[i, 2]), 2), "distance_m": round(float(d[i]), 1)}
+
+
 def point_info(products: Products, lon: float, lat: float, h: float, draft: float, margin: float) -> dict:
     out = {"kind": "outside", "lon": lon, "lat": lat, "h": h, "draft": draft, "margin": margin,
            "zone": None, "depth_min": None, "depth_max": None, "clearance_min": None,
            "clearance_max": None, "z_min": None, "z_max": None, "z": None, "unc": None,
            "bottom_above_water_min": None, "bottom_above_water_max": None, "obs_count": None,
            "gravel": in_gravel(products, lon, lat),
-           "bottom_source": "satellite", "kz_conflict": False, "kz_interp": None, "z_max_sat": None}
+           "bottom_source": "satellite", "kz_conflict": False, "kz_interp": None, "z_max_sat": None,
+           "kz_nearest": None}
     px = _pixel(products, lon, lat)
     if px is None:
         return out
@@ -91,6 +105,8 @@ def point_info(products: Products, lon: float, lat: float, h: float, draft: floa
                z_min=_r(z_lo), z_max=_r(z_hi), z=_r(products.z[r, c]), unc=_r(products.unc[r, c]))
     if products.z_hi_sat is not None:                  # surowa górna granica satelity (przed kalibracją), np. „zawsze woda"
         out["z_max_sat"] = _r(products.z_hi_sat[r, c])
+    if out["kind"] == "always_water" and out["bottom_source"] == "satellite" and not out["gravel"]:
+        out["kz_nearest"] = nearest_kz_spot(products, lon, lat)     # poza zasięgiem interpolacji KŻ: tylko informacja
     if out["kind"] == "land":
         out.update(bottom_above_water_min=_r(z_lo - h), bottom_above_water_max=_r(z_hi - h))
     return out

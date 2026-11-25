@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 from affine import Affine
 
-from app.depth import SOURCE_KZ, Bounds, combined_bounds, satellite_bounds
+from app.depth import SOURCE_KZ, Bounds, combined_bounds, load_kz_spots, satellite_bounds
 from app.settings import get_settings
 from app.zones import mask_geometry
 from mielizna import bottom, capacity, levels
@@ -64,6 +64,7 @@ class Products:
     kz_interp: dict | None = None                     # {"p5", "p95"} z meta.json rastrów łączonych albo None, gdy ich nie wczytano
     kz_outline: dict | None = None                    # geometria GeoJSON (4326) obszaru dna z mapy KŻ, liczona raz przy starcie
     combined: bool = False                            # True, gdy serwujemy granice łączone (skalibrowane + KŻ) z `model/<okres>_kz/`
+    kz_spots: np.ndarray | None = None                # punkty mapy KŻ (N×3: x, y, z w układzie siatki) z `kz_spots.csv`; None bez rastrów łączonych
     z_hi_sat: np.ndarray | None = None                # surowa górna granica satelity (float64, +∞ zawsze ląd, NaN poza modelem), przed kalibracją
 
     @property
@@ -162,12 +163,13 @@ def kz_version_suffix(data_dir: Path, kz_dir: Path, kz_meta: dict) -> str:
     """Przyrostek wersji `-kz<sha>`: odcisk wejść łączenia, bajtów rastrów łączonych i `meta.json` oraz plików oceny.
 
     Co: hashuje `inputs_sha1` z meta.json, bajty `bottom_zlo.tif`, `bottom_zhi.tif`, `bottom_source.tif`, `meta.json`
-      z `kz_dir` oraz `kz_loo.json` i `calibration.json`.
+      i `kz_spots.csv` z `kz_dir` oraz `kz_loo.json` i `calibration.json`.
     Dlaczego: ETagi i klucze cache wynikają z wersji, więc każda zmiana serwowanych granic, kalibracji albo oceny KŻ
       musi ją zmienić (spec: wersja obejmuje odcisk rastrów łączonych).
     """
     h = hashlib.sha1(str(kz_meta.get("inputs_sha1", "")).encode())
-    files = [Path(kz_dir) / f for f in ("bottom_zlo.tif", "bottom_zhi.tif", "bottom_source.tif", "meta.json")]
+    files = [Path(kz_dir) / f for f in ("bottom_zlo.tif", "bottom_zhi.tif", "bottom_source.tif", "meta.json",
+                                          "kz_spots.csv")]
     files += [Path(data_dir) / "processed" / "eval" / f"{name}.json" for name in ("kz_loo", "calibration")]
     for f in files:
         h.update(f.read_bytes() if f.exists() else b"")
@@ -193,11 +195,12 @@ def load_products(data_dir: Path, period: str = "all", use_kz: bool | None = Non
     finite_max = bounds.z_hi[bounds.in_model & np.isfinite(bounds.z_hi)]   # próg ostrzeżenia z SUROWEGO satelity, nie z połączonych granic
     z_max_floor = float(finite_max.min())
     kz_dir = proc / "model" / f"{period}_kz"
-    version_suffix, kz_interp, kz_outline, combined = "", None, None, False
+    version_suffix, kz_interp, kz_outline, combined, kz_spots = "", None, None, False, None
     if (use_kz if use_kz is not None else not get_settings().no_kz) and (kz_dir / "bottom_zlo.tif").exists():
         kz_meta = json.loads((kz_dir / "meta.json").read_text(encoding="utf-8"))
         bounds = combined_bounds(bounds, kz_dir)
         combined = True
+        kz_spots = load_kz_spots(kz_dir)
         version_suffix = kz_version_suffix(data_dir, kz_dir, kz_meta)
         kz_interp = {"p5": float(kz_meta["p5"]), "p95": float(kz_meta["p95"])}
         kz_outline = mask_geometry(bounds.in_model & (bounds.source == SOURCE_KZ), transform, crs)
@@ -239,5 +242,5 @@ def load_products(data_dir: Path, period: str = "all", use_kz: bool | None = Non
         capacity_table=capacity_table, eval=ev, eval_hash=short_hash(json.dumps(ev, sort_keys=True).encode()),
         gravel_hash=gravel_hash, gravel=gravel, gravel_geom=gravel_geom,
         hazards=load_hazards(data_dir), hazards_hash=hazards_hash, kz_interp=kz_interp, kz_outline=kz_outline,
-        combined=combined, z_hi_sat=z_hi_sat,
+        combined=combined, z_hi_sat=z_hi_sat, kz_spots=kz_spots,
     )

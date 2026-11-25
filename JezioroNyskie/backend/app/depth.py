@@ -121,3 +121,19 @@ def combined_bounds(sat: Bounds, kz_dir: Path) -> Bounds:
         raise ValueError(f"raster łączony {z_lo.shape} nie pasuje do siatki satelitarnej {sat.z_lo.shape}")
     return Bounds(z_lo=z_lo.astype(np.float64), z_hi=z_hi.astype(np.float64), in_model=sat.in_model,
                   source=(src & 1).astype(np.uint8), kz_conflict=(src & 2) > 0)
+
+
+def load_kz_spots(kz_dir: Path) -> np.ndarray | None:
+    """Punkty rzędnych mapy KŻ z `kz_spots.csv` (x, y, z w układzie siatki) jako tablica N×3; None bez pliku.
+
+    Co: ten sam zbiór punktów, z którego pipeline rozpiął powierzchnię KŻ (`14_kz_deep.py`).
+    Dlaczego: popup „zawsze woda” poza zasięgiem interpolacji podaje najbliższy punkt mapy; to tylko informacja,
+      strefy go nie używają.
+    """
+    f = Path(kz_dir) / "kz_spots.csv"
+    if not f.exists():
+        return None
+    import pandas as pd
+    df = pd.read_csv(f)
+    arr = df[["x", "y", "z"]].to_numpy(np.float64)
+    return arr[np.isfinite(arr).all(axis=1)]
