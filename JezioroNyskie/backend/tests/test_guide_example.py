@@ -13,13 +13,12 @@ import pytest
 
 from app import depth
 
-bottom = pytest.importorskip("mielizna.bottom")
-
 GUIDE = Path(__file__).resolve().parents[2] / "docs" / "jak-czytac-kod.md"
 
 
 @pytest.fixture(scope="module")
 def example():
+    bottom = pytest.importorskip("mielizna.bottom")
     h = np.array([194.9, 194.2, 195.6, 193.8])
     sigma = np.array([0.15, 0.15, 0.40, 0.15])
     is_c = np.array([False, False, True, False])
@@ -30,6 +29,7 @@ def example():
 
 
 def test_bounds_from_compute_bounds(example):
+    bottom = pytest.importorskip("mielizna.bottom")
     r, _ = example
     assert r["z_min_raw"][0, 0] == pytest.approx(194.2)
     assert r["z_max_raw"][0, 0] == pytest.approx(194.9)

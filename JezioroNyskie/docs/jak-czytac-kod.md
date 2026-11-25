@@ -1,6 +1,6 @@
 # Jak czytać kod: skąd bierze się głębokość
 
-Ten przewodnik mówi, w jakiej kolejności czytać pliki, żeby zrozumieć, jak z zdjęć satelitarnych
+Ten przewodnik mówi, w jakiej kolejności czytać pliki, żeby zrozumieć, jak ze zdjęć satelitarnych
 dostajemy głębokość wody i strefę (bezpieczna / ryzykowna / zbyt płytka). Opisuje część satelitarną.
 Każdy krok to jeden plik i jedna myśl. Nie musisz znać Pythona, żeby iść za opisem: w każdym pliku
 na górze jest komentarz „Co robi / Dlaczego tak / Wejście → wyjście".
@@ -25,9 +25,12 @@ a skrypt `06_water_levels.py` ją uruchamia i zapisuje `scenes.json`. Źródła,
 - **R**: znany pomiar z wodowskazu (`known_levels.csv`).
 - **B**: pojemność zbiornika z komunikatu RZGW, zamieniona tabelą KŻ na rzędną (`variant_b`).
   Niepewność to stałe 0,15 m (`B_SIGMA`).
-- **A**: rzędna odczytana z NMT wzdłuż brzegu. Uzupełnia tylko dni, w których nie ma B ani R.
-- **C**: rzędna z krzywej „powierzchnia jeziora → poziom" (`variant_c`), dla scen bez komunikatu.
-  Niepewność jest większa (błąd z walidacji rok po roku, `rmse_loyo`), więc takim scenom ufamy mniej.
+- **A**: rzędna odczytana z NMT wzdłuż brzegu. Pochodzi z opcjonalnego pliku `levels_a.csv` (robi go skrypt 06b;
+  bez niego skrypt 06 liczy tylko R, B i C). Uzupełnia tylko dni, w których nie ma B ani R.
+- **C**: rzędna z krzywej „powierzchnia jeziora → poziom" (`variant_c`), dla scen, które nie mają ani R, ani B,
+  ani A i przeszły kontrolę jakości (QC). Niepewność jest większa (błąd z walidacji rok po roku, `rmse_loyo`;
+  przy ekstrapolacji krzywej jeszcze +0,1 m), więc takim scenom ufamy mniej. Scena, która nie przeszła QC,
+  a nie ma R/B/A, dostaje metodę `qc_excluded` i bez poziomu nie bierze udziału w modelu.
 
 Wynik tego kroku: dla każdej sceny para `h_t`, `h_sigma` i litera metody.
 
@@ -38,22 +41,25 @@ Najpierw `combine_evidence` łączy dwie maski wody (RF i Otsu) w jedną obserwa
 Potem `compute_bounds` (praca w `_bounds_strip`) robi dla każdego piksela to:
 
 1. Układa sceny według poziomu `h_t`.
-2. Szuka progu dna, który zgadza się z jak największą liczbą scen (woda poniżej progu, ląd powyżej).
-   Pojedyncza pomyłka klasyfikatora nie psuje wyniku. Liczba sprzecznych scen trafia do `n_conflict`.
+2. Szuka progu dna, który zgadza się z jak największą liczbą scen: woda przy poziomach powyżej progu, ląd przy
+   poziomach poniżej progu. Pojedyncza pomyłka klasyfikatora zwykle nie przesuwa progu; przy remisie między
+   progami bierzemy obwiednię (przedział szerszy, nigdy węższy). Liczba scen sprzecznych z progiem trafia do `n_conflict`.
 3. `z_max_raw` to najniższy poziom, przy którym piksel jest wodą spójną z progiem (dno jest najwyżej tak wysoko).
    `z_min_raw` to najwyższy poziom, przy którym piksel jest lądem spójnym z progiem (dno jest co najmniej tak wysoko).
-4. Poszerza przedział o niepewność poziomu: `z_min = z_min_raw − k_sigma · h_sigma` (przy lądzie, który wyznaczył
-   dolną granicę) oraz `z_max = z_max_raw + k_sigma · h_sigma` (przy wodzie, która wyznaczyła górną granicę).
-   Domyślnie `k_sigma = 1`. Dokładniej: dla granicy bierze się maksimum (dół) albo minimum (góra) z wartości
-   `h ∓ k_sigma · h_sigma` po wszystkich scenach spójnych z progiem, nie samo σ jednej sceny.
+4. Poszerza przedział o niepewność poziomu dokładnie tak: `z_min` to maksimum z `h − k_sigma · h_sigma` po scenach
+   lądu spójnych z progiem, a `z_max` to minimum z `h + k_sigma · h_sigma` po scenach wody (nie-C) spójnych z progiem.
+   Domyślnie `k_sigma = 1`. Każda scena liczy się osobno, nie tylko ta o skrajnym `h`.
 5. Reguła R24: woda ze sceny typu C jest traktowana jak „nieznane" przy wyznaczaniu progu i `z_max`
    (poziom C bywa zaniżony, a zaniżony poziom wody obniżałby `z_max` w niebezpiecznym kierunku).
    Ląd ze sceny C zostaje. Piksel, któremu pominięto wodę z C, dostaje flagę 8 (informacyjną).
 6. Brak spójnego lądu → `z_min = NaN`, czyli −∞ (zawsze woda, flaga 1). Brak spójnej wody → `z_max = NaN`,
-   czyli +∞ (zawsze ląd, flaga 2).
+   czyli +∞ (zawsze ląd, flaga 2). Flaga 4 (CONFLICT) znaczy, że część scen przeczy progowi (`n_conflict > 0`).
+   Flaga 16 (UNRESOLVED) znaczy, że piksel ma obserwacje, ale obie granice są puste (remis na jednym poziomie albo
+   sprzeczne obserwacje na różnych poziomach). Taki piksel zostaje w modelu z przedziałem od −∞ do +∞, więc
+   w kroku 4 zawsze wychodzi RISK.
 
 Niezmiennik: `z_min ≤ z_min_raw < z_max_raw ≤ z_max`. Wynik zapisuje `write_model` jako rastry `bottom_zmin.tif`,
-`bottom_zmax.tif`, `obs_count`, `flags` (katalog `data/processed/model/<okres>/`).
+`bottom_zmax.tif`, `obs_count.tif`, `bottom_flags.tif` (katalog `data/processed/model/<okres>/`).
 
 ### Krok 3. Wczytanie do backendu: `backend/app/data.py`, funkcja `load_products`, potem `depth.satellite_bounds`
 
@@ -61,7 +67,7 @@ Niezmiennik: `z_min ≤ z_min_raw < z_max_raw ≤ z_max`. Wynik zapisuje `write_
 `backend/app/depth.py`. Ta funkcja zamienia puste wartości na nieskończoności, żeby dalej nie trzeba było
 obsługiwać przypadków szczególnych:
 
-- piksel jest poza modelem, gdy `obs_count` to 0 lub 65535, albo `flags` to 255 (obie granice = NaN),
+- piksel jest poza modelem, gdy `obs_count` to 0 lub 65535, albo `flags` to 255 → obie granice NaN,
 - `z_min = NaN` w modelu → `z_lo = −∞` (zawsze woda),
 - `z_max = NaN` w modelu → `z_hi = +∞` (zawsze ląd).
 
