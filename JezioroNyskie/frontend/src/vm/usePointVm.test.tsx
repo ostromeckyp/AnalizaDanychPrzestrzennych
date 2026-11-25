@@ -68,32 +68,114 @@ describe('toPopupModel', () => {
     expect(toPopupModel(pointModel, withCov(null)).caveat).toBe('Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.');
   });
 
-  it('A: bottom source row for satellite and for KŻ (with interpolation error bounds and caveat)', () => {
+  it('A: bottom source row for satellite and for KŻ (interpolation error as deeper/shallower than the map, own caveat)', () => {
     const sat = toPopupModel(pointModel, meta);
     expect(sat.rows).toContainEqual({ term: 'Dno', desc: 'model satelitarny' });
     expect(sat.caveat).not.toMatch(/Mapa KŻ/);
-    const kz = toPopupModel({ ...pointModel, bottom_source: 'kz', kz_interp: { p5: -2.0, p95: 3.0 } }, meta);
+    const kz = toPopupModel({ ...pointModel, bottom_source: 'kz', kz_interp: { p5: -2.0, p95: 3.02 } }, meta);
     expect(kz.rows).toContainEqual({
       term: 'Dno',
-      desc: `mapa KŻ 2023 (orientacyjne; błąd interpolacji od −3,0 do +2,0${NB}m)`,
+      desc: `mapa KŻ 2023 (orientacyjne): dno do 3,0${NB}m głębiej albo do 2,0${NB}m płycej niż na mapie (błąd interpolacji)`,
     });
+    // dno z mapy KŻ: bez pokrycia kalibracji satelity (P5–P95 to z definicji 90 % błędów sprawdzianu)
     expect(kz.caveat).toBe(
-      'Przedział obejmuje dno w ok. 90 % sprawdzonych przypadków. Mapa KŻ opisuje dno z 2023 r.; poniżej 192,5 m jest orientacyjna.' +
-        ' Mapa amatorska; ryzyko korzystania ponosi użytkownik.',
+      'Przedział dna z mapy KŻ obejmuje 90 % błędów interpolacji ze sprawdzianu (punkt odłożony).' +
+        ' Mapa KŻ opisuje dno z 2023 r.; poniżej 192,5 m jest orientacyjna. Mapa amatorska; ryzyko korzystania ponosi użytkownik.',
     );
+    expect(kz.caveat).not.toMatch(/sprawdzonych przypadków/);
     expect(kz.value).toBe(`1,00–2,00${NB}m`);
+    expect(artefacts(kz)).not.toMatch(/null|NaN|Infinity|undefined|—/);
+    expect(kz.caveat).not.toMatch(/null|NaN|Infinity|undefined|—/);
     const kzNoInterp = toPopupModel({ ...pointModel, bottom_source: 'kz', kz_interp: null }, meta);
     expect(kzNoInterp.rows).toContainEqual({ term: 'Dno', desc: 'mapa KŻ 2023 (orientacyjne)' });
+    const kzNoDepth = toPopupModel({ ...pointModel, bottom_source: 'kz', depth_min: null, depth_max: null }, meta);
+    expect(kzNoDepth.caveat).toBe('Mapa KŻ opisuje dno z 2023 r.; poniżej 192,5 m jest orientacyjna. Mapa amatorska; ryzyko korzystania ponosi użytkownik.');
   });
 
-  it('B: KŻ conflict adds a warning row and no source row', () => {
+  it('A: without combined bounds the caveat never quotes calibration coverage', () => {
+    const raw = { ...meta, accuracy: { ...meta.accuracy, combined_bounds: false } };
+    expect(toPopupModel(pointModel, raw).caveat).toBe('Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.');
+  });
+
+  it('B: KŻ conflict adds a warning row next to the satellite source row', () => {
     const m = toPopupModel({ ...pointAlwaysWater, kz_conflict: true }, meta);
     expect(m.rows).toContainEqual({
       term: 'Mapa KŻ jest tu sprzeczna z satelitą',
       desc: 'pokazujemy tylko model satelitarny.',
       warning: true,
     });
+    expect(m.rows).toContainEqual({ term: 'Dno', desc: 'model satelitarny' });
+    expect(artefacts(m)).not.toMatch(/null|NaN|Infinity|undefined|—/);
     expect(toPopupModel(pointAlwaysWater, meta).rows.some((r) => /sprzeczna z satelitą/.test(r.term))).toBe(false);
+  });
+
+  // piksel „zawsze woda” bez KŻ, którego skalibrowana górna granica dna leży nie niżej niż h − zanurzenie
+  const awUnassessed: Point = {
+    ...pointAlwaysWater, h: 195.0, draft: 0.5, z_max: 195.28, z_max_sat: 193.05,
+    depth_min: 0, clearance_min: -0.5, zone: 'risk',
+  };
+  const NOTE_UNASSESSED =
+    `Satelita widział tu zawsze wodę: dno poniżej 193,05${NB}m n.p.m. (najniższy zaobserwowany stan). ` +
+    'Po poszerzeniu przedziałów — ekstrapolacji, której tu nie zmierzyliśmy — górna granica dna to ' +
+    `195,28${NB}m, więc nie gwarantujemy minimalnej głębokości.`;
+  // stałe myślniki w nocie są celowe; skan szuka placeholderów w danych
+  const scan = (m: ReturnType<typeof toPopupModel>) =>
+    artefacts(m).replace(' — ekstrapolacji, której tu nie zmierzyliśmy — ', ' ');
+
+  it('B: always water with calibrated upper bound near the surface: depth not assessed, both bounds', () => {
+    const m = toPopupModel(awUnassessed, meta);
+    expect(m.variant).toBe('B');
+    expect(m.value).toBe('Głębokość nieoceniona');
+    expect(m.note).toBe(NOTE_UNASSESSED);
+    expect(m.rows).toContainEqual({ term: 'Dno', desc: 'model satelitarny' });
+    expect(m.zone).toEqual({ key: 'risk', name: 'Ryzykowna', label: `dla jachtu 0,50${NB}m` });
+    expect(scan(m)).not.toMatch(/null|NaN|Infinity|undefined|—/);
+    // granica dokładnie na h − zanurzenie też jest nieoceniona; z_max_sat brak → próg z meta
+    expect(toPopupModel({ ...awUnassessed, depth_min: 0.5 }, meta).value).toBe('Głębokość nieoceniona');
+    expect(toPopupModel({ ...awUnassessed, z_max_sat: null }, meta).note).toContain(`dno poniżej 193,05${NB}m n.p.m.`);
+    const conflict = toPopupModel({ ...awUnassessed, kz_conflict: true }, meta);
+    expect(conflict.value).toBe('Głębokość nieoceniona');
+    expect(conflict.rows.at(-1)).toEqual({ term: 'Mapa KŻ jest tu sprzeczna z satelitą', desc: 'pokazujemy tylko model satelitarny.', warning: true });
+    expect(scan(conflict)).not.toMatch(/null|NaN|Infinity|undefined|—/);
+  });
+
+  it('B: unassessed always water outside KŻ reach names the nearest KŻ spot (information only)', () => {
+    const m = toPopupModel({ ...awUnassessed, kz_nearest: { z: 189.5, distance_m: 347.2 } }, meta);
+    expect(m.value).toBe('Głębokość nieoceniona');
+    expect(m.note).toBe(NOTE_UNASSESSED);
+    expect(m.rows).toContainEqual({
+      term: 'Najbliższy punkt mapy KŻ',
+      desc: `189,5${NB}m n.p.m., 350${NB}m stąd (poza zasięgiem interpolacji)`,
+    });
+    expect(m.zone?.key).toBe('risk');
+    expect(scan(m)).not.toMatch(/null|NaN|Infinity|undefined|—/);
+    expect(toPopupModel(awUnassessed, meta).rows.some((r) => r.term === 'Najbliższy punkt mapy KŻ')).toBe(false);
+    const bad = toPopupModel({ ...awUnassessed, kz_nearest: { z: NaN, distance_m: Infinity } }, meta);
+    expect(bad.rows.some((r) => r.term === 'Najbliższy punkt mapy KŻ')).toBe(false);
+  });
+
+  it('B: unassessed always water in the gravel pit: gravel sentence first, then the satellite bounds', () => {
+    const m = toPopupModel({ ...awUnassessed, gravel: true }, meta);
+    expect(m.value).toBe('Wyrobisko żwirowni');
+    expect(m.note).toBe(`Wyrobisko żwirowni: dno zmienne, mapa KŻ go nie opisuje. ${NOTE_UNASSESSED}`);
+    expect(m.rows.some((r) => r.term === 'Najbliższy punkt mapy KŻ')).toBe(false);
+    expect(m.rows.at(-1)).toEqual({ term: 'Dno zmienne (eksploatacja kruszywa)', desc: 'model może być nieaktualny.', warning: true });
+    expect(m.zone?.key).toBe('risk');
+    expect(scan(m)).not.toMatch(/null|NaN|Infinity|undefined|—/);
+  });
+
+  it('B: always water deeper than the draft keeps the deeper-than text and gains the source row', () => {
+    const m = toPopupModel(pointAlwaysWater, meta);
+    expect(m.value).toBe(`≥ 1,95${NB}m`);
+    expect(m.rows).toContainEqual({ term: 'Dno', desc: 'model satelitarny' });
+  });
+
+  it('C: land shows the bottom source; KŻ land keeps the UWAGA caveat', () => {
+    expect(toPopupModel(pointLand, meta).rows).toContainEqual({ term: 'Dno', desc: 'model satelitarny' });
+    const kz = toPopupModel({ ...pointLand, bottom_source: 'kz', kz_interp: { p5: -2.0, p95: 3.02 } }, meta);
+    expect(kz.rows.some((r) => r.term === 'Dno' && r.desc.startsWith('mapa KŻ 2023'))).toBe(true);
+    expect(kz.caveat).toBe('Mapa KŻ opisuje dno z 2023 r.; poniżej 192,5 m jest orientacyjna. Mapa amatorska; ryzyko korzystania ponosi użytkownik.');
+    expect(artefacts(kz)).not.toMatch(/null|NaN|Infinity|undefined|—/);
   });
 
   it('A: zone label follows API zone, never computed', () => {
