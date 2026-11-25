@@ -21,10 +21,10 @@ from rasterio import features
 from shapely.geometry import shape
 from shapely.validation import make_valid
 
-NONE, SAFE, RISK, DANGER = 0, 1, 2, 3
+from app.depth import DANGER, EPS, NONE, RISK, SAFE, Bounds, classify
+
 ZONE_NAMES = {1: "safe", 2: "risk", 3: "danger"}
 PIXEL_KM2 = 1e-4        # piksel 10 m × 10 m
-EPS = 1e-6              # tolerancja porównania D_lo z d + m
 
 
 def round_param(x: float, step: float = 0.05) -> float:
@@ -34,17 +34,10 @@ def round_param(x: float, step: float = 0.05) -> float:
 
 def zone_classes(h: float, draft: float, margin: float, z_lo: np.ndarray, z_hi: np.ndarray,
                  in_model: np.ndarray) -> np.ndarray:
-    """Klasyfikuje piksele wg reguły §6.4; poza modelem (in_model False) zwraca NONE."""
-    with np.errstate(invalid="ignore"):          # NaN poza modelem: porównania maskujemy in_model
-        D_lo = h - z_hi                          # głębokość w najpłytszym wariancie dna
-        D_hi = h - z_lo                          # głębokość w najgłębszym wariancie dna
-        too_shallow = D_hi < draft
-        safe = D_lo >= draft + margin - EPS
-    classes = np.full(np.shape(z_lo), RISK, dtype=np.uint8)
-    classes[safe] = SAFE
-    classes[too_shallow] = DANGER                # przy sprzeczności wygrywa zbyt płytka
-    classes[~np.asarray(in_model, bool)] = NONE
-    return classes
+    """Klasyfikuje piksele wg reguły §6.4; poza modelem (in_model False) zwraca NONE. Cienka nakładka na `depth.classify`."""
+    bounds = Bounds(z_lo, z_hi, np.asarray(in_model, bool), np.zeros(np.shape(z_lo), np.uint8),
+                    np.zeros(np.shape(z_lo), bool))
+    return classify(h, draft, margin, bounds)
 
 
 def zone_stats(classes: np.ndarray, h: float, z_lo: np.ndarray, in_model: np.ndarray) -> dict:

@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 from affine import Affine
 
+from app.depth import Bounds, satellite_bounds
 from mielizna import bottom, capacity, levels
 from mielizna.capacity import MAX_PP_MLN_M3, NPP_MLN_M3  # brief §4, wspólne z pipeline'em (kz_compare)
 from mielizna.levels import AreaLevelCurve
@@ -36,12 +37,10 @@ class Products:
     transform: Affine
     crs: str
     shape: tuple[int, int]
-    z_lo: np.ndarray        # float64, −∞ gdzie z_min = NaN (zawsze woda), NaN poza modelem
-    z_hi: np.ndarray        # float64, +∞ gdzie z_max = NaN (zawsze ląd), NaN poza modelem
+    bounds: Bounds          # granice dna (z_lo/z_hi z ±∞, in_model, źródło); patrz app/depth.py
     z: np.ndarray           # float32
     unc: np.ndarray         # float32
     obs_count: np.ndarray   # uint16
-    in_model: np.ndarray    # bool
     meta: dict
     version: str
     scenes: list[dict]
@@ -60,6 +59,21 @@ class Products:
     hazards: dict | None = None                       # przeszkody z locji KŻ ({"source", "features"}) albo None, gdy brak pliku
     hazards_hash: str = ""                            # odcisk bajtów pliku przeszkód (część ETagu /api/hazards)
     gravel_geom: object | None = None                 # suma obrysów jako przygotowana geometria do testu „punkt w obrysie"
+
+    @property
+    def z_lo(self) -> np.ndarray:
+        """float64, −∞ gdzie z_min = NaN (zawsze woda), NaN poza modelem."""
+        return self.bounds.z_lo
+
+    @property
+    def z_hi(self) -> np.ndarray:
+        """float64, +∞ gdzie z_max = NaN (zawsze ląd), NaN poza modelem."""
+        return self.bounds.z_hi
+
+    @property
+    def in_model(self) -> np.ndarray:
+        """bool, maska pikseli modelu."""
+        return self.bounds.in_model
 
 
 def capacity_to_level(p: Products, v: float) -> float:
@@ -149,11 +163,8 @@ def load_products(data_dir: Path, period: str = "all") -> Products:
         transform, crs = ds.transform, ds.crs.to_string()
 
     obs, flags = arrays["obs_count"], arrays["flags"]
-    in_model = ~((obs == 0) | (obs == 65535) | (flags == 255))
-    z_min, z_max = arrays["z_min"].astype(np.float64), arrays["z_max"].astype(np.float64)
-    z_lo = np.where(in_model, np.where(np.isnan(z_min), -np.inf, z_min), np.nan)
-    z_hi = np.where(in_model, np.where(np.isnan(z_max), np.inf, z_max), np.nan)
-    finite_max = z_hi[in_model & np.isfinite(z_hi)]
+    bounds = satellite_bounds(arrays["z_min"], arrays["z_max"], obs, flags)
+    finite_max = bounds.z_hi[bounds.in_model & np.isfinite(bounds.z_hi)]
 
     scenes = [s for s in json.loads((proc / "scenes.json").read_text(encoding="utf-8"))
               if s["qc_ok"] and s["h_t"] is not None]
@@ -185,8 +196,8 @@ def load_products(data_dir: Path, period: str = "all") -> Products:
         gravel_geom = prep(gravel.geometry.union_all())
 
     return Products(
-        transform=transform, crs=crs, shape=obs.shape, z_lo=z_lo, z_hi=z_hi, z=arrays["z"],
-        unc=arrays["unc"], obs_count=obs, in_model=in_model, meta=meta,
+        transform=transform, crs=crs, shape=obs.shape, bounds=bounds, z=arrays["z"],
+        unc=arrays["unc"], obs_count=obs, meta=meta,
         version=f"{period}-{meta['version']}", scenes=scenes, shorelines=shorelines, marinas=marinas,
         curve=curve, rf_metrics=rf_metrics, z_max_floor=float(finite_max.min()), npp=npp, max_pp=max_pp,
         capacity_table=capacity_table, eval=ev, eval_hash=short_hash(json.dumps(ev, sort_keys=True).encode()),

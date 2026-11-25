@@ -2,7 +2,7 @@
 
 Co robi: dla współrzędnych lon/lat i parametrów h / draft / margin znajduje piksel modelu i zwraca
   głębokość, prześwit względem zanurzenia, strefę oraz wartości dna (z_min, z_max, z, unc).
-Dlaczego tak: strefa pochodzi z `zones.zone_classes` liczonego na tablicach 1×1, więc to ta sama
+Dlaczego tak: strefa pochodzi z `depth.classify` liczonego na tablicach 1×1, więc to ta sama
   reguła co w `/api/zones` (jedno źródło prawdy, spec §4). Liczby nieskończone (zawsze woda → brak
   górnej głębokości, zawsze ląd → brak górnej rzędnej dna) oddajemy jako `None`, bo JSON nie zna ∞.
 Wejście → wyjście: `point_info(products, lon, lat, h, draft, margin)` → słownik zgodny z `PointResponse`.
@@ -19,7 +19,8 @@ import rasterio.transform
 from pyproj import Transformer
 
 from app.data import Products
-from app.zones import ZONE_NAMES, zone_classes
+from app.depth import Bounds, classify, depth_range, point_kind
+from app.zones import ZONE_NAMES
 
 
 _local = threading.local()
@@ -75,11 +76,12 @@ def point_info(products: Products, lon: float, lat: float, h: float, draft: floa
     out["obs_count"] = int(products.obs_count[r, c])
 
     z_lo, z_hi = float(products.z_lo[r, c]), float(products.z_hi[r, c])
-    cls = zone_classes(h, draft, margin, np.array([[z_lo]]), np.array([[z_hi]]), np.array([[True]]))
-    out["zone"] = ZONE_NAMES[int(cls[0, 0])]
-    out["kind"] = "land" if h <= z_lo else "always_water" if z_lo == -math.inf else "model"
+    one = Bounds(np.array([[z_lo]]), np.array([[z_hi]]), np.array([[True]]),
+                 np.zeros((1, 1), np.uint8), np.zeros((1, 1), bool))
+    out["zone"] = ZONE_NAMES[int(classify(h, draft, margin, one)[0, 0])]
+    out["kind"] = point_kind(h, z_lo)
 
-    d_lo, d_hi = h - z_hi, h - z_lo
+    d_lo, d_hi = (float(v[0, 0]) for v in depth_range(h, one.z_lo, one.z_hi))
     out.update(depth_min=_r(max(d_lo, 0.0)), depth_max=_r(d_hi),
                clearance_min=_r(d_lo - draft), clearance_max=_r(d_hi - draft),
                z_min=_r(z_lo), z_max=_r(z_hi), z=_r(products.z[r, c]), unc=_r(products.unc[r, c]))
