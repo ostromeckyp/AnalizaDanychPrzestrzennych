@@ -14,7 +14,7 @@ def test_deltas_p95_and_empty_band():
     assert d["192.9-194.8"]["delta_hi"] == np.percentile(r * 2, 95)
     assert d["192.9-194.8"]["n"] == 100
     for b in ("194.8+", "<192.9"):
-        assert d[b]["delta_lo"] == 0 and d[b]["delta_hi"] == 0 and d[b]["note"] == "brak pikseli"
+        assert d[b]["delta_lo"] == 0 and d[b]["delta_hi"] == 0 and d[b]["note"].startswith("brak pikseli")
     json.dumps(d, allow_nan=False)
 
 

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from . import kz_compare, shoreline, volume
+from . import calibration, kz_compare, shoreline, volume
 
 
 @dataclass
@@ -101,6 +101,18 @@ def bound_residuals(model: dict, shore: np.ndarray, h: float) -> tuple[np.ndarra
     zmin, zmax = np.asarray(model["z_min"], float), np.asarray(model["z_max"], float)
     ok = shore & np.isfinite(zmin) & np.isfinite(zmax)
     return np.maximum(0.0, zmin[ok] - h), np.maximum(0.0, h - zmax[ok])
+
+
+def bound_residuals_banded(model: dict, shore: np.ndarray, h: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Jak `bound_residuals`, plus pasmo kalibracji każdego piksela (`calibration.pixel_band` z granic modelu foldu).
+
+    Dlaczego tak: `calibration.apply` wybiera δ po środku przedziału, więc δ i pokrycie muszą być liczone po tym samym
+      kluczu, a nie po poziomie sceny h (piksele chybione mają środek powyżej 194,8 m częściej niż h sceny).
+    """
+    zmin, zmax = np.asarray(model["z_min"], float), np.asarray(model["z_max"], float)
+    ok = shore & np.isfinite(zmin) & np.isfinite(zmax)
+    lo, hi = bound_residuals(model, shore, h)
+    return lo, hi, calibration.pixel_band(zmin[ok], zmax[ok])
 
 
 def iou(pred: np.ndarray, ref: np.ndarray, zone: np.ndarray) -> float:

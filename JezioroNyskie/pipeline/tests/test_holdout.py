@@ -129,3 +129,11 @@ def test_bound_residuals_below_in_above():
     m = _model([[1, 2]], [[np.nan, 1.0]], [[2.0, np.inf]])  # granica nieskończona/NaN: piksel pomijany
     lo, hi = holdout.bound_residuals(m, np.ones((1, 2), bool), 2.0)
     assert len(lo) == 0 and len(hi) == 0
+
+
+def test_bound_residuals_banded_uses_midpoint_band():
+    # h = 194.5 (pasmo 192.9-194.8), ale środek przedziału 195.0 -> pasmo 194.8+; środek 192.0 -> pożycza 192.9-194.8
+    m = _model([[0, 0, 0]], [[194.6, 191.5, 193.0]], [[195.4, 192.5, 194.0]])
+    lo, hi, band = holdout.bound_residuals_banded(m, np.ones((1, 3), bool), 194.5)
+    assert band.tolist() == ["194.8+", "192.9-194.8", "192.9-194.8"]
+    assert np.allclose(lo, [0.1, 0, 0.0], atol=1e-4) and np.allclose(hi, [0, 2.0, 0.5], atol=1e-4)

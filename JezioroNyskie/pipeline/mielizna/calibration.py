@@ -19,6 +19,23 @@ BORROW_FROM = "192.9-194.8"
 NO_PIXELS = "brak pikseli"
 
 
+def pixel_band(z_lo: np.ndarray, z_hi: np.ndarray) -> np.ndarray:
+    """Pasmo kalibracji piksela (to samo dla dopasowania δ i dla `apply`): środek przedziału albo jedyna skończona granica.
+
+    „<192.9” jest scalane z „192.9-194.8”; piksel bez skończonej granicy dostaje "".
+    """
+    lo, hi = np.asarray(z_lo, float), np.asarray(z_hi, float)
+    flo, fhi = np.isfinite(lo), np.isfinite(hi)
+    with np.errstate(invalid="ignore"):
+        mid = (lo + hi) / 2
+    ref = np.where(flo & fhi, mid, np.where(flo, lo, np.where(fhi, hi, np.nan)))
+    has = np.isfinite(ref)
+    band = np.full(lo.shape, "", dtype=object)
+    band[has] = budget.band_of(ref[has])
+    band[band == "<192.9"] = BORROW_FROM
+    return band
+
+
 def deltas(res_lo_by_band: dict[str, np.ndarray], res_hi_by_band: dict[str, np.ndarray], q: float = 95) -> dict[str, dict]:
     """Poszerzenia {pasmo: {delta_lo, delta_hi, n, note}}: percentyl `q` reszt; puste pasmo → 0 i nota „brak pikseli”."""
     out = {}
@@ -27,7 +44,8 @@ def deltas(res_lo_by_band: dict[str, np.ndarray], res_hi_by_band: dict[str, np.n
         hi = np.asarray(res_hi_by_band.get(b, []), float)
         n = int(len(lo))
         if n == 0:
-            out[b] = {"delta_lo": 0.0, "delta_hi": 0.0, "n": 0, "note": NO_PIXELS}
+            note = NO_PIXELS + (f"; pożycza {BORROW_FROM} (środki < 192,9 m scalone z tym pasmem)" if b == "<192.9" else "")
+            out[b] = {"delta_lo": 0.0, "delta_hi": 0.0, "n": 0, "note": note}
         else:
             out[b] = {"delta_lo": float(np.percentile(lo, q)), "delta_hi": float(np.percentile(hi, q)), "n": n,
                       "note": None}
@@ -63,14 +81,8 @@ def apply(z_lo: np.ndarray, z_hi: np.ndarray, d: dict) -> tuple[np.ndarray, np.n
     """
     lo, hi = np.asarray(z_lo, float), np.asarray(z_hi, float)
     flo, fhi = np.isfinite(lo), np.isfinite(hi)
-    with np.errstate(invalid="ignore"):
-        mid = (lo + hi) / 2
-    ref = np.where(flo & fhi, mid, np.where(flo, lo, np.where(fhi, hi, np.nan)))
+    band = pixel_band(lo, hi)
     dlo, dhi = np.zeros(lo.shape), np.zeros(lo.shape)
-    has = np.isfinite(ref)
-    band = np.full(lo.shape, "", dtype=object)
-    band[has] = budget.band_of(ref[has])
-    band[band == "<192.9"] = BORROW_FROM
     for b in budget.BANDS:
         m = band == b
         if m.any():

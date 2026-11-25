@@ -40,9 +40,9 @@ METHOD = ("Roczny hold-out: dla każdego roku 2020-2026 model dna z scen pozosta
 LEAKAGE = ("RF i krzywa C (poziomy wariantu C) nie są trenowane od nowa na foldach: maski scen i poziomy treningowe "
            "pochodzą z potoku, który widział też scenę testową, więc hold-out jest optymistyczny w tym zakresie.")
 CAL_METHOD = ("Kalibracja z rocznego hold-outu (modele foldów, poza próbą): na pikselach brzegowych z obiema granicami "
-              "skończonymi reszty max(0, z_min − h) i max(0, h − z_max), pasmo wg poziomu h sceny testowej; δ_lo i δ_hi = "
+              "skończonymi reszty max(0, z_min − h) i max(0, h − z_max), pasmo wg środka przedziału piksela z modelu foldu (ten sam klucz co w poszerzaniu; środki < 192,9 m scalone z 192.9-194.8); δ_lo i δ_hi = "
               "P95 reszt w paśmie. Poszerzenie: z_min − δ_lo, z_max + δ_hi tylko dla granic skończonych; pasmo piksela wg "
-              "środka przedziału, poniżej 192,9 m δ pasma 192.9-194.8 (brak pikseli hold-outu). Pokrycie = udział pikseli "
+              "środka przedziału (jedyna skończona granica, gdy druga jest nieskończona). Pokrycie = udział pikseli "
               "brzegowych hold-outu z dnem w przedziale, przed i po poszerzeniu.")
 
 
@@ -53,7 +53,7 @@ def load_ev(sel, aoi):
     return bottom.combine_evidence(rf_s, ot_s)
 
 
-def scene_record(model, ev_i, h, zone, lake_zone, transform):
+def scene_record(model, ev_i, h, zone, lake_zone, transform, with_res=False):
     """Metryki jednej sceny dla modelu `model` (fałdy albo serwowany).
 
     Błąd pionowy na pikselach brzegowych obu stron (woda i ląd); `err_water`/`err_land` to diagnostyka stron osobno.
@@ -65,7 +65,7 @@ def scene_record(model, ev_i, h, zone, lake_zone, transform):
     valid = zone & (ev_i != 255)
     sd = holdout.shoreline_distance(pred, ev_i, transform)
     return {"side": {"water": vw, "land": vl},
-            "res": holdout.bound_residuals(model, holdout.shore_pixels(ev_i, "both"), h),
+            "res": holdout.bound_residuals_banded(model, holdout.shore_pixels(ev_i, "both"), h) if with_res else None,
             "n_shore": ve["n_shore"], "err": ve["err"], "in_bounds": ve["in_bounds"],
             "iou_zone": holdout.iou(pred, ev_i, zone), "iou_lake": holdout.iou(pred, ev_i, lake_zone),
             "share_uncertain": float(unc[valid].mean()) if valid.any() else float("nan"),
@@ -128,7 +128,7 @@ def main() -> int:
         res = bottom.compute_bounds(ev[f.train], h[f.train], sig[f.train], is_c=is_c[f.train], k_sigma=1.0)
         log.info("fold %d: train %d, test %d (%.0f s)", f.year, len(f.train), len(f.test), time.time() - t0)
         for i in f.test:
-            rec_h[i] = scene_record(res, ev[i], float(h[i]), zone, aoi, grid.transform)
+            rec_h[i] = scene_record(res, ev[i], float(h[i]), zone, aoi, grid.transform, with_res=True)
             rec_s[i] = scene_record(served, ev[i], float(h[i]), zone, aoi, grid.transform)
         del res
     test_idx = [i for i in range(n) if rec_h[i] is not None]
@@ -170,11 +170,12 @@ def main() -> int:
     out = {"method": METHOD, "leakage_note": LEAKAGE, "n_folds": len(folds), "n_test_scenes": ah["n_test_scenes"],
            "n_skipped": ah["n_skipped"], "holdout": block(ah, rh), "in_sample": block(as_, rs), "by_fold": by_fold,
            "by_period": by_period, "by_band": by_band}
-    # kalibracja: reszty poza przedziałem z modeli foldów (poza próbą), per pasmo poziomu sceny testowej
-    res_lo = {b: np.concatenate([rh[j]["res"][0] for j in range(len(test_idx)) if band_lbl[j] == b] or [np.array([])])
-              for b in budget.BANDS}
-    res_hi = {b: np.concatenate([rh[j]["res"][1] for j in range(len(test_idx)) if band_lbl[j] == b] or [np.array([])])
-              for b in budget.BANDS}
+    # kalibracja: reszty z modeli foldów (poza próbą), pasmo = pasmo środka przedziału piksela (jak w calibration.apply)
+    res_lo, res_hi = {}, {}
+    for b in budget.BANDS:
+        parts = [(r["res"][0][r["res"][2] == b], r["res"][1][r["res"][2] == b]) for r in rh]
+        res_lo[b] = np.concatenate([p[0] for p in parts] or [np.array([])])
+        res_hi[b] = np.concatenate([p[1] for p in parts] or [np.array([])])
     dl = calibration.deltas(res_lo, res_hi)
     cov = calibration.coverage(res_lo, res_hi, dl)
     cal = {"bands": dl, "coverage_before": {"overall": cov["overall"]["before"],
