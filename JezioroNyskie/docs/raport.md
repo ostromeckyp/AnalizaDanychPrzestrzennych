@@ -1,6 +1,6 @@
 # Mielizna — raport: model dna Jeziora Nyskiego z Sentinel-2 i jego dokładność
 
-Autor: Paweł Ostromecki. Stan: gałąź `eval/holdout-error-budget`, listopad 2026.
+Autor: Paweł Ostromecki. Stan: gałąź `model/kz-deep-bottom`, listopad 2026.
 
 **Najważniejsze w pięciu zdaniach.** Model dna powstał wyłącznie z obrazów Sentinel-2 i znanego poziomu wody w dniu każdego
 zdjęcia: piksel widziany jako woda przy poziomie `h` ma dno poniżej `h`, a widziany jako ląd ma dno powyżej. Na odsłoniętym
@@ -14,7 +14,7 @@ są praktycznie takie same. Przyczyny błędu w pierścieniu nie ustaliliśmy (o
 KŻ Nysa, model sprzed powodzi jest średnio o +0,31<!-- eval:kz_points.json:pooled.bias --> m płytszy (RMSE
 0,84<!-- eval:kz_points.json:pooled.rmse --> m), ale na małej próbie (n = 32<!-- eval:kz_points.json:pooled.n -->) i tylko
 w paśmie 192,5–195 m; to porównanie dotyczy wyłącznie modelu `pre_flood`, a dla modelu serwowanego w aplikacji (`all`)
-jedyną niezależną kontrolą rzędnej dna w metrach jest wynik względem NMT podany wyżej (objętość, §5.4, sprawdza przyrost warstw, nie rzędne). Model nie wie nic o dnie poniżej ok. 192,9 m (najniższy zaobserwowany poziom wody). **To projekt naukowy;
+jedyną niezależną kontrolą rzędnej dna w metrach jest wynik względem NMT podany wyżej (objętość, §5.4, sprawdza przyrost warstw, nie rzędne). Model nie wie nic o dnie poniżej ok. 192,9 m (najniższy zaobserwowany poziom wody); aplikacja pokazuje tam dno z mapy KŻ, z błędem interpolacji tej mapy, a nie z modelu (§6.6). **To projekt naukowy;
 aplikacja nie służy do nawigacji** (ten sam napis jest w stopce aplikacji i na stronie „O metodzie”).
 
 Konwencje. Rzędne w m n.p.m.; docelowy układ wysokości PL-EVRF2007-NH, ale poziomy z komunikatów RZGW mają układ nieznany
@@ -276,7 +276,10 @@ poziomów obu okresów, nie z realnej zmiany dna; przy tym kryterium „|Δz| > 
 | `h_t` wariant D vs A/B | 107<!-- eval:variant_d.json:n_valid --> scen w dziedzinie D (`h_t` < 194,95<!-- eval:variant_d.json:h_max_valid --> m) | w ±0,2 m: 27,1 %<!-- eval:variant_d.json:share_within_0_2 --> scen (A 55,6 %<!-- eval:variant_d.json:by_method.A.share_within_0_2 -->, B 14,8 %<!-- eval:variant_d.json:by_method.B.share_within_0_2 -->, C 0 %<!-- eval:variant_d.json:by_method.C.share_within_0_2 -->); mediana \|D − h_t\| 0,28<!-- eval:variant_d.json:median_abs_diff --> m | kryterium „większość w ±0,2 m” **niespełnione**; D tylko zgrubną kontrolą |
 | Objętość (ΔV warstw) vs tabela pojemności | tabela KŻ pojemność ↔ rzędna | 193,3–194,8 m: model/tabela 0,986<!-- eval:volume.json:bands.[193.3-194.8].ratio -->; 194,8–196,3 m: 0,893<!-- eval:volume.json:bands.[194.8-196.3].ratio -->; 196,3–197,8 m: 0,750<!-- eval:volume.json:bands.[196.3-197.8].ratio -->; dno rdzenia z bilansu 190,49<!-- eval:volume.json:core_bottom_main.z_core_mean --> m | zgodne do ok. 194,8 m; wyżej brak powierzchni wody (§5.4) |
 | Hold-out roczny (model bez roku vs sceny tego roku) | 155<!-- eval:holdout.json:n_test_scenes --> scen B/R z lat 2020–2026, linia wody na masce RF ∧ Otsu | MAE 0,94<!-- eval:holdout.json:holdout.vertical.mae -->, bias −0,16<!-- eval:holdout.json:holdout.vertical.bias -->, P90 \|błędu\| 1,95<!-- eval:holdout.json:holdout.vertical.p90_abs --> m; `h_t` ∈ [z_min, z_max]: 17,2 %<!-- eval:holdout.json:holdout.vertical.share_in_bounds -->; w próbie MAE 0,93<!-- eval:holdout.json:in_sample.vertical.mae --> m | hold-out ≈ w próbie; optymistyczny (RF i krzywa C bez ponownego treningu) (§5.5) |
-| Zakres błędu dna wg pasm | hold-out, LiDAR (`all`), KŻ (`pre_flood`), źródła z n ≥ 5 | 192,9–194,8 m: 0,65<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.0 -->–1,11<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.1 --> m; ≥ 194,8 m: 1,04<!-- eval:error_budget.json:bands.[194.8+].range_m.0 -->–1,34<!-- eval:error_budget.json:bands.[194.8+].range_m.1 --> m; < 192,9 m: brak danych | zestawienie, nie suma; bez terenu (§5.6) |
+| Zakres błędu dna wg pasm | hold-out, LiDAR (`all`), KŻ (`pre_flood`), źródła z n ≥ 5 | 192,9–194,8 m: 0,65<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.0 -->–1,11<!-- eval:error_budget.json:bands.[192.9-194.8].range_m.1 --> m; ≥ 194,8 m: 1,04<!-- eval:error_budget.json:bands.[194.8+].range_m.0 -->–1,34<!-- eval:error_budget.json:bands.[194.8+].range_m.1 --> m; < 192,9 m: brak danych o modelu | zestawienie, nie suma; bez terenu (§5.6) |
+| Kalibracja przedziałów dna | reszty rocznego hold-outu poza przedziałem, piksele brzegowe z obiema granicami (n = 896 730<!-- eval:calibration.json:n_pixels -->) | `h_t` ∈ przedziale: przed 17,2 %<!-- eval:calibration.json:coverage_before.overall -->, po poszerzeniu 90,2 %<!-- eval:calibration.json:coverage_after.overall --> | poszerzenie dopasowane i sprawdzone na tych samych resztach; stosowane też do granic jednostronnych (ekstrapolacja, §5.6) |
+| Źródło poziomu wody w treningu (eksperyment) | ten sam hold-out bez scen C / tylko B i R | MAE 0,944<!-- eval:holdout_level_sources.json:variants.all.vertical.mae --> / 0,944<!-- eval:holdout_level_sources.json:variants.no_c.vertical.mae --> / 0,935<!-- eval:holdout_level_sources.json:variants.b_r_only.vertical.mae --> m | **brak poprawy**; serwowany model bez zmian (§5.5) |
+| Dno głębokiej części z mapy KŻ (punkt odłożony, LOO) | 98<!-- eval:kz_loo.json:n --> punktów KŻ w strefie „zawsze woda” (5<!-- eval:kz_loo.json:n_skipped --> pominiętych) | błąd interpolacji mapy KŻ: MAE 1,04<!-- eval:kz_loo.json:mae --> m, bias +0,42<!-- eval:kz_loo.json:bias --> m, P5 / P95 −2,00<!-- eval:kz_loo.json:p5 --> / +3,02<!-- eval:kz_loo.json:p95 --> m; poniżej 192,9 m MAE 1,03<!-- eval:kz_loo.json:below_192_9.mae --> m (n = 93<!-- eval:kz_loo.json:below_192_9.n -->) | mapa sprawdzona sama ze sobą, nie całkowity błąd dna (§6.6) |
 
 ![Błąd dna względem NMT](img/eval-dno-vs-nmt-histogram.png)
 
@@ -489,6 +492,29 @@ jest wyraźnie zawyżony względem hold-outu, który sam jest optymistyczny (RF 
 klasyfikacji: referencją jest ta sama maska RF ∧ Otsu, więc jeśli przy wysokiej wodzie zalana roślinność jest klasyfikowana jako ląd
 (hipoteza 1 z §5.2), to model i referencja mylą się tak samo. Pierścienia +1,43<!-- eval:bottom_vs_nmt.json:all_z_ge_196.bias --> m względem NMT ta kontrola nie może zobaczyć.
 
+**Eksperyment: czy błąd pochodzi z poziomów wody scen treningowych?** Skoro hold-out ≈ w próbie, błąd siedzi raczej
+w wejściach modelu, a najsłabszym wejściem są poziomy C (z krzywej powierzchnia–poziom) i A. Powtórzyliśmy hold-out
+w trzech wariantach scen **budujących** model: wszystkie (`all`, jak wyżej), bez scen C (`no_c`) i tylko B i R
+(`b_r_only`). Fałdy i sceny testowe są te same we wszystkich wariantach; zmienia się tylko trening (np. w fałdzie 2020:
+189<!-- eval:holdout_level_sources.json:variants.all.n_train_scenes.2020 -->, 164<!-- eval:holdout_level_sources.json:variants.no_c.n_train_scenes.2020 --> i
+127<!-- eval:holdout_level_sources.json:variants.b_r_only.n_train_scenes.2020 --> scen). Skrypt `pipeline/12a_holdout_levels.py` (`make holdout-levels`), wynik
+`eval/holdout_level_sources.json`. Serwowany model się nie zmienia.
+
+| wariant treningu | pikseli z przewidywaniem | MAE [m] | bias [m] | P90 \|błędu\| [m] | `h_t` w przedziale | bez przewidywania |
+|---|---|---|---|---|---|---|
+| `all` | 896 730<!-- eval:holdout_level_sources.json:variants.all.vertical.n --> | 0,944<!-- eval:holdout_level_sources.json:variants.all.vertical.mae --> | −0,16<!-- eval:holdout_level_sources.json:variants.all.vertical.bias --> | 1,95<!-- eval:holdout_level_sources.json:variants.all.vertical.p90_abs --> | 17,2 %<!-- eval:holdout_level_sources.json:variants.all.vertical.share_in_bounds --> | 21,6 %<!-- eval:holdout_level_sources.json:variants.all.vertical.share_no_pred --> |
+| `no_c` | 863 246<!-- eval:holdout_level_sources.json:variants.no_c.vertical.n --> | 0,944<!-- eval:holdout_level_sources.json:variants.no_c.vertical.mae --> | −0,19<!-- eval:holdout_level_sources.json:variants.no_c.vertical.bias --> | 1,96<!-- eval:holdout_level_sources.json:variants.no_c.vertical.p90_abs --> | 16,8 %<!-- eval:holdout_level_sources.json:variants.no_c.vertical.share_in_bounds --> | 24,5 %<!-- eval:holdout_level_sources.json:variants.no_c.vertical.share_no_pred --> |
+| `b_r_only` | 863 567<!-- eval:holdout_level_sources.json:variants.b_r_only.vertical.n --> | 0,935<!-- eval:holdout_level_sources.json:variants.b_r_only.vertical.mae --> | −0,15<!-- eval:holdout_level_sources.json:variants.b_r_only.vertical.bias --> | 1,97<!-- eval:holdout_level_sources.json:variants.b_r_only.vertical.p90_abs --> | 18,2 %<!-- eval:holdout_level_sources.json:variants.b_r_only.vertical.share_in_bounds --> | 24,5 %<!-- eval:holdout_level_sources.json:variants.b_r_only.vertical.share_no_pred --> |
+
+**Wynik: brak poprawy.** Bez scen C MAE jest takie samo, a tylko z B i R mniejsze o mniej niż 0,01 m. W pasmach różnice idą
+w przeciwne strony: w 192,9–194,8 m `b_r_only` ma MAE 0,79<!-- eval:holdout_level_sources.json:variants.b_r_only.by_band.[192.9-194.8].vertical.mae --> m wobec
+0,77<!-- eval:holdout_level_sources.json:variants.all.by_band.[192.9-194.8].vertical.mae --> m, a w ≥ 194,8 m 1,01<!-- eval:holdout_level_sources.json:variants.b_r_only.by_band.[194.8+].vertical.mae --> m wobec
+1,04<!-- eval:holdout_level_sources.json:variants.all.by_band.[194.8+].vertical.mae --> m. Wniosek: źródło poziomu wody w treningu nie jest głównym składnikiem
+błędu na linii wody. Porównanie ma jedno zakłócenie: mniej scen treningowych to mniej pikseli z obiema granicami, więc udział
+pikseli bez przewidywania rośnie z 21,6 %<!-- eval:holdout_level_sources.json:variants.all.vertical.share_no_pred --> do 24,5 %<!-- eval:holdout_level_sources.json:variants.no_c.vertical.share_no_pred -->,
+a warianty liczą MAE na nieco innych pikselach. Nie wiemy, czy na wspólnych pikselach różnica byłaby inna; tak małe różnice
+MAE nie uzasadniają zmiany modelu. Serwowany model zostaje bez zmian (decyzja należy do autora).
+
 ### 5.6 Jak zmierzyliśmy i zakres błędu (bez terenu)
 
 Pomiary w terenie (echosonda, zdjęcia przy niskiej wodzie) i stare mapy są odłożone do następnego sezonu. Do tego czasu mamy pięć
@@ -559,6 +585,51 @@ z kierunkiem LiDAR-u: przy wysokiej wodzie modelowi brakuje zalanej powierzchni.
 **Pasmo < 192,9 m bez liczby.** Model nie ma tam dolnej granicy dna (najniższy obserwowany poziom to 192,90 m), żadna scena testowa
 nie ma tak niskiego poziomu, a NMT nie widzi dna pod wodą. Cztery punkty KŻ z modelem w pikselu to anegdota, nie zakres. Jedyną
 liczbą o głębokim środku jest średnie dno rdzenia z bilansu objętości (§5.4), ale to średnia dla całego rdzenia, nie mapa błędu.
+Budżet ma dla tego pasma osobne pole `kz_loo`: błąd interpolacji mapy KŻ (MAE 1,03<!-- eval:error_budget.json:bands.[<192.9].kz_loo.mae --> m,
+n = 93<!-- eval:error_budget.json:bands.[<192.9].kz_loo.n -->, §6.6). To błąd mapy KŻ względem jej własnych punktów, a nie błąd
+modelu względem referencji, więc nie wchodzi do zakresu (`range_m` zostaje puste) i nie miesza się z kolumnami tabeli.
+
+**Kalibracja przedziałów dna.** Przedział [`z_min`, `z_max`] obejmuje `h_t` tylko w 17,2 %<!-- eval:calibration.json:coverage_before.overall -->
+pikseli brzegowych hold-outu (§5.5), więc strefy „obiecują” za dużo. Poszerzamy go jednostronnie: z reszt hold-outu (modele fałd,
+poza próbą) na pikselach z obiema granicami liczymy, o ile prawdziwe dno wyszło poniżej `z_min` i powyżej `z_max`, i bierzemy
+95. percentyl każdej strony osobno, w pasmach budżetu wg środka przedziału piksela (`pipeline/mielizna/calibration.py`, wynik
+`eval/calibration.json`; reszty liczy `12_holdout.py`).
+
+| pasmo (środek przedziału) | pikseli | `δ_lo` [m] (w dół od `z_min`) | `δ_hi` [m] (w górę od `z_max`) | w przedziale przed | po |
+|---|---|---|---|---|---|
+| 192,9–194,8 m (także środki < 192,9 m) | 453 516<!-- eval:calibration.json:bands.[192.9-194.8].n --> | 0,11<!-- eval:calibration.json:bands.[192.9-194.8].delta_lo --> | 2,23<!-- eval:calibration.json:bands.[192.9-194.8].delta_hi --> | 18,5 %<!-- eval:calibration.json:coverage_before.bands.[192.9-194.8] --> | 90,2 %<!-- eval:calibration.json:coverage_after.bands.[192.9-194.8] --> |
+| ≥ 194,8 m | 443 214<!-- eval:calibration.json:bands.[194.8+].n --> | 1,83<!-- eval:calibration.json:bands.[194.8+].delta_lo --> | 0,71<!-- eval:calibration.json:bands.[194.8+].delta_hi --> | 15,8 %<!-- eval:calibration.json:coverage_before.bands.[194.8+] --> | 90,2 %<!-- eval:calibration.json:coverage_after.bands.[194.8+] --> |
+| **razem** | 896 730<!-- eval:calibration.json:n_pixels --> | | | 17,2 %<!-- eval:calibration.json:coverage_before.overall --> | **90,2 %<!-- eval:calibration.json:coverage_after.overall -->** |
+
+Poszerzenia są asymetryczne i w obu pasmach odwrotne: w dolnym paśmie dno częściej wychodzi **nad** `z_max`, w górnym **pod**
+`z_min`. Przyczyny tego odwrócenia nie badaliśmy. Nie porównujemy go z biasem hold-outu w pasmach (§5.5), bo tam pasmo wyznacza
+poziom sceny, a tu środek przedziału piksela.
+Pokrycie „po” jest liczone na tych samych resztach, z których dopasowano poszerzenia, więc ok. 90 % jest z konstrukcji, a nie
+niezależnym sprawdzianem; P95 każdej strony osobno daje łącznie ok. 90 %, nie dokładnie 95 %.
+
+Granice nieskończone (±∞) zostają nieskończone. **Decyzja autora (2026-11-25): poszerzamy też granice jednostronne**, np. górną
+granicę pikseli „zawsze woda” (≈ 193,05 m → ≈ 195,28 m), choć poszerzenia zmierzyliśmy tylko na pikselach z obiema granicami. To
+**ekstrapolacja**: nie mamy reszt, które by ją sprawdzały. Kalibracja wchodzi do rastrów łączonych (§6.6) przed regułą KŻ;
+`z_max_floor` (ostrzeżenie „dno poniżej obserwacji”) i wszystkie kontrole (§5.2–§5.6, §6.4) liczą się dalej na surowych
+granicach satelity. Skutek dla stref (zanurzenie 0,5<!-- eval:kz_deep.json:draft --> m, zapas 0,3<!-- eval:kz_deep.json:margin --> m;
+„po” = kalibracja i mapa KŻ, `eval/kz_deep.json`), z wariantem alternatywnym „kalibracja tylko pikseli z obiema granicami”
+(ta sama reguła KŻ) jako kontekstem:
+
+| poziom wody | obszar | bezpieczna: przed / po / tylko dwustronne | ryzykowna: przed / po / tylko dwustronne | zbyt płytka: przed / po / tylko dwustronne |
+|---|---|---|---|---|
+| 194,5 m (najczęstszy) | piksele modelu | 48,3 %<!-- eval:kz_deep.json:zones_before.[194.5].in_model.safe --> / 18,0 %<!-- eval:kz_deep.json:zones_after.[194.5].in_model.safe --> / 41,9 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[194.5].in_model.safe --> | 3,6 %<!-- eval:kz_deep.json:zones_before.[194.5].in_model.risk --> / 36,1 %<!-- eval:kz_deep.json:zones_after.[194.5].in_model.risk --> / 12,2 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[194.5].in_model.risk --> | 48,0 %<!-- eval:kz_deep.json:zones_before.[194.5].in_model.danger --> / 45,8 %<!-- eval:kz_deep.json:zones_after.[194.5].in_model.danger --> / 45,9 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[194.5].in_model.danger --> |
+| 194,5 m | „zawsze woda” | 100,0 %<!-- eval:kz_deep.json:zones_before.[194.5].always_water.safe --> / 43,0 %<!-- eval:kz_deep.json:zones_after.[194.5].always_water.safe --> / 100,0 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[194.5].always_water.safe --> | 0,0 %<!-- eval:kz_deep.json:zones_before.[194.5].always_water.risk --> / 57,0 %<!-- eval:kz_deep.json:zones_after.[194.5].always_water.risk --> / 0,0 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[194.5].always_water.risk --> | 0 %<!-- eval:kz_deep.json:zones_before.[194.5].always_water.danger --> / 0 %<!-- eval:kz_deep.json:zones_after.[194.5].always_water.danger --> / 0 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[194.5].always_water.danger --> |
+| 193,6 m (typowa zima) | piksele modelu | 0 %<!-- eval:kz_deep.json:zones_before.[193.6].in_model.safe --> / 13,5 %<!-- eval:kz_deep.json:zones_after.[193.6].in_model.safe --> / 13,5 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[193.6].in_model.safe --> | 47,1 %<!-- eval:kz_deep.json:zones_before.[193.6].in_model.risk --> / 35,5 %<!-- eval:kz_deep.json:zones_after.[193.6].in_model.risk --> / 35,5 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[193.6].in_model.risk --> | 52,9 %<!-- eval:kz_deep.json:zones_before.[193.6].in_model.danger --> / 51,0 %<!-- eval:kz_deep.json:zones_after.[193.6].in_model.danger --> / 51,0 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[193.6].in_model.danger --> |
+| 193,6 m | „zawsze woda” | 0 %<!-- eval:kz_deep.json:zones_before.[193.6].always_water.safe --> / 32,2 %<!-- eval:kz_deep.json:zones_after.[193.6].always_water.safe --> / 32,2 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[193.6].always_water.safe --> | 100 %<!-- eval:kz_deep.json:zones_before.[193.6].always_water.risk --> / 67,8 %<!-- eval:kz_deep.json:zones_after.[193.6].always_water.risk --> / 67,8 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[193.6].always_water.risk --> | 0 %<!-- eval:kz_deep.json:zones_before.[193.6].always_water.danger --> / 0,0 %<!-- eval:kz_deep.json:zones_after.[193.6].always_water.danger --> / 0,0 %<!-- eval:kz_deep.json:zones_after_two_sided_only.[193.6].always_water.danger --> |
+
+Pikseli modelu jest 250 421<!-- eval:kz_deep.json:zones_before.[194.5].in_model.n -->, w tym „zawsze woda”
+104 928<!-- eval:kz_deep.json:n_always_water -->. Przy 194,5 m spadek udziału stref bezpiecznych w modelu bierze się w większości z ekstrapolacji
+na granice jednostronne (sama kalibracja pikseli dwustronnych obniża go znacznie mniej, por. kolumnę „tylko dwustronne”): piksel „zawsze woda” bez mapy KŻ ma po kalibracji `z_hi` ≈ 195,28 m, czyli powyżej lustra wody, więc nie może
+być bezpieczny (wynika to wprost z reguły; przykład liczbowy w `docs/jak-czytac-kod.md`, przykład B). Bezpieczne zostają tam tylko
+piksele, którym mapa KŻ obniża górną granicę. Wariant „tylko dwustronne” zostawia strefę „zawsze woda” bezpieczną jak przed kalibracją.
+Przy 193,6 m oba warianty dają to samo: wszystkie nowe piksele bezpieczne pochodzą z mapy KŻ (przed: 0 %). Wybraliśmy wariant
+ostrożniejszy (więcej stref ryzykownych); ceną jest to, że przy 194,5 m więcej niż połowa strefy „zawsze woda” jest ryzykowna
+tylko z powodu niezmierzonego poszerzenia.
 
 **Co zamknie walidacja terenowa (następny sezon).**
 
@@ -573,8 +644,9 @@ liczbą o głębokim środku jest średnie dno rdzenia z bilansu objętości (§
 ## 6. Porównanie z mapą KŻ (K1–K5)
 
 Mapa KŻ jest amatorska („dane pozyskano i odwzorowano sposobem amatorskim”), a dno poniżej 192,5 m autor mapy opisuje jako
-orientacyjne. Dlatego służy tylko do walidacji i kontroli, nigdy jako dane wejściowe modelu, a wszystkie wyniki z tej sekcji są
-**orientacyjne**. Warunki „UWAGA” są na nakładce i w `data/reference/KZ_ZRODLO_I_WARUNKI.md`.
+orientacyjne. Dlatego nie jest danymi wejściowymi modelu satelitarnego; §6.1–§6.5 używają jej tylko do walidacji i kontroli,
+a wszystkie wyniki z tej sekcji są **orientacyjne**. Wyjątek opisuje §6.6: w strefie „zawsze woda”, gdzie model nie ma dolnej
+granicy dna, aplikacja pokazuje dno z mapy KŻ (osobne rastry, poza modelem i poza kontrolami). Warunki „UWAGA” są na nakładce i w `data/reference/KZ_ZRODLO_I_WARUNKI.md`.
 
 ### 6.1 K1 — georeferencja
 
@@ -667,6 +739,70 @@ kontrolą ręczną. Ponieważ punkty KŻ wchodzą do D, walidacja dna punktami K
 *Mapa KŻ (półprzezroczysta) pod strefami modelu przy NPP (zanurzenie 0,5 m, zapas 0,3 m), poziomica 195,0 m modelu (ciągła) i KŻ
 (kropkowana), poziomica 192,5 m KŻ i punkty KŻ. Źródło mapy: W. Wróblewski, KŻ Nysa, 23.05.2023; warunki „UWAGA” na rysunku.*
 
+### 6.6 Dno głębokiej części z mapy KŻ
+
+**Po co.** Piksel „zawsze woda” (104 928<!-- eval:kz_deep.json:n_always_water --> pikseli, ok. 42 % modelu) nie był lądem na żadnej scenie spójnej z progiem (§4), więc model
+zna tylko jego górną granicę dna (`z_max` ≈ 193,05 m), a dolnej nie ma (`z_lo` = −∞). Popup nie mógł tam podać głębokości od–do,
+a budżet błędu w paśmie < 192,9 m nie ma liczby. Mapa KŻ ma w tej strefie rzędne punktowe i poziomicę 192,5 m. Rzędne są
+bezwzględne (m n.p.m.), więc głębokość = bieżący poziom − rzędna, bez znajomości poziomu w dniu pomiaru KŻ. Skrypt
+`pipeline/14_kz_deep.py` (`make kz-deep`), funkcje `mielizna/kz_deep.py` i `mielizna/combine.py`; wynik w osobnym katalogu
+`model/all_kz/` i w `eval/kz_loo.json`, `eval/kz_deep.json`.
+
+**Powierzchnia.** TIN z punktów KŻ po kontroli ręcznej (§6.2) i z poziomicy 192,5 m, **bez poziomicy 195,0 m**; żwirownia
+wycięta jak w wariancie D. Poziomica 195,0 m opisuje głównie brzegi wysp, które satelita i tak zna, a w analizie projektu
+odpowiadała za większość sprzeczności: z nią rzędna KŻ wypada powyżej `z_max` satelity w
+13,6 %<!-- eval:kz_deep.json:contour_195_check.with_195.kz_above_zmax_share --> pokrytych pikseli „zawsze woda”, bez niej w
+6,8 %<!-- eval:kz_deep.json:contour_195_check.without_195.kz_above_zmax_share -->; pokrycie strefy spada przy tym tylko z
+82,9 %<!-- eval:kz_deep.json:contour_195_check.with_195.coverage --> do 81,9 %<!-- eval:kz_deep.json:contour_195_check.without_195.coverage -->. W analizie
+projektu (2026-11-25; liczby poza plikami oceny) sprzeczności skupiały się blisko poziomicy 195,0 m (do 100 m od niej 67 %
+pikseli sprzecznych, dalej niż 300 m 2,4 %). Wyjaśnienie, że to artefakt TIN rozpiętego między poziomicą wyspy a głębokimi
+punktami, jest hipotezą; nie sprawdzaliśmy go osobno.
+
+**Błąd interpolacji mapy KŻ (punkt odłożony, LOO).** Dla każdego punktu KŻ w pikselu „zawsze woda” (poza żwirownią) budujemy
+powierzchnię bez tego punktu (poziomica 192,5 m zostaje) i czytamy ją w pikselu punktu. Błąd ze znakiem = odczyt − rzędna punktu
+(dodatni = powierzchnia płycej niż punkt). Punkty, które po usunięciu wypadają poza otoczkę pozostałych, pomijamy.
+
+| punkty | n | pominięte | MAE [m] | bias [m] | P5 [m] | P95 [m] | P90 \|błędu\| [m] |
+|---|---|---|---|---|---|---|---|
+| wszystkie w „zawsze woda” | 98<!-- eval:kz_loo.json:n --> | 5<!-- eval:kz_loo.json:n_skipped --> | 1,04<!-- eval:kz_loo.json:mae --> | +0,42<!-- eval:kz_loo.json:bias --> | −2,00<!-- eval:kz_loo.json:p5 --> | +3,02<!-- eval:kz_loo.json:p95 --> | 2,69<!-- eval:kz_loo.json:p90_abs --> |
+| rzędna < 192,9 m | 93<!-- eval:kz_loo.json:below_192_9.n --> | — | 1,03<!-- eval:kz_loo.json:below_192_9.mae --> | +0,51<!-- eval:kz_loo.json:below_192_9.bias --> | −1,59<!-- eval:kz_loo.json:below_192_9.p5 --> | +3,05<!-- eval:kz_loo.json:below_192_9.p95 --> | 2,65<!-- eval:kz_loo.json:below_192_9.p90_abs --> |
+
+Błąd jest asymetryczny: powierzchnia częściej pokazuje dno **płycej** niż punkt (bias dodatni, P95 dalej od zera niż P5).
+**To jest błąd interpolacji mapy KŻ, a nie całkowity błąd dna ani jego dokładność.** LOO sprawdza mapę samą ze sobą: mierzy, jak
+dobrze powierzchnia odtwarza punkt z sąsiednich punktów. Nie widzi błędu samych pomiarów KŻ ani przesunięcia całej mapy (zera
+wodowskazu, układu wysokości). O takim przesunięciu mówi tylko K5: w paśmie 192,5–195 m model `pre_flood` jest średnio o
++0,30<!-- eval:kz_points.json:[192.5-195.0].bias --> m wyżej niż rzędne KŻ (§6.4), czego przyczyny (mapa czy model) nie
+rozdzieliliśmy; poniżej 192,5 m nie ma żadnej niezależnej kontroli. Kwantyle P5/P95 pochodzą z ok. 100 punktów, więc same są
+zaszumione.
+
+**Reguła łączenia.** Prawdziwe dno = odczyt − błąd, więc przy błędzie w [P5; P95] leży w [`kz` − P95; `kz` − P5]. Dla piksela
+„zawsze woda” z wartością powierzchni `kz` (po kalibracji satelity, §5.6):
+
+- `z_lo = kz − P95` (głębsza granica, `kz` − 3,02 m),
+- `z_hi = min(z_hi satelity, kz − P5)` (płytsza granica, nie wyżej niż skalibrowana granica satelity),
+- źródło piksela: KŻ. Pozostałe piksele są bez zmian (źródło: satelita).
+- Sprzeczność, gdy nawet `kz − P95` leży wyżej niż `z_hi` satelity: piksel zostaje satelitarny (`z_lo` = −∞) i dostaje znacznik
+  `kz_conflict`; przedziału nie wymyślamy. Satelita wygrywa, bo mapa jest amatorska.
+
+**Wynik.** Powierzchnia KŻ pokrywa 81,9 %<!-- eval:kz_deep.json:coverage --> pikseli „zawsze woda” (85 972<!-- eval:kz_deep.json:n_covered --> pikseli);
+sprzeczności według reguły łączenia: 0<!-- eval:kz_deep.json:n_conflict -->. To nie przeczy 6,8 % wyżej: tamta liczba porównuje samą rzędną `kz`
+z surowym `z_max`, a reguła porównuje `kz − P95` (o 3 m niżej) ze skalibrowanym `z_hi`. Zmianę stref przy 194,5 i 193,6 m (razem
+z kalibracją) pokazuje tabela w §5.6: przy 193,6 m (typowa zima) wszystkie piksele bezpieczne pochodzą z mapy KŻ
+(32,2 %<!-- eval:kz_deep.json:zones_after.[193.6].always_water.safe --> strefy „zawsze woda”, przed: 0 %<!-- eval:kz_deep.json:zones_before.[193.6].always_water.safe -->).
+
+**W aplikacji.** Backend wczytuje rastry `model/all_kz/` zamiast granic satelitarnych (`backend/app/depth.py:combined_bounds`);
+strefy i popup liczą się tą samą regułą. Popup pokazuje źródło dna („Dno: mapa KŻ 2023 (orientacyjne; błąd interpolacji …)”
+albo „model satelitarny”), przy sprzeczności informację, że pokazujemy tylko satelitę, a przy dnie z KŻ zastrzeżenie: mapa opisuje
+dno z 2023 r., poniżej 192,5 m jest orientacyjna, jest amatorska, a ryzyko korzystania ponosi użytkownik. Warstwa „Dno wg mapy
+KŻ” pokazuje obszar ze źródłem KŻ (`/api/kz-deep`) z atrybucją mapy; warunki „UWAGA” są w opisie źródeł na stronie „O metodzie”
+i w `data/reference/KZ_ZRODLO_I_WARUNKI.md`. Ostrzeżenie „dno poniżej obserwacji” (`z_max_floor`) liczy się z surowego `z_max`
+satelity. Kontrole (08, 10, 12, 12a, 13) nie czytają rastrów łączonych (test `test_independence`): mapa KŻ nie może oceniać
+modelu, którego jest częścią.
+
+**Ograniczenia.** Mapa jest amatorska (warunki „UWAGA”), opisuje dno z 23.05.2023, a dno poniżej 192,5 m sam autor mapy nazywa
+orientacyjnym. Po powodzi 2024 zmiany dna poniżej 193,8 m nie wykluczyliśmy (§4). Kwantyle P5/P95 są globalne, z jednego LOO.
+Przedział z KŻ ma szerokość do ok. 5 m (P95 − P5), więc to informacja o rzędzie głębokości, nie o pojedynczych metrach.
+
 ---
 
 ## 7. Aplikacja
@@ -679,6 +815,10 @@ przedziałem i liczbą obserwacji), historię linii brzegowych i stronę „O me
 Popup z zakresem głębokości ma dopisek „Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.”, a kafel „RMSE dna”
 podaje obciążenie bez przypisywania go układowi wysokości („przyczyna nieustalona”, §5.2) i udział pikseli, w których przedział
 [`z_min`, `z_max`] zawiera teren.
+Od planu 6 backend liczy strefy i popup na granicach łączonych z `model/all_kz/`: przedziały satelity po kalibracji (§5.6) i dno
+z mapy KŻ w strefie „zawsze woda” (§6.6); popup podaje źródło dna, a strona „O metodzie” ma akapit o obu poprawkach i wiersz
+źródeł z warunkami „UWAGA” dla warstwy „Dno wg mapy KŻ”. Zastrzeżenie przy zakresie głębokości podaje pokrycie kalibracji
+(„Przedział obejmuje dno w ok. 90 % sprawdzonych przypadków.”).
 Uruchomienie: `docker compose up --build` (README, „Uruchomienie”); `/api/zones` przez nginx: mediana 0,09 s (pomiar Task 11, M7 §8),
 więc kryterium BRIEF §11 (≤ 2 s) i M5 (< 1 s) jest spełnione.
 
@@ -705,8 +845,9 @@ dzięki powodzi 2024 i piętrzeniu 2025) `all` jest o +1,43<!-- eval:bottom_vs_n
 w aplikacji są orientacyjne co do metra i 1,5 m.
 
 **Nie nadaje się do:** nawigacji ani decyzji o bezpieczeństwie żeglugi (aplikacja: „Projekt naukowy. Nie służy do nawigacji.”);
-podawania głębokości z dokładnością lepszą niż ok. 1 m; traktowania przedziału [`z_min`, `z_max`] jako przedziału ufności (zawiera
-referencję w 6–31 % przypadków); dna poniżej ok. 192,9 m (nigdy nie obserwowane); rejonu żwirowni (dno zmienne); dna po powodzi
+podawania głębokości z dokładnością lepszą niż ok. 1 m; traktowania przedziału [`z_min`, `z_max`] jako przedziału ufności (surowy zawiera
+referencję w 6–31 % przypadków; po kalibracji ok. 90 % na pikselach brzegowych hold-outu, ale z konstrukcji, §5.6); dna poniżej ok.
+192,9 m (model go nie obserwował; aplikacja pokazuje tam orientacyjne dno z mapy KŻ, §6.6); rejonu żwirowni (dno zmienne); dna po powodzi
 2024 poniżej 193,8 m. Domyślny zapas 0,3 m w aplikacji **nie pokrywa** zmierzonych błędów.
 
 Lista ograniczeń (z notatek M1–M7 i ledgerów planów 1–4):
@@ -742,6 +883,11 @@ Lista ograniczeń (z notatek M1–M7 i ledgerów planów 1–4):
     Serwowany `all` = `pre_flood` poniżej ok. 196 m plus górny pierścień 196–198 m z obciążeniem ok. +1,4 m. Pytanie nie brzmi więc
     „`all` czy `pre_flood`”, tylko: czy pokazywać pierścień (informacja „tu przy wysokiej wodzie bywa woda”, ale z dnem za wysoko),
     czy go maskować / oznaczać w aplikacji jako mniej pewny. Na razie aplikacja serwuje `all` bez zmian (P4-R34).
+13. **Dno z mapy KŻ i kalibracja (plan 6):** dno w strefie „zawsze woda” pochodzi z amatorskiej mapy z 2023 r. (poniżej 192,5 m
+    orientacyjnej); jego błąd znamy tylko jako błąd interpolacji mapy (LOO), bez błędu pomiaru i układu wysokości KŻ; kwantyle
+    P5/P95 z ok. 100 punktów. Poszerzenie przedziałów stosujemy też do granic jednostronnych, choć zmierzyliśmy je tylko na
+    pikselach z obiema granicami (ekstrapolacja z decyzji autora); przy 194,5 m więcej niż połowa strefy „zawsze woda” jest przez to
+    ryzykowna. Pokrycie ok. 90 % jest dopasowane na tych samych resztach, na których je raportujemy (§5.6).
 
 ---
 
@@ -761,7 +907,9 @@ make kz-qc-ui                      # RĘCZNIE: kontrola punktów KŻ (wynik w re
 make kz-contours kz-gravel variant-d
 uv run python 06_water_levels.py   # dopisuje D do scenes.json (h_t bez zmian; bez retreningu RF)
 make evaluate kz-compare kz-overlay volume
-make holdout error-budget            # hold-out roczny (§5.5), zakres błędu wg pasm (§5.6)
+make holdout holdout-levels          # hold-out roczny i calibration.json (§5.5, §5.6), eksperyment źródeł poziomu (tylko pomiar)
+make kz-deep                         # rastry łączone model/all_kz, kz_loo.json, kz_deep.json (§6.6)
+make error-budget                    # zakres błędu wg pasm (§5.6); pole kz_loo z kz_loo.json, więc po kz-deep
 uv run pytest -q                   # w tym test spójności liczb tego raportu
 ```
 
@@ -788,5 +936,7 @@ punktów, `config_kz.yaml`). `make -n kz-compare` nie uruchamia RF ani klasyfika
 `rm data/processed/eval/model_choice.json && make evaluate` (analogicznie `kz_compare.json`, `variant_d.json`).
 `holdout` zależy tylko od kodu hold-outu (`12_holdout.py`, `mielizna/holdout.py`, `mielizna/budget.py`) i od
 `eval/model_choice.json`; buduje 7<!-- eval:holdout.json:n_folds --> modeli fałd w pamięci (rastrów nie zapisuje) i nie uruchamia RF ani klasyfikacji. `error-budget`
-czyta tylko JSON-y oceny (`holdout.json`, `bottom_vs_nmt.json`, `kz_points.json`, `volume.json`, `levels.json`). Po zmianie modelu:
+czyta tylko JSON-y oceny (`holdout.json`, `bottom_vs_nmt.json`, `kz_points.json`, `volume.json`, `levels.json`, opcjonalnie
+`kz_loo.json`). `kz-deep` nie ma łańcucha georef/OCR KŻ w prerekwizytach (make uruchomiłby OCR, który zmienia `id` punktów); po zmianie
+modelu albo kalibracji: `rm data/processed/eval/kz_deep.json && make kz-deep`. Po zmianie modelu:
 `rm data/processed/eval/holdout.json && make holdout error-budget`.

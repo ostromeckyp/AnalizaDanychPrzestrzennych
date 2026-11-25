@@ -1,7 +1,9 @@
 # Jak czytać kod: skąd bierze się głębokość
 
 Ten przewodnik mówi, w jakiej kolejności czytać pliki, żeby zrozumieć, jak ze zdjęć satelitarnych
-dostajemy głębokość wody i strefę (bezpieczna / ryzykowna / zbyt płytka). Opisuje część satelitarną.
+dostajemy głębokość wody i strefę (bezpieczna / ryzykowna / zbyt płytka). Kroki 1–5 opisują część satelitarną,
+kroki 6–7 dwie poprawki robione w pipeline'ie: poszerzenie przedziałów (kalibrację) i dno z mapy KŻ tam, gdzie satelita
+dna nie widzi.
 Każdy krok to jeden plik i jedna myśl. Nie musisz znać Pythona, żeby iść za opisem: w każdym pliku
 na górze jest komentarz „Co robi / Dlaczego tak / Wejście → wyjście".
 
@@ -74,6 +76,12 @@ obsługiwać przypadków szczególnych:
 Wynik to obiekt `Bounds` (`z_lo`, `z_hi`, `in_model`, plus `source` i `kz_conflict`, które dla satelity
 są stałe: 0 i False).
 
+Zaraz potem `load_products` wywołuje `combined_bounds` (ten sam plik `depth.py`). Jeśli istnieje katalog
+`data/processed/model/<okres>_kz/`, granice z satelity są **zastępowane** granicami z tego katalogu: po kalibracji
+i z dnem z mapy KŻ (kroki 6–7). Maska „w modelu” zostaje satelitarna. Bez tego katalogu (albo ze zmienną
+`MIELIZNA_NO_KZ`) backend liczy na samych granicach satelitarnych. Ostrzeżenie „dno poniżej obserwacji”
+(`z_max_floor`) zawsze pochodzi z surowych granic satelity.
+
 ### Krok 4. Głębokość i strefa: `depth.depth_range`, potem `depth.classify`
 
 Przy poziomie wody `h` (wybranym przez użytkownika albo bieżącym):
@@ -91,7 +99,48 @@ Funkcje `zones.py` tylko wywołują te dwie funkcje, bez własnej reguły.
 Po kliknięciu w mapę `point_info` znajduje piksel, składa z jego `z_lo`, `z_hi` jednoelementowy `Bounds`
 i wywołuje po kolei `classify`, `depth_range` i `point_kind`. `point_kind` rozróżnia: `land` (gdy `h ≤ z_lo`,
 dno nad wodą), `always_water` (gdy `z_lo = −∞`) i `model` (zwykły piksel). Z tego powstaje to, co widzisz
-w okienku: strefa, głębokość od–do i rezerwa pod stępką.
+w okienku: strefa, głębokość od–do i rezerwa pod stępką. Piksel z dnem z mapy KŻ ma skończone `z_lo`, więc
+dostaje `model`, a pole `bottom_source = "kz"` mówi, skąd jest dno (okienko pisze wtedy „Dno: mapa KŻ 2023”).
+
+### Krok 6. Kalibracja przedziałów: `pipeline/mielizna/calibration.py`, uruchamiana w `pipeline/14_kz_deep.py`
+
+Przedział z kroku 2 jest za wąski: w rocznym hold-oucie (model bez danego roku sprawdzany na liniach wody z tego
+roku) prawdziwe dno mieści się w `[z_min, z_max]` tylko w ok. 17 % przypadków. Dlatego go poszerzamy.
+
+- Skąd poszerzenie: skrypt `12_holdout.py` zbiera, o ile prawdziwe dno wyszło poza przedział (osobno w dół
+  i w górę), na pikselach brzegowych z **obiema** granicami. Funkcja `deltas` bierze z tych reszt 95. percentyl,
+  osobno dla każdego pasma wysokości (192,9–194,8 m i ≥ 194,8 m). Wynik: `data/processed/eval/calibration.json`.
+- Jak poszerzamy: funkcja `apply` odejmuje `δ_lo` od `z_min` i dodaje `δ_hi` do `z_max`. Pasmo piksela wybiera
+  `pixel_band`: środek przedziału, a gdy jedna granica jest nieskończona, ta druga. Poniżej 192,9 m używamy
+  poszerzeń pasma 192,9–194,8 m (hold-out nie ma tam danych).
+- Granice nieskończone (±∞) zostają nieskończone. Ale piksel „zawsze woda” ma skończone `z_max`, więc też jest
+  poszerzany w górę, choć poszerzenie zmierzono tylko na pikselach z obiema granicami. To świadoma decyzja
+  (ekstrapolacja), opisana w raporcie.
+
+`14_kz_deep.py` czyta surowe granice (tą samą regułą co `satellite_bounds`) i wywołuje `calibration.apply`.
+
+### Krok 7. Dno z mapy KŻ w głębokiej części: `pipeline/mielizna/kz_deep.py`, potem `pipeline/mielizna/combine.py`, funkcja `merge_kz`
+
+Piksel „zawsze woda” ma tylko górną granicę dna (ok. 193,05 m, a po kalibracji wyżej), więc satelita nie mówi,
+jak głęboko jest. Tam bierzemy dno z amatorskiej mapy KŻ Nysa (2023).
+
+1. `kz_deep.deep_surface` rozpina powierzchnię (siatka trójkątów, TIN) na punktach rzędnych KŻ i poziomicy 192,5 m.
+   Poziomicy 195,0 m celowo nie używa, bo to ona dawała większość sprzeczności z obrazami satelitarnymi.
+2. `kz_deep.loo` sprawdza tę powierzchnię: usuwa po kolei jeden punkt, buduje powierzchnię z pozostałych i patrzy,
+   o ile chybia w miejscu usuniętego punktu (błąd = odczyt − rzędna punktu; dodatni = powierzchnia płycej).
+   Z tych błędów bierze P5 (ok. −2,0 m) i P95 (ok. +3,0 m). To **błąd interpolacji mapy KŻ**, nie całkowity błąd:
+   nie widzi błędów samego pomiaru KŻ. Wynik: `eval/kz_loo.json`.
+3. `combine.merge_kz` dla piksela z `z_lo = −∞`, w którym powierzchnia ma wartość `kz`:
+   - dolna granica: `z_lo = kz − P95`,
+   - górna granica: `z_hi = min(z_hi, kz − P5)` (nie wyżej niż skalibrowana granica satelity),
+   - źródło 1 (KŻ).
+   Jeśli nawet `kz − P95` wychodzi wyżej niż `z_hi` satelity, mapa przeczy satelicie: piksel zostaje satelitarny
+   i dostaje znacznik sprzeczności (`kz_conflict`). Pozostałe piksele są bez zmian.
+
+Wynik zapisuje `14_kz_deep.py` w `data/processed/model/<okres>_kz/` (`bottom_zlo.tif`, `bottom_zhi.tif`,
+`bottom_source.tif`: bit 0 = KŻ, bit 1 = sprzeczność; `meta.json` z P5/P95). Te rastry wczytuje backend w kroku 3
+(`depth.combined_bounds`). Kontrole modelu (hold-out, LiDAR, KŻ, budżet) ich **nie** czytają, żeby mapa KŻ nie
+oceniała modelu, którego jest częścią.
 
 ## Przykład A: jeden piksel, cztery sceny
 
@@ -119,3 +168,30 @@ Zbyt płytko nie jest (`D_hi = 1,45 ≥ 0,5`), ale bezpiecznie też nie (`D_lo =
 Strefa: **RISK**.
 
 **Krok 5.** `h = 195,5 > z_lo = 194,05`, więc `point_kind` zwraca `model`.
+
+## Przykład B: piksel „zawsze woda” z dnem z mapy KŻ
+
+Też policzony prawdziwym kodem (ten sam test). Piksel był wodą na każdej scenie, więc `z_min = NaN`
+(flaga 1), a `z_max = 193,05` m (typowa wartość w tej strefie). Liczby kalibracji i KŻ to wartości z plików
+`calibration.json` i `model/all_kz/meta.json` zaokrąglone do 0,01 m: dla pasma 192,9–194,8 m `δ_hi = 2,23` m,
+a z LOO `P5 = −2,00` m i `P95 = +3,02` m. Rzędną mapy KŻ w tym pikselu przyjmujemy dla przykładu `kz = 190,0` m.
+
+**Krok 3 (`satellite_bounds`).** `z_lo = −∞`, `z_hi = 193,05`.
+
+**Krok 6 (`calibration.apply`).** Jedyna skończona granica to 193,05 m, więc pasmo 192,9–194,8 m.
+`z_lo` zostaje −∞, a `z_hi = 193,05 + 2,23 = 195,28`.
+
+**Krok 7 (`combine.merge_kz`).** `z_lo = 190,0 − 3,02 = 186,98` i `z_hi = min(195,28; 190,0 + 2,00) = 192,00`.
+Sprzeczności nie ma (186,98 nie leży wyżej niż 195,28), więc źródło to KŻ. Dno leży między 186,98 a 192,00 m n.p.m.
+
+**Krok 4** dla `h = 194,5` m (najczęstszy poziom), `d = 0,5` m i `m = 0,3` m:
+`D_lo = 194,5 − 192,00 = 2,50` m i `D_hi = 194,5 − 186,98 = 7,52` m. `D_lo = 2,50 ≥ 0,8`, więc strefa **SAFE**.
+
+**Krok 5.** `z_lo = 186,98` jest skończone, więc `point_kind` zwraca `model`; okienko pokazuje głębokość
+2,50–7,52 m i wiersz „Dno: mapa KŻ 2023 (orientacyjne; …)” z ostrzeżeniem, że mapa jest amatorska.
+
+**Ten sam piksel bez mapy KŻ** (powierzchnia KŻ go nie obejmuje): po kroku 6 zostaje `z_lo = −∞`, `z_hi = 195,28`.
+Wtedy `D_lo = 194,5 − 195,28 = −0,78` m (granica dna może leżeć nad wodą), a `D_hi = +∞`. Ani bezpiecznie, ani na
+pewno za płytko: strefa **RISK**, a `point_kind` zwraca `always_water`. Bez kalibracji (`z_hi = 193,05`) ten piksel
+byłby bezpieczny (`D_lo = 1,45` m). Tak działa ekstrapolacja kalibracji na granice jednostronne (krok 6).
+
