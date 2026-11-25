@@ -11,5 +11,6 @@ export type Visible = {
   shorelines: boolean;
   marinas: boolean;
   gravel: boolean;
+  kzDeep: boolean;
   hazards: boolean;
 };

@@ -39,6 +39,8 @@ export function MapPage() {
             marinas={map.marinas}
             gravel={map.gravel}
             gravelAttribution={map.gravelAttribution}
+            kzDeep={map.kzDeep}
+            kzDeepAttribution={map.kzDeepAttribution}
             hazards={map.hazards}
             hazardsAttribution={map.hazardsAttribution}
             visible={map.visible}

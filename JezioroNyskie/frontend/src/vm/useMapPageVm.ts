@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { type Gravel, type Hazards, type Marinas, type Meta, type Zones } from '../api/client';
+import { type Gravel, type Hazards, type KzDeep, type Marinas, type Meta, type Zones } from '../api/client';
 import type { ParameterPanelProps } from '../components/panel/ParameterPanel';
 import type { HazardPopupModel } from '../components/popup/types';
 import type { LayerKey, LevelMode } from '../components/panel/types';
@@ -9,6 +9,7 @@ import { useBulletinVm } from './useBulletinVm';
 import { useCapacityVm } from './useCapacityVm';
 import { useCurrentLevelVm } from './useCurrentLevelVm';
 import { useGravelVm } from './useGravelVm';
+import { useKzDeepVm } from './useKzDeepVm';
 import { toHazardPopupModel, useHazardsVm } from './useHazardsVm';
 import { useMarinasVm } from './useMarinasVm';
 import { useMetaVm } from './useMetaVm';
@@ -24,6 +25,7 @@ const DEFAULT_VISIBLE: Record<LayerKey, boolean> = {
   shorelines: false,
   marinas: true,
   gravel: true,
+  kzDeep: true,
   hazards: true,
 };
 
@@ -39,6 +41,8 @@ export interface MapPageVm {
     marinas?: Marinas;
     gravel?: Gravel;
     gravelAttribution?: string;
+    kzDeep?: KzDeep;
+    kzDeepAttribution?: string;
     hazards?: Hazards;
     hazardsAttribution?: string;
     bottomLayer?: { url: string; coordinates: [number, number][] };
@@ -81,6 +85,7 @@ export function useMapPageVm(): MapPageVm {
   const level = useCurrentLevelVm();
   const { marinas } = useMarinasVm();
   const { gravel, attribution: gravelAttribution } = useGravelVm();
+  const { kzDeep, attribution: kzDeepAttribution } = useKzDeepVm();
   const { hazards, attribution: hazardsAttribution } = useHazardsVm();
 
   const [hUser, setHUser] = useState<number>();
@@ -203,6 +208,8 @@ export function useMapPageVm(): MapPageVm {
       marinas,
       gravel,
       gravelAttribution,
+      kzDeep,
+      kzDeepAttribution,
       hazards,
       hazardsAttribution,
       bottomLayer: layer(meta?.layers.bottom),

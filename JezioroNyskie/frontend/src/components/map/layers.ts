@@ -16,11 +16,13 @@ export const IDS = {
   marinas: 'marinas',
   marinasLetters: 'marinas-letters',
   gravel: 'gravel',
+  kzDeep: 'kz-deep',
   hazards: 'hazards',
   pin: 'pin',
 } as const;
 
 export const HATCH_IMAGE = 'risk-hatch';
+export const KZ_HATCH_IMAGE = 'kz-hatch';
 export const POI_IMAGE = { marina: 'poi-P', slipway: 'poi-S' } as const;
 
 const ORTO_TILES =
@@ -90,6 +92,14 @@ export const gravelLayer = (theme: ThemeName): LayerSpecification => ({
   type: 'line',
   source: IDS.gravel,
   paint: { 'line-color': ZONE_COLORS[theme].danger, 'line-width': 2.5, 'line-dasharray': [3, 2] },
+});
+
+// Dno wg mapy KŻ: kreskowane wypełnienie (kreski w drugą stronę niż strefa ryzyka, kolor inny niż obrys żwirowni).
+export const kzDeepLayer = (): LayerSpecification => ({
+  id: IDS.kzDeep,
+  type: 'fill',
+  source: IDS.kzDeep,
+  paint: { 'fill-pattern': KZ_HATCH_IMAGE, 'fill-opacity': 0.8 },
 });
 
 // Przeszkody z locji: pomarańczowe kółka z ciemną obwódką (kolory z theme.ts), nad przystaniami, pod pinezką.

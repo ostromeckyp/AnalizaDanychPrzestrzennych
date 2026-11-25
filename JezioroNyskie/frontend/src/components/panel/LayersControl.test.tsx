@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { LayersControl } from './LayersControl';
 
-const visible = { zones: true, bottom: false, uncertainty: false, shorelines: false, marinas: true, gravel: true, hazards: true };
+const visible = { zones: true, bottom: false, uncertainty: false, shorelines: false, marinas: true, gravel: true, kzDeep: true, hazards: true };
 
 describe('LayersControl', () => {
   it('list variant: checkboxes with labels', async () => {

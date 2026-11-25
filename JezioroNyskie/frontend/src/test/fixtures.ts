@@ -1,5 +1,5 @@
 // Wspólne dane testowe zgodne ze schematem API (wartości punktów jak w fixture backendu).
-import type { CurrentLevel, Gravel, Hazards, Meta, Point, Scene, Zones, ZoneFeature } from '../api/client';
+import type { CurrentLevel, Gravel, Hazards, KzDeep, Meta, Point, Scene, Zones, ZoneFeature } from '../api/client';
 
 const corners: [number, number][] = [
   [17.0, 50.5],
@@ -47,6 +47,7 @@ export const meta: Meta = {
     kz_bias: null,
     levels_mae_ab: null,
     variant_d_within_0_2: null,
+    calibration_coverage: 0.9,
   },
   area_level: {
     nodes_area_km2: [10.5, 12.0, 14.0],
@@ -235,6 +236,17 @@ export const hazards: Hazards = {
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [17.285333, 50.466667] },
       properties: { ...hazardProps, id: 'grzbiet', name: 'Grzbiet testowy', kind: 'spłycenie', z: 195.5, z_kind: 'grzbiet', description: 'Spłycenie przy niskim stanie.', note: '' },
+    },
+  ],
+};
+
+export const kzDeep: KzDeep = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: square(17.03, 50.47) },
+      properties: { attribution: 'Mapa KŻ Nysa (W. Wróblewski, 2023)', note: 'dno wg mapy KŻ' },
     },
   ],
 };

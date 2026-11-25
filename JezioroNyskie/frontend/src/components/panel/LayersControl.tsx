@@ -17,6 +17,7 @@ const LAYERS: [LayerKey, string][] = [
   ['shorelines', 'Historyczne linie brzegowe'],
   ['marinas', 'Przystanie i slipy (OSM)'],
   ['gravel', 'Dno zmienne (eksploatacja kruszywa)'],
+  ['kzDeep', 'Dno wg mapy KŻ'],
   ['hazards', 'Przeszkody z locji'],
 ];
 

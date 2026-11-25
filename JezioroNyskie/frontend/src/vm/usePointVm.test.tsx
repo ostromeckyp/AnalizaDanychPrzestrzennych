@@ -54,11 +54,45 @@ describe('toPopupModel', () => {
   });
 
   it('A: depth range carries the "not a confidence interval" caveat; single value and other variants do not', () => {
-    const caveat = 'Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.';
+    const caveat = 'Przedział obejmuje dno w ok. 90 % sprawdzonych przypadków.';
     expect(toPopupModel(pointModel, meta).caveat).toBe(caveat);
     expect(toPopupModel({ ...pointModel, depth_min: 1.5, depth_max: 1.5 }, meta).caveat).toBe(caveat);
     expect(toPopupModel({ ...pointModel, depth_min: null, depth_max: null }, meta).caveat).toBeUndefined();
     for (const p of [pointAlwaysWater, pointLand, pointOutside]) expect(toPopupModel(p, meta).caveat).toBeUndefined();
+  });
+
+  it('A: caveat uses calibration coverage from meta rounded to whole percent, with a fallback', () => {
+    const withCov = (c: number | null) => ({ ...meta, accuracy: { ...meta.accuracy, calibration_coverage: c } });
+    expect(toPopupModel(pointModel, withCov(0.9)).caveat).toBe('Przedział obejmuje dno w ok. 90 % sprawdzonych przypadków.');
+    expect(toPopupModel(pointModel, withCov(0.874)).caveat).toBe('Przedział obejmuje dno w ok. 87 % sprawdzonych przypadków.');
+    expect(toPopupModel(pointModel, withCov(null)).caveat).toBe('Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.');
+  });
+
+  it('A: bottom source row for satellite and for KŻ (with interpolation error bounds and caveat)', () => {
+    const sat = toPopupModel(pointModel, meta);
+    expect(sat.rows).toContainEqual({ term: 'Dno', desc: 'model satelitarny' });
+    expect(sat.caveat).not.toMatch(/Mapa KŻ/);
+    const kz = toPopupModel({ ...pointModel, bottom_source: 'kz', kz_interp: { p5: -2.0, p95: 3.0 } }, meta);
+    expect(kz.rows).toContainEqual({
+      term: 'Dno',
+      desc: `mapa KŻ 2023 (orientacyjne; błąd interpolacji od −3,0 do +2,0${NB}m)`,
+    });
+    expect(kz.caveat).toBe(
+      'Przedział obejmuje dno w ok. 90 % sprawdzonych przypadków. Mapa KŻ opisuje dno z 2023 r.; poniżej 192,5 m jest orientacyjna.',
+    );
+    expect(kz.value).toBe(`1,00–2,00${NB}m`);
+    const kzNoInterp = toPopupModel({ ...pointModel, bottom_source: 'kz', kz_interp: null }, meta);
+    expect(kzNoInterp.rows).toContainEqual({ term: 'Dno', desc: 'mapa KŻ 2023 (orientacyjne)' });
+  });
+
+  it('B: KŻ conflict adds a warning row and no source row', () => {
+    const m = toPopupModel({ ...pointAlwaysWater, kz_conflict: true }, meta);
+    expect(m.rows).toContainEqual({
+      term: 'Mapa KŻ jest tu sprzeczna z satelitą',
+      desc: 'pokazujemy tylko model satelitarny.',
+      warning: true,
+    });
+    expect(toPopupModel(pointAlwaysWater, meta).rows.some((r) => /sprzeczna z satelitą/.test(r.term))).toBe(false);
   });
 
   it('A: zone label follows API zone, never computed', () => {
@@ -70,7 +104,7 @@ describe('toPopupModel', () => {
   it('A: negative or missing clearance and missing optional numbers produce no artefacts', () => {
     const m = toPopupModel({ ...pointModel, clearance_min: null, clearance_max: null, z: null, unc: null, obs_count: null }, meta);
     expect(artefacts(m)).not.toMatch(/null|NaN|Infinity|undefined|—/);
-    expect(m.rows.map((r) => r.term)).toEqual(['Położenie']);
+    expect(m.rows.map((r) => r.term)).toEqual(['Dno', 'Położenie']);
     const neg = toPopupModel({ ...pointModel, clearance_min: -0.5, clearance_max: -0.1 }, meta);
     expect(neg.note).not.toMatch(/-|−/);
   });

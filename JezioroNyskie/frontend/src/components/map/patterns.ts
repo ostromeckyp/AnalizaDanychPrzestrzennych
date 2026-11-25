@@ -24,6 +24,20 @@ export function makeHatch(theme: ThemeName): PixelImage {
   return { width: size, height: size, data };
 }
 
+// Kreskowanie „Dno wg mapy KŻ”: kreski \ na półprzezroczystym tle, w kolorze akcentu POI (odróżnia od żwirowni i strefy ryzyka).
+export function makeKzHatch(theme: ThemeName): PixelImage {
+  const size = 16;
+  const [fg] = [rgb(POI_COLORS[theme].fg)];
+  const data = new Uint8ClampedArray(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const line = (x - y + size) % 8 < 2;
+      data.set(line ? [fg[0], fg[1], fg[2], 255] : [fg[0], fg[1], fg[2], 40], (y * size + x) * 4);
+    }
+  }
+  return { width: size, height: size, data };
+}
+
 // Bitmapy 5×7 liter znaczników: P = przystań, S = slip.
 const GLYPHS: Record<'P' | 'S', string[]> = {
   P: ['1111.', '1...1', '1...1', '1111.', '1....', '1....', '1....'],

@@ -8,11 +8,13 @@ import { withTheme } from '../../urls';
 import {
   HATCH_IMAGE,
   IDS,
+  KZ_HATCH_IMAGE,
   POI_IMAGE,
   baseStyle,
   gravelLayer,
   hazardLayer,
   hazardPaint,
+  kzDeepLayer,
   marinaLayers,
   pinLayer,
   pinPaint,
@@ -20,7 +22,7 @@ import {
   shorelineLayers,
   zoneLayers,
 } from './layers';
-import { makeHatch, poiLetters } from './patterns';
+import { makeHatch, makeKzHatch, poiLetters } from './patterns';
 import type { Bbox, GeoJsonData, ImageLayerData, Visible } from './types';
 
 export interface MapViewProps {
@@ -35,6 +37,9 @@ export interface MapViewProps {
   gravel?: GeoJsonData;
   /** Atrybucja obrysu (z API), dopisywana do kontrolki atrybucji przez źródło warstwy. */
   gravelAttribution?: string;
+  /** Powierzchnia „Dno wg mapy KŻ”; warstwa powstaje dopiero z danymi (pusta kolekcja = brak warstwy). */
+  kzDeep?: GeoJsonData;
+  kzDeepAttribution?: string;
   /** Przeszkody z locji; warstwa powstaje dopiero z danymi (pusta odpowiedź = brak warstwy). */
   hazards?: GeoJsonData;
   /** Atrybucja przeszkód (z API), dopisywana do kontrolki atrybucji przez źródło warstwy. */
@@ -111,6 +116,7 @@ export function MapView(props: MapViewProps) {
       const t = propsRef.current.theme;
       appliedTheme.current = t;
       map.addImage(HATCH_IMAGE, makeHatch(t));
+      map.addImage(KZ_HATCH_IMAGE, makeKzHatch(t));
       const letters = poiLetters(t);
       map.addImage(POI_IMAGE.marina, letters.P);
       map.addImage(POI_IMAGE.slipway, letters.S);
@@ -180,6 +186,21 @@ export function MapView(props: MapViewProps) {
     setVis(map, [IDS.gravel], propsRef.current.visible.gravel);
   }, [ready, gravel, gravelAttribution]);
 
+  // Dno wg mapy KŻ: pod żwirownią (i nad strefami), źródło z atrybucją powstaje przy pierwszych danych.
+  const { kzDeep, kzDeepAttribution } = props;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map || !kzDeep) return;
+    const src = map.getSource(IDS.kzDeep) as GeoJSONSource | undefined;
+    if (src) {
+      src.setData(kzDeep as never);
+      return;
+    }
+    map.addSource(IDS.kzDeep, { type: 'geojson', data: kzDeep as never, attribution: kzDeepAttribution });
+    map.addLayer(kzDeepLayer(), map.getLayer(IDS.gravel) ? IDS.gravel : IDS.marinas);
+    setVis(map, [IDS.kzDeep], propsRef.current.visible.kzDeep);
+  }, [ready, kzDeep, kzDeepAttribution]);
+
   // Przeszkody z locji: tak jak żwirownia, źródło z atrybucją powstaje przy pierwszych danych.
   const { hazards, hazardsAttribution } = props;
   useEffect(() => {
@@ -234,6 +255,7 @@ export function MapView(props: MapViewProps) {
     if (map.getLayer(IDS.gravel)) map.setPaintProperty(IDS.gravel, 'line-color', c.danger);
     if (map.getLayer(IDS.hazards)) for (const [k, v] of Object.entries(hazardPaint(theme))) map.setPaintProperty(IDS.hazards, k, v);
     map.updateImage(HATCH_IMAGE, makeHatch(theme));
+    map.updateImage(KZ_HATCH_IMAGE, makeKzHatch(theme));
     const letters = poiLetters(theme);
     map.updateImage(POI_IMAGE.marina, letters.P);
     map.updateImage(POI_IMAGE.slipway, letters.S);
@@ -251,8 +273,9 @@ export function MapView(props: MapViewProps) {
     setVis(map, [IDS.shorelines, IDS.shorelinesDashed], visible.shorelines);
     setVis(map, [IDS.marinas, IDS.marinasLetters], visible.marinas);
     setVis(map, [IDS.gravel], visible.gravel);
+    setVis(map, [IDS.kzDeep], visible.kzDeep);
     setVis(map, [IDS.hazards], visible.hazards);
-  }, [ready, visible.zones, visible.bottom, visible.uncertainty, visible.shorelines, visible.marinas, visible.gravel, visible.hazards, props.bottomLayer, props.uncertaintyLayer, props.gravel, props.hazards]);
+  }, [ready, visible.zones, visible.bottom, visible.uncertainty, visible.shorelines, visible.marinas, visible.gravel, visible.kzDeep, visible.hazards, props.bottomLayer, props.uncertaintyLayer, props.gravel, props.kzDeep, props.hazards]);
 
   useEffect(() => {
     const map = mapRef.current;

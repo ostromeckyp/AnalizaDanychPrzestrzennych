@@ -45,6 +45,7 @@ vi.mock('../api/client', async (orig) => {
       currentLevel: vi.fn(),
       marinas: vi.fn(),
       gravel: vi.fn(),
+      kzDeep: vi.fn(),
       hazards: vi.fn(),
       bulletinLatest: vi.fn(),
       capacityToLevel: vi.fn(),
@@ -78,6 +79,7 @@ beforeEach(() => {
   m.currentLevel.mockResolvedValue({ ...currentLevel, h: 195.6 });
   m.marinas.mockResolvedValue({ type: 'FeatureCollection', features: [] });
   m.gravel.mockRejectedValue(new Error('404'));
+  m.kzDeep.mockRejectedValue(new Error("404"));
   m.hazards.mockResolvedValue({ type: 'FeatureCollection', features: [], source: '', source_url: '' });
   m.capacityToLevel.mockResolvedValue({ h: 195, in_table: true } as never);
   m.levelToCapacity.mockResolvedValue({ v: 45.6, in_table: true } as never);

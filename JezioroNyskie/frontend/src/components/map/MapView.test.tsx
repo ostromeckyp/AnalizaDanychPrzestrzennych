@@ -81,7 +81,7 @@ const base: MapViewProps = {
   zones: fc(1),
   bottomLayer: { url: '/api/layers/bottom.png', coordinates: [[17, 50.5], [17.1, 50.5], [17.1, 50.4], [17, 50.4]] },
   uncertaintyLayer: { url: '/api/layers/unc.png?v=1', coordinates: [[17, 50.5], [17.1, 50.5], [17.1, 50.4], [17, 50.4]] },
-  visible: { zones: true, bottom: true, uncertainty: true, shorelines: true, marinas: true, gravel: true, hazards: true },
+  visible: { zones: true, bottom: true, uncertainty: true, shorelines: true, marinas: true, gravel: true, kzDeep: true, hazards: true },
   basemap: 'osm',
   npp: 195.91,
   onMapClick: vi.fn(),
@@ -161,6 +161,24 @@ describe('MapView', () => {
     );
     rerender(<MapView {...base} gravel={g} visible={{ ...base.visible, gravel: false }} />);
     expect(h.fns.setLayoutProperty).toHaveBeenCalledWith('gravel', 'visibility', 'none');
+  });
+
+  it('warstwa dna wg mapy KŻ: wypełnienie z kreskowaniem pod żwirownią; bez danych brak warstwy', () => {
+    mount();
+    expect(h.layers.has('kz-deep')).toBe(false);
+    cleanup();
+    const k = { type: 'FeatureCollection', features: [], n: 1 };
+    const { rerender } = mount({ kzDeep: k, kzDeepAttribution: 'Mapa KŻ Nysa (W. Wróblewski, 2023)' });
+    expect(h.fns.addSource).toHaveBeenCalledWith(
+      'kz-deep',
+      expect.objectContaining({ type: 'geojson', attribution: 'Mapa KŻ Nysa (W. Wróblewski, 2023)' }),
+    );
+    expect(h.fns.addLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'kz-deep', type: 'fill', paint: expect.objectContaining({ 'fill-pattern': 'kz-hatch' }) }),
+      'marinas',
+    );
+    rerender(<MapView {...base} kzDeep={k} visible={{ ...base.visible, kzDeep: false }} />);
+    expect(h.fns.setLayoutProperty).toHaveBeenCalledWith('kz-deep', 'visibility', 'none');
   });
 
   it('warstwa przeszkód: źródło z atrybucją, kółka z ciemną obwódką, widoczność przez layout; bez danych brak warstwy', () => {

@@ -20,8 +20,24 @@ const ZONE_NAMES: Record<ZoneKey, string> = { safe: 'Bezpieczna', risk: 'Ryzykow
 // Każda liczba z API może być null (a zepsuty backend da NaN); brakujące wiersze po prostu pomijamy.
 const num = (x: number | null | undefined): x is number => typeof x === 'number' && Number.isFinite(x);
 
-// Przedział [z_min, z_max] zawiera teren w ok. 6 % pikseli kontrolnych (raport §5.2) — żeglarz musi to wiedzieć przy zakresie.
-const RANGE_CAVEAT = 'Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.';
+// Przedział [z_min, z_max] jest skalibrowany na pikselach kontrolnych (nie jest przedziałem ufności) — żeglarz musi to wiedzieć przy zakresie.
+const RANGE_CAVEAT_FALLBACK = 'Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.';
+const KZ_CAVEAT = 'Mapa KŻ opisuje dno z 2023 r.; poniżej 192,5 m jest orientacyjna.';
+
+function rangeCaveat(meta: Meta): string {
+  const c = meta.accuracy.calibration_coverage;
+  return num(c) ? `Przedział obejmuje dno w ok. ${Math.round(c * 100)} % sprawdzonych przypadków.` : RANGE_CAVEAT_FALLBACK;
+}
+
+/** Wiersz „Dno”: skąd pochodzi powierzchnia dna (model satelitarny albo mapa KŻ z błędem interpolacji). */
+function bottomSourceRow(p: Point) {
+  if (p.bottom_source !== 'kz') return { term: 'Dno', desc: 'model satelitarny' };
+  const k = p.kz_interp;
+  const err = k && num(k.p5) && num(k.p95) ? `; błąd interpolacji od −${fmtNum(Math.abs(k.p95), 1)} do +${fmtNum(Math.abs(k.p5), 1)}${NBSP}m` : '';
+  return { term: 'Dno', desc: `mapa KŻ 2023 (orientacyjne${err})` };
+}
+
+const KZ_CONFLICT_ROW = { term: 'Mapa KŻ jest tu sprzeczna z satelitą', desc: 'pokazujemy tylko model satelitarny.', warning: true };
 
 const range = (a: number, b: number) => (a === b ? fmtM(a) : `${fmtNum(a, 2)}–${fmtNum(b, 2)}${NBSP}m`);
 
@@ -67,14 +83,15 @@ function baseModel(p: Point, meta: Meta): PopupModel {
     case 'model': {
       const { depth_min: lo, depth_max: hi } = p;
       const depth = num(lo) && num(hi) ? range(lo, hi) : undefined;
+      const isKz = p.bottom_source === 'kz';
       return {
         variant: 'A',
         title: 'Głębokość w tym miejscu',
         value: depth ?? 'Brak oceny głębokości',
         note: clearanceNote(p),
         zone: zoneOf(p, true),
-        rows: [...heightRow('Wysokość dna', p), ...scenes(p), location(p)],
-        ...(depth ? { caveat: RANGE_CAVEAT } : {}),
+        rows: [bottomSourceRow(p), ...heightRow('Wysokość dna', p), ...scenes(p), location(p)],
+        ...(depth ? { caveat: isKz ? `${rangeCaveat(meta)} ${KZ_CAVEAT}` : rangeCaveat(meta) } : isKz ? { caveat: KZ_CAVEAT } : {}),
       };
     }
     case 'always_water': {
@@ -89,6 +106,7 @@ function baseModel(p: Point, meta: Meta): PopupModel {
           ...(num(floor) ? [{ term: 'Wysokość dna', desc: `< ${fmtLevel(floor)}` }] : []),
           { term: 'Obserwacje satelitarne', desc: 'brak (zawsze woda)' },
           location(p),
+          ...(p.kz_conflict ? [KZ_CONFLICT_ROW] : []),
         ],
       };
     }
