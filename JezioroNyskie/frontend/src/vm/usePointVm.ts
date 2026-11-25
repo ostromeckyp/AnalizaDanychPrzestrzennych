@@ -22,7 +22,8 @@ const num = (x: number | null | undefined): x is number => typeof x === 'number'
 
 // Przedział [z_min, z_max] jest skalibrowany na pikselach kontrolnych (nie jest przedziałem ufności) — żeglarz musi to wiedzieć przy zakresie.
 const RANGE_CAVEAT_FALLBACK = 'Zakres głębokości jest orientacyjny — nie jest przedziałem ufności.';
-const KZ_CAVEAT = 'Mapa KŻ opisuje dno z 2023 r.; poniżej 192,5 m jest orientacyjna.';
+// Warunki „UWAGA” mapy KŻ (data/reference/KZ_ZRODLO_I_WARUNKI.md) muszą iść za każdym produktem pochodnym (R10).
+const KZ_CAVEAT = 'Mapa KŻ opisuje dno z 2023 r.; poniżej 192,5 m jest orientacyjna. Mapa amatorska; ryzyko korzystania ponosi użytkownik.';
 
 function rangeCaveat(meta: Meta): string {
   const c = meta.accuracy.calibration_coverage;

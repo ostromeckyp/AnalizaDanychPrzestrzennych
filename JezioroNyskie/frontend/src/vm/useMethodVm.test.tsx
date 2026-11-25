@@ -195,4 +195,65 @@ describe('useMethodVm', () => {
     expect(without.range).toBe('brak danych');
     expect(without.dominant).toBe('—');
   });
+
+  it('band note explains the deep cell is the KŻ map interpolation error, only when that cell is shown', async () => {
+    const mk = (withLoo: boolean) => ({
+      ...meta,
+      validation: {
+        checks: [],
+        lidar_note: 'x',
+        bands: [
+          { band: '< 192,9 m', range_m: null, dominant: null, note: 'n', ...(withLoo ? { kz_loo: { n: 93, mae: 1.034, p5: -1.59, p95: 3.05 } } : {}) },
+        ],
+      },
+    });
+    metaMock.mockResolvedValue(mk(true));
+    const a = setup();
+    await waitFor(() => expect(a.result.current.status).toBe('ready'));
+    expect(a.result.current.validation!.bandsNote).toMatch(/< 192,9 m .*błąd interpolacji mapy KŻ .*nie błąd modelu/);
+    metaMock.mockResolvedValue(mk(false));
+    const b = setup();
+    await waitFor(() => expect(b.result.current.status).toBe('ready'));
+    expect(b.result.current.validation!.bandsNote).toBe('Główne źródło = kontrola z największym błędem w paśmie.');
+  });
+
+  it('deep-bottom paragraph: KŻ interpolation error (never "dokładność"), calibration as extrapolation', async () => {
+    metaMock.mockResolvedValue({
+      ...meta,
+      accuracy: { ...meta.accuracy, calibration_coverage: 0.9017, holdout_in_bounds: 0.1718 },
+      validation: {
+        checks: [],
+        lidar_note: 'x',
+        bands: [{ band: '< 192,9 m', range_m: null, dominant: null, note: 'n', kz_loo: { n: 93, mae: 1.034, p5: -1.59, p95: 3.05 } }],
+      },
+    });
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    const [kz, cal] = result.current.deepBottom!.paragraphs;
+    expect(kz).toContain('Błąd interpolacji mapy KŻ (każdy punkt odłożony i odtworzony z pozostałych, n = 93): MAE 1,03\u00a0m.');
+    expect(kz).toContain('nie całkowity błąd dna');
+    expect(kz).toContain('„Dno wg mapy KŻ”');
+    expect(kz).not.toMatch(/dokładnoś/i);
+    expect(cal).toContain('ok. 90% sprawdzonych przypadków (przed poszerzeniem 17%)');
+    expect(cal).toContain('ekstrapolacja');
+  });
+
+  it('deep-bottom paragraph without eval numbers has no placeholders', async () => {
+    metaMock.mockResolvedValue({ ...meta, validation: undefined });
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    const text = result.current.deepBottom!.paragraphs.join(' ');
+    expect(text).not.toMatch(/MAE|NaN|undefined|—%/);
+  });
+
+  it('sources list the KŻ deep-bottom layer with the UWAGA terms', async () => {
+    metaMock.mockResolvedValue(meta);
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    const row = result.current.sources.find((s) => s.name.startsWith('Dno wg mapy KŻ'))!;
+    expect(row.license).toContain('warunki „UWAGA”');
+    expect(row.license).toContain('całość ryzyka korzystania ponosi użytkownik');
+    expect(row.license).toContain('niekomercyjnych');
+  });
 });
+

@@ -78,7 +78,8 @@ describe('toPopupModel', () => {
       desc: `mapa KŻ 2023 (orientacyjne; błąd interpolacji od −3,0 do +2,0${NB}m)`,
     });
     expect(kz.caveat).toBe(
-      'Przedział obejmuje dno w ok. 90 % sprawdzonych przypadków. Mapa KŻ opisuje dno z 2023 r.; poniżej 192,5 m jest orientacyjna.',
+      'Przedział obejmuje dno w ok. 90 % sprawdzonych przypadków. Mapa KŻ opisuje dno z 2023 r.; poniżej 192,5 m jest orientacyjna.' +
+        ' Mapa amatorska; ryzyko korzystania ponosi użytkownik.',
     );
     expect(kz.value).toBe(`1,00–2,00${NB}m`);
     const kzNoInterp = toPopupModel({ ...pointModel, bottom_source: 'kz', kz_interp: null }, meta);

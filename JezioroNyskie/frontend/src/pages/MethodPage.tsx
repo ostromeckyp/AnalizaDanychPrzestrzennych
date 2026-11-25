@@ -57,6 +57,14 @@ export function MethodPage() {
           <AccuracyTiles tiles={vm.tiles} />
         </section>
         {vm.validation && <ValidationSection {...vm.validation} />}
+        {vm.deepBottom && (
+          <section aria-labelledby="m-deep">
+            <h2 id="m-deep">{vm.deepBottom.title}</h2>
+            {vm.deepBottom.paragraphs.map((t) => (
+              <p key={t} className="method__note">{t}</p>
+            ))}
+          </section>
+        )}
         <section aria-labelledby="m-src">
           <h2 id="m-src">Źródła danych</h2>
           <SourcesTable rows={vm.sources} />

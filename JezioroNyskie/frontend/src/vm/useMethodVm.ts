@@ -1,3 +1,4 @@
+import type { Meta } from '../api/client';
 import { fmtDate, fmtM, fmtNum, fmtPct, plScenes } from '../format';
 import { useMetaVm } from './useMetaVm';
 
@@ -22,6 +23,9 @@ export type MethodValidation = {
   lidarNote: string;
 };
 
+// Akapit „Dno głębokiej części i kalibracja”: liczby z /api/meta (pasmo < 192,9 m budżetu i pokrycie kalibracji).
+export type MethodDeepBottom = { title: string; paragraphs: string[] };
+
 export interface MethodVm {
   status: 'loading' | 'error' | 'ready';
   retry(): void;
@@ -30,6 +34,7 @@ export interface MethodVm {
   chart?: MethodChart;
   tiles: MethodTile[];
   validation?: MethodValidation;
+  deepBottom?: MethodDeepBottom;
   sources: MethodSource[];
   credit: string;
 }
@@ -60,6 +65,13 @@ const SOURCES: MethodSource[] = [
     use: 'tabela pojemność ↔ rzędna (wariant B); obrys żwirowni i porównanie dna; współrzędne i rzędne przeszkód z podpisów zdjęć w locji (https://kz.nysa.pl/jezioro-nyskie/locja/)',
     license:
       'bezpłatna, niekomercyjna; dane mogą zawierać błędy; źródło: Wiktor Wróblewski, KŻ Nysa, aktualizacja 23.05.2023',
+  },
+  {
+    // Warstwa pochodna mapy KŻ: warunki „UWAGA” (data/reference/KZ_ZRODLO_I_WARUNKI.md) przy każdym produkcie pochodnym (R10).
+    name: 'Dno wg mapy KŻ (warstwa na mapie)',
+    use: 'rzędne dna tam, gdzie jezioro nigdy nie odsłoniło dna („zawsze woda”): punkty rzędnych i poziomica 192,5 m mapy KŻ Nysa',
+    license:
+      'warunki „UWAGA” mapy KŻ: dane pozyskane sposobem amatorskim, mogą zawierać błędy; tylko do celów niekomercyjnych; całość ryzyka korzystania ponosi użytkownik; dno poniżej 192,5 m orientacyjne; źródło: Wiktor Wróblewski, KŻ Nysa, 23.05.2023',
   },
   {
     name: 'OpenStreetMap',
@@ -224,10 +236,14 @@ export function useMethodVm(): MethodVm {
           dominant: b.dominant ?? (!b.range_m && b.kz_loo ? `błąd interpolacji KŻ: MAE ${fmtM(b.kz_loo.mae)}` : '—'),
           note: b.range_m ? '' : b.note,
         })),
-        bandsNote: 'Główne źródło = kontrola z największym błędem w paśmie.',
+        bandsNote: val.bands.some((b) => !b.range_m && b.kz_loo)
+          ? 'Główne źródło = kontrola z największym błędem w paśmie. Wyjątek: w paśmie < 192,9 m model nie ma liczby, a komórka podaje błąd interpolacji mapy KŻ (mapa sprawdzona sama ze sobą), nie błąd modelu.'
+          : 'Główne źródło = kontrola z największym błędem w paśmie.',
         lidarNote: val.lidar_note,
       }
     : undefined;
+
+  const deepBottom = deepBottomOf(meta);
 
   const al = meta.area_level;
   const points: ChartPoint[] = [];
@@ -260,6 +276,33 @@ export function useMethodVm(): MethodVm {
     steps,
     tiles,
     validation,
+    deepBottom,
     chart: { points, nodes, npp: meta.npp, maxPp: meta.max_pp, legend },
   };
+}
+
+/** Akapity o dnie z mapy KŻ i o kalibracji przedziałów; liczby tylko z meta (bez nich zdanie bez liczby). */
+function deepBottomOf(meta: Meta): MethodDeepBottom {
+  const loo = meta.validation?.bands.find((b) => b.kz_loo)?.kz_loo;
+  const kz =
+    'Tam, gdzie jezioro nigdy nie odsłoniło dna (strefa „zawsze woda”), satelita wie tylko, że dno leży niżej niż ' +
+    'najniższy zaobserwowany poziom wody. W tej strefie dno bierzemy z amatorskiej mapy KŻ Nysa (2023): z punktów ' +
+    'rzędnych i poziomicy 192,5 m, bez poziomicy 195,0 m, która najczęściej przeczyła obrazom satelitarnym. ' +
+    (loo
+      ? `Błąd interpolacji mapy KŻ (każdy punkt odłożony i odtworzony z pozostałych, n = ${fmtNum(loo.n, 0)}): MAE ${fmtM(loo.mae)}. `
+      : '') +
+    'To błąd mapy sprawdzonej samą sobą, a nie całkowity błąd dna: nie obejmuje błędu pomiaru ani układu wysokości mapy. ' +
+    'Gdzie mapa przeczy satelicie, pokazujemy tylko satelitę. Na mapie ten obszar pokazuje warstwa „Dno wg mapy KŻ”.';
+  const acc = meta.accuracy;
+  const before = acc.holdout_in_bounds;
+  const after = acc.calibration_coverage;
+  const cal =
+    'Przedziały dna z satelity poszerzyliśmy na podstawie rocznego hold-outu' +
+    (typeof after === 'number'
+      ? `: obejmują teraz dno w ok. ${fmtPct(after * 100, 0)} sprawdzonych przypadków` +
+        (typeof before === 'number' ? ` (przed poszerzeniem ${fmtPct(before * 100, 0)})` : '')
+      : '') +
+    '. Poszerzenie zmierzyliśmy na pikselach z obiema granicami dna, a stosujemy też tam, gdzie znana jest tylko jedna ' +
+    '(np. „zawsze woda”) — to ekstrapolacja. Skutek: więcej stref ryzykownych przy typowych poziomach wody.';
+  return { title: 'Dno głębokiej części i kalibracja przedziałów', paragraphs: [kz, cal] };
 }
