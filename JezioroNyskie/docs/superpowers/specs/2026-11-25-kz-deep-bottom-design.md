@@ -173,6 +173,9 @@ uzupełniany o KŻ i kalibrację na końcu.
   strefy).
 - Refaktor: ścieżka backendu + przewodnik; `bottom.py` bez zmian (2026-11-25).
 - Dopisać kalibrację przedziałów i eksperyment ze źródłami poziomu; projekt zaakceptowany (2026-11-25).
+- Kalibracja także dla granic jednostronnych (np. „zawsze woda”), mimo że δ zmierzono tylko na pikselach z obiema
+  granicami — wybrane po zobaczeniu skutku (zielone przy 194,5 m: 48 % → 18 %; wariant „tylko obie granice”: 42 %).
+  Raport podaje oba warianty i nazywa to ekstrapolacją (2026-11-25).
 
 ## Decyzje projektu (po recenzji)
 
