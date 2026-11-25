@@ -1,0 +1,1118 @@
+{
+ "zones": {
+  "193.0|0.3|0.0": {
+   "sha1": "92ddd6ecd1194d8fe026d9a59efdcc9eb738eb8d",
+   "stats": {
+    "water_km2": 11.7887,
+    "safe_km2": 0.0,
+    "safe_pct": 0.0,
+    "risk_km2": 10.5055,
+    "risk_pct": 89.11499995758649,
+    "danger_km2": 14.5366,
+    "danger_pct": 10.885000042413498
+   },
+   "warnings": [
+    "below_observed_bottom"
+   ]
+  },
+  "193.0|0.3|0.3": {
+   "sha1": "92ddd6ecd1194d8fe026d9a59efdcc9eb738eb8d",
+   "stats": {
+    "water_km2": 11.7887,
+    "safe_km2": 0.0,
+    "safe_pct": 0.0,
+    "risk_km2": 10.5055,
+    "risk_pct": 89.11499995758649,
+    "danger_km2": 14.5366,
+    "danger_pct": 10.885000042413498
+   },
+   "warnings": [
+    "below_observed_bottom"
+   ]
+  },
+  "193.0|0.5|0.0": {
+   "sha1": "34111cca5c6677d97188d607d1b0a7f887d2cf0d",
+   "stats": {
+    "water_km2": 11.7887,
+    "safe_km2": 0.0,
+    "safe_pct": 0.0,
+    "risk_km2": 10.4933,
+    "risk_pct": 89.01151102326804,
+    "danger_km2": 14.5488,
+    "danger_pct": 10.988488976731956
+   },
+   "warnings": [
+    "below_observed_bottom"
+   ]
+  },
+  "193.0|0.5|0.3": {
+   "sha1": "34111cca5c6677d97188d607d1b0a7f887d2cf0d",
+   "stats": {
+    "water_km2": 11.7887,
+    "safe_km2": 0.0,
+    "safe_pct": 0.0,
+    "risk_km2": 10.4933,
+    "risk_pct": 89.01151102326804,
+    "danger_km2": 14.5488,
+    "danger_pct": 10.988488976731956
+   },
+   "warnings": [
+    "below_observed_bottom"
+   ]
+  },
+  "193.0|1.0|0.0": {
+   "sha1": "3d49828ad9afea49ecf21a977d7bab984e1a3b9e",
+   "stats": {
+    "water_km2": 11.7887,
+    "safe_km2": 0.0,
+    "safe_pct": 0.0,
+    "risk_km2": 10.4928,
+    "risk_pct": 89.0072696735009,
+    "danger_km2": 14.5493,
+    "danger_pct": 10.992730326499105
+   },
+   "warnings": [
+    "below_observed_bottom"
+   ]
+  },
+  "193.0|1.0|0.3": {
+   "sha1": "3d49828ad9afea49ecf21a977d7bab984e1a3b9e",
+   "stats": {
+    "water_km2": 11.7887,
+    "safe_km2": 0.0,
+    "safe_pct": 0.0,
+    "risk_km2": 10.4928,
+    "risk_pct": 89.0072696735009,
+    "danger_km2": 14.5493,
+    "danger_pct": 10.992730326499105
+   },
+   "warnings": [
+    "below_observed_bottom"
+   ]
+  },
+  "194.0|0.3|0.0": {
+   "sha1": "0d7b34180e7e6ef654819a826c0b99db09c8c371",
+   "stats": {
+    "water_km2": 13.0128,
+    "safe_km2": 12.0995,
+    "safe_pct": 92.98152588220829,
+    "risk_km2": 0.6901,
+    "risk_pct": 5.303239886880609,
+    "danger_km2": 12.252500000000001,
+    "danger_pct": 1.7152342309111028
+   },
+   "warnings": []
+  },
+  "194.0|0.3|0.3": {
+   "sha1": "f3e6f633f2dad45d92f9da0bd24011122cdd0ced",
+   "stats": {
+    "water_km2": 13.0128,
+    "safe_km2": 11.1689,
+    "safe_pct": 85.83010574203861,
+    "risk_km2": 1.6207,
+    "risk_pct": 12.45466002705029,
+    "danger_km2": 12.252500000000001,
+    "danger_pct": 1.7152342309111028
+   },
+   "warnings": []
+  },
+  "194.0|0.5|0.0": {
+   "sha1": "354da25dd9aea422cf7513f7709d311cce73dfa1",
+   "stats": {
+    "water_km2": 13.0128,
+    "safe_km2": 11.9726,
+    "safe_pct": 92.0063322267306,
+    "risk_km2": 0.6358,
+    "risk_pct": 4.88595844091971,
+    "danger_km2": 12.4337,
+    "danger_pct": 3.1077093323496867
+   },
+   "warnings": []
+  },
+  "194.0|0.5|0.3": {
+   "sha1": "c035a2f1e4ede0d42977cfc62391776ae1528976",
+   "stats": {
+    "water_km2": 13.0128,
+    "safe_km2": 10.5899,
+    "safe_pct": 81.38064060002459,
+    "risk_km2": 2.0185,
+    "risk_pct": 15.511650067625721,
+    "danger_km2": 12.4337,
+    "danger_pct": 3.1077093323496867
+   },
+   "warnings": []
+  },
+  "194.0|1.0|0.0": {
+   "sha1": "014d73dbb21c50581a225dbbb7c83a2200a29f67",
+   "stats": {
+    "water_km2": 13.0128,
+    "safe_km2": 0.0,
+    "safe_pct": 0.0,
+    "risk_km2": 11.7887,
+    "risk_pct": 90.59310832411165,
+    "danger_km2": 13.253400000000001,
+    "danger_pct": 9.406891675888355
+   },
+   "warnings": [
+    "below_observed_bottom"
+   ]
+  },
+  "194.0|1.0|0.3": {
+   "sha1": "014d73dbb21c50581a225dbbb7c83a2200a29f67",
+   "stats": {
+    "water_km2": 13.0128,
+    "safe_km2": 0.0,
+    "safe_pct": 0.0,
+    "risk_km2": 11.7887,
+    "risk_pct": 90.59310832411165,
+    "danger_km2": 13.253400000000001,
+    "danger_pct": 9.406891675888355
+   },
+   "warnings": [
+    "below_observed_bottom"
+   ]
+  },
+  "195.0|0.3|0.0": {
+   "sha1": "7a9e6017f15876352fb60e0dc2354352cd929b76",
+   "stats": {
+    "water_km2": 13.254100000000001,
+    "safe_km2": 13.16,
+    "safe_pct": 99.2900310092726,
+    "risk_km2": 0.0649,
+    "risk_pct": 0.4896598033815951,
+    "danger_km2": 11.8172,
+    "danger_pct": 0.2203091873458024
+   },
+   "warnings": []
+  },
+  "195.0|0.3|0.3": {
+   "sha1": "dc0e350b81882ac8486ff06ced22f7d8e79acb29",
+   "stats": {
+    "water_km2": 13.254100000000001,
+    "safe_km2": 12.9908,
+    "safe_pct": 98.01344489629624,
+    "risk_km2": 0.2341,
+    "risk_pct": 1.7662459163579571,
+    "danger_km2": 11.8172,
+    "danger_pct": 0.2203091873458024
+   },
+   "warnings": []
+  },
+  "195.0|0.5|0.0": {
+   "sha1": "efac9d3367f1878141484da962e98b30f1f4d6e5",
+   "stats": {
+    "water_km2": 13.254100000000001,
+    "safe_km2": 13.0576,
+    "safe_pct": 98.51743988652568,
+    "risk_km2": 0.1264,
+    "risk_pct": 0.9536671671407337,
+    "danger_km2": 11.8581,
+    "danger_pct": 0.5288929463335873
+   },
+   "warnings": []
+  },
+  "195.0|0.5|0.3": {
+   "sha1": "68e08c0600de9a3e7437000011f96765ced9cf30",
+   "stats": {
+    "water_km2": 13.254100000000001,
+    "safe_km2": 12.8949,
+    "safe_pct": 97.2898952022393,
+    "risk_km2": 0.2891,
+    "risk_pct": 2.1812118514271055,
+    "danger_km2": 11.8581,
+    "danger_pct": 0.5288929463335873
+   },
+   "warnings": []
+  },
+  "195.0|1.0|0.0": {
+   "sha1": "09974c66e2a7d6594902c87e987003aa5c164914",
+   "stats": {
+    "water_km2": 13.254100000000001,
+    "safe_km2": 12.6773,
+    "safe_pct": 95.6481390664021,
+    "risk_km2": 0.3355,
+    "risk_pct": 2.5312922039218053,
+    "danger_km2": 12.029300000000001,
+    "danger_pct": 1.8205687296761002
+   },
+   "warnings": []
+  },
+  "195.0|1.0|0.3": {
+   "sha1": "7aa18ec337a307c25b4e0d8268fabc7fbb6bad99",
+   "stats": {
+    "water_km2": 13.254100000000001,
+    "safe_km2": 12.0995,
+    "safe_pct": 91.28873329762112,
+    "risk_km2": 0.9133,
+    "risk_pct": 6.890697972702786,
+    "danger_km2": 12.029300000000001,
+    "danger_pct": 1.8205687296761002
+   },
+   "warnings": []
+  },
+  "195.91|0.3|0.0": {
+   "sha1": "5182670ac210450696a442d7897967dd1c80183b",
+   "stats": {
+    "water_km2": 13.7064,
+    "safe_km2": 13.289000000000001,
+    "safe_pct": 96.95470729002511,
+    "risk_km2": 0.194,
+    "risk_pct": 1.415397186715695,
+    "danger_km2": 11.5591,
+    "danger_pct": 1.6298955232592074
+   },
+   "warnings": []
+  },
+  "195.91|0.3|0.3": {
+   "sha1": "4826ab76663b841eb5a7fb7e8c7bc0ce2999adea",
+   "stats": {
+    "water_km2": 13.7064,
+    "safe_km2": 13.2362,
+    "safe_pct": 96.56948578766124,
+    "risk_km2": 0.24680000000000002,
+    "risk_pct": 1.8006186890795541,
+    "danger_km2": 11.5591,
+    "danger_pct": 1.6298955232592074
+   },
+   "warnings": []
+  },
+  "195.91|0.5|0.0": {
+   "sha1": "292ada9a200ee8ad455b9abd1639a0cb85cb0916",
+   "stats": {
+    "water_km2": 13.7064,
+    "safe_km2": 13.2551,
+    "safe_pct": 96.70737757543921,
+    "risk_km2": 0.0645,
+    "risk_pct": 0.4705830852740326,
+    "danger_km2": 11.7225,
+    "danger_pct": 2.8220393392867567
+   },
+   "warnings": []
+  },
+  "195.91|0.5|0.3": {
+   "sha1": "a878f4696789bb417e27455228ba24ca6cd276f1",
+   "stats": {
+    "water_km2": 13.7064,
+    "safe_km2": 13.227400000000001,
+    "safe_pct": 96.50528220393394,
+    "risk_km2": 0.0922,
+    "risk_pct": 0.6726784567793148,
+    "danger_km2": 11.7225,
+    "danger_pct": 2.8220393392867567
+   },
+   "warnings": []
+  },
+  "195.91|1.0|0.0": {
+   "sha1": "ebecf64a90c6eeebd992a69fc41031c5aa56e8e0",
+   "stats": {
+    "water_km2": 13.7064,
+    "safe_km2": 13.183300000000001,
+    "safe_pct": 96.18353469911867,
+    "risk_km2": 0.0599,
+    "risk_pct": 0.4370221210529388,
+    "danger_km2": 11.7989,
+    "danger_pct": 3.3794431798284017
+   },
+   "warnings": []
+  },
+  "195.91|1.0|0.3": {
+   "sha1": "5d558fa7317a15aad0857489ed6200767d23cf94",
+   "stats": {
+    "water_km2": 13.7064,
+    "safe_km2": 13.156600000000001,
+    "safe_pct": 95.98873518940057,
+    "risk_km2": 0.08660000000000001,
+    "risk_pct": 0.6318216307710267,
+    "danger_km2": 11.7989,
+    "danger_pct": 3.3794431798284017
+   },
+   "warnings": []
+  }
+ },
+ "points": [
+  {
+   "lon": 17.21580096175217,
+   "lat": 50.440248106546946,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "outside",
+    "lon": 17.21580096175217,
+    "lat": 50.440248106546946,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": null,
+    "depth_min": null,
+    "depth_max": null,
+    "clearance_min": null,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": null,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.21580096175217,
+   "lat": 50.440248106546946,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "outside",
+    "lon": 17.21580096175217,
+    "lat": 50.440248106546946,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": null,
+    "depth_min": null,
+    "depth_max": null,
+    "clearance_min": null,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": null,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.321101135783678,
+   "lat": 50.46232804720531,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "outside",
+    "lon": 17.321101135783678,
+    "lat": 50.46232804720531,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": null,
+    "depth_min": null,
+    "depth_max": null,
+    "clearance_min": null,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": null,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.321101135783678,
+   "lat": 50.46232804720531,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "outside",
+    "lon": 17.321101135783678,
+    "lat": 50.46232804720531,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": null,
+    "depth_min": null,
+    "depth_max": null,
+    "clearance_min": null,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": null,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.323785456700044,
+   "lat": 50.43024823292308,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "outside",
+    "lon": 17.323785456700044,
+    "lat": 50.43024823292308,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": null,
+    "depth_min": null,
+    "depth_max": null,
+    "clearance_min": null,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": null,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.323785456700044,
+   "lat": 50.43024823292308,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "outside",
+    "lon": 17.323785456700044,
+    "lat": 50.43024823292308,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": null,
+    "depth_min": null,
+    "depth_max": null,
+    "clearance_min": null,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": null,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.276227154252318,
+   "lat": 50.4754369914827,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "land",
+    "lon": 17.276227154252318,
+    "lat": 50.4754369914827,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "danger",
+    "depth_min": 0.0,
+    "depth_max": -4.84,
+    "clearance_min": null,
+    "clearance_max": -5.34,
+    "z_min": 197.84,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": 4.84,
+    "bottom_above_water_max": null,
+    "obs_count": 215,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.276227154252318,
+   "lat": 50.4754369914827,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "land",
+    "lon": 17.276227154252318,
+    "lat": 50.4754369914827,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "danger",
+    "depth_min": 0.0,
+    "depth_max": -3.34,
+    "clearance_min": null,
+    "clearance_max": -3.84,
+    "z_min": 197.84,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": 3.34,
+    "bottom_above_water_max": null,
+    "obs_count": 215,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.289890610720448,
+   "lat": 50.47185994908487,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "land",
+    "lon": 17.289890610720448,
+    "lat": 50.47185994908487,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "danger",
+    "depth_min": 0.0,
+    "depth_max": -4.84,
+    "clearance_min": null,
+    "clearance_max": -5.34,
+    "z_min": 197.84,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": 4.84,
+    "bottom_above_water_max": null,
+    "obs_count": 217,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.289890610720448,
+   "lat": 50.47185994908487,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "land",
+    "lon": 17.289890610720448,
+    "lat": 50.47185994908487,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "danger",
+    "depth_min": 0.0,
+    "depth_max": -3.34,
+    "clearance_min": null,
+    "clearance_max": -3.84,
+    "z_min": 197.84,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": 3.34,
+    "bottom_above_water_max": null,
+    "obs_count": 217,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.278687904037533,
+   "lat": 50.473674061560125,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "land",
+    "lon": 17.278687904037533,
+    "lat": 50.473674061560125,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "danger",
+    "depth_min": 0.0,
+    "depth_max": -4.84,
+    "clearance_min": null,
+    "clearance_max": -5.34,
+    "z_min": 197.84,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": 4.84,
+    "bottom_above_water_max": null,
+    "obs_count": 217,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.278687904037533,
+   "lat": 50.473674061560125,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "land",
+    "lon": 17.278687904037533,
+    "lat": 50.473674061560125,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "danger",
+    "depth_min": 0.0,
+    "depth_max": -3.34,
+    "clearance_min": null,
+    "clearance_max": -3.84,
+    "z_min": 197.84,
+    "z_max": null,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": 3.34,
+    "bottom_above_water_max": null,
+    "obs_count": 217,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.22496819899364,
+   "lat": 50.45127455728431,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "always_water",
+    "lon": 17.22496819899364,
+    "lat": 50.45127455728431,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "risk",
+    "depth_min": 0.0,
+    "depth_max": null,
+    "clearance_min": -0.55,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": 193.05,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 217,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.22496819899364,
+   "lat": 50.45127455728431,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "always_water",
+    "lon": 17.22496819899364,
+    "lat": 50.45127455728431,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "safe",
+    "depth_min": 1.45,
+    "depth_max": null,
+    "clearance_min": 0.95,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": 193.05,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 217,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.26120111039371,
+   "lat": 50.45461073090657,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "always_water",
+    "lon": 17.26120111039371,
+    "lat": 50.45461073090657,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "risk",
+    "depth_min": 0.0,
+    "depth_max": null,
+    "clearance_min": -0.55,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": 193.05,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 217,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.26120111039371,
+   "lat": 50.45461073090657,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "always_water",
+    "lon": 17.26120111039371,
+    "lat": 50.45461073090657,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "safe",
+    "depth_min": 1.45,
+    "depth_max": null,
+    "clearance_min": 0.95,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": 193.05,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 217,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.256491051784952,
+   "lat": 50.44473369062665,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "always_water",
+    "lon": 17.256491051784952,
+    "lat": 50.44473369062665,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "risk",
+    "depth_min": 0.0,
+    "depth_max": null,
+    "clearance_min": -0.55,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": 193.05,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 218,
+    "gravel": true
+   }
+  },
+  {
+   "lon": 17.256491051784952,
+   "lat": 50.44473369062665,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "always_water",
+    "lon": 17.256491051784952,
+    "lat": 50.44473369062665,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "safe",
+    "depth_min": 1.45,
+    "depth_max": null,
+    "clearance_min": 0.95,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": 193.05,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 218,
+    "gravel": true
+   }
+  },
+  {
+   "lon": 17.274302508296238,
+   "lat": 50.44310992313277,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "model",
+    "lon": 17.274302508296238,
+    "lat": 50.44310992313277,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "danger",
+    "depth_min": 0.0,
+    "depth_max": 0.18,
+    "clearance_min": -0.76,
+    "clearance_max": -0.32,
+    "z_min": 192.82,
+    "z_max": 193.26,
+    "z": 193.04,
+    "unc": 0.22,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 218,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.274302508296238,
+   "lat": 50.44310992313277,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "model",
+    "lon": 17.274302508296238,
+    "lat": 50.44310992313277,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "safe",
+    "depth_min": 1.24,
+    "depth_max": 1.68,
+    "clearance_min": 0.74,
+    "clearance_max": 1.18,
+    "z_min": 192.82,
+    "z_max": 193.26,
+    "z": 193.04,
+    "unc": 0.22,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 218,
+    "gravel": false
+   }
+  },
+  {
+   "lon": 17.24473030675794,
+   "lat": 50.44653615127747,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "model",
+    "lon": 17.24473030675794,
+    "lat": 50.44653615127747,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "danger",
+    "depth_min": 0.0,
+    "depth_max": 0.04,
+    "clearance_min": -0.95,
+    "clearance_max": -0.46,
+    "z_min": 192.96,
+    "z_max": 193.45,
+    "z": 193.29,
+    "unc": 0.25,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 218,
+    "gravel": true
+   }
+  },
+  {
+   "lon": 17.24473030675794,
+   "lat": 50.44653615127747,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "model",
+    "lon": 17.24473030675794,
+    "lat": 50.44653615127747,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "safe",
+    "depth_min": 1.05,
+    "depth_max": 1.54,
+    "clearance_min": 0.55,
+    "clearance_max": 1.04,
+    "z_min": 192.96,
+    "z_max": 193.45,
+    "z": 193.29,
+    "unc": 0.25,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 218,
+    "gravel": true
+   }
+  },
+  {
+   "lon": 17.244803503019302,
+   "lat": 50.44455794770085,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "land",
+    "lon": 17.244803503019302,
+    "lat": 50.44455794770085,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "danger",
+    "depth_min": 0.0,
+    "depth_max": -0.25,
+    "clearance_min": -1.23,
+    "clearance_max": -0.75,
+    "z_min": 193.25,
+    "z_max": 193.73,
+    "z": 193.49,
+    "unc": 0.24,
+    "bottom_above_water_min": 0.25,
+    "bottom_above_water_max": 0.73,
+    "obs_count": 218,
+    "gravel": true
+   }
+  },
+  {
+   "lon": 17.244803503019302,
+   "lat": 50.44455794770085,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "model",
+    "lon": 17.244803503019302,
+    "lat": 50.44455794770085,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "risk",
+    "depth_min": 0.77,
+    "depth_max": 1.25,
+    "clearance_min": 0.27,
+    "clearance_max": 0.75,
+    "z_min": 193.25,
+    "z_max": 193.73,
+    "z": 193.49,
+    "unc": 0.24,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 218,
+    "gravel": true
+   }
+  },
+  {
+   "lon": 17.25767131141629,
+   "lat": 50.45095919164743,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "always_water",
+    "lon": 17.25767131141629,
+    "lat": 50.45095919164743,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "risk",
+    "depth_min": 0.0,
+    "depth_max": null,
+    "clearance_min": -0.55,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": 193.05,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 217,
+    "gravel": true
+   }
+  },
+  {
+   "lon": 17.25767131141629,
+   "lat": 50.45095919164743,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "always_water",
+    "lon": 17.25767131141629,
+    "lat": 50.45095919164743,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "safe",
+    "depth_min": 1.45,
+    "depth_max": null,
+    "clearance_min": 0.95,
+    "clearance_max": null,
+    "z_min": null,
+    "z_max": 193.05,
+    "z": null,
+    "unc": null,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 217,
+    "gravel": true
+   }
+  },
+  {
+   "lon": 17.247623090776308,
+   "lat": 50.444510484199256,
+   "h": 193.0,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "model",
+    "lon": 17.247623090776308,
+    "lat": 50.444510484199256,
+    "h": 193.0,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "danger",
+    "depth_min": 0.0,
+    "depth_max": 0.04,
+    "clearance_min": -0.95,
+    "clearance_max": -0.46,
+    "z_min": 192.96,
+    "z_max": 193.45,
+    "z": 193.21,
+    "unc": 0.25,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 218,
+    "gravel": true
+   }
+  },
+  {
+   "lon": 17.247623090776308,
+   "lat": 50.444510484199256,
+   "h": 194.5,
+   "draft": 0.5,
+   "margin": 0.3,
+   "out": {
+    "kind": "model",
+    "lon": 17.247623090776308,
+    "lat": 50.444510484199256,
+    "h": 194.5,
+    "draft": 0.5,
+    "margin": 0.3,
+    "zone": "safe",
+    "depth_min": 1.05,
+    "depth_max": 1.54,
+    "clearance_min": 0.55,
+    "clearance_max": 1.04,
+    "z_min": 192.96,
+    "z_max": 193.45,
+    "z": 193.21,
+    "unc": 0.25,
+    "bottom_above_water_min": null,
+    "bottom_above_water_max": null,
+    "obs_count": 218,
+    "gravel": true
+   }
+  }
+ ]
+}
