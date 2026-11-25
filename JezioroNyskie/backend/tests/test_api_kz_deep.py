@@ -92,3 +92,20 @@ def test_z_max_floor_from_raw_satellite(dataset, dataset_kz):
 def test_meta_calibration_coverage(client_kz, client):
     assert client_kz.get("/api/meta").json()["accuracy"]["calibration_coverage"] == 0.9
     assert client.get("/api/meta").json()["accuracy"]["calibration_coverage"] is None
+
+
+def test_version_changes_with_combined_raster_bytes(dataset_kz):
+    """Wersja (a więc ETagi) obejmuje bajty rastrów łączonych i meta.json, nie tylko wejścia łączenia."""
+    import rasterio
+    a = load_products(dataset_kz, "all", use_kz=True)
+    kz_dir = dataset_kz / "processed" / "model" / "all_kz"
+    with rasterio.open(kz_dir / "bottom_zhi.tif", "r+") as ds:
+        arr = ds.read(1)
+        arr[0, 12] = 194.5
+        ds.write(arr, 1)
+    b = load_products(dataset_kz, "all", use_kz=True)
+    assert a.version != b.version
+    meta = kz_dir / "meta.json"
+    meta.write_text(meta.read_text(encoding="utf-8") + " ", encoding="utf-8")
+    c = load_products(dataset_kz, "all", use_kz=True)
+    assert b.version != c.version
