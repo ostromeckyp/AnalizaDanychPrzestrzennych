@@ -23,3 +23,13 @@ def test_two_sided_only_calibrates_only_pixels_with_both_bounds():
     # serwowana kalibracja (wszędzie) zmienia granicę jednostronną — różnica wariantów jest właśnie tu
     lo_all, hi_all = s14.calibration.apply(z_lo, z_hi, DELTAS)
     assert hi_all[1] == 193.05 + 2.0 and lo_all[2] == 195.0 - 1.0
+
+
+def test_kz_above_zmax_counts_only_covered_always_water():
+    surf = np.array([193.5, 192.0, np.nan, 194.0])
+    z_hi = np.array([193.05, 193.05, 193.05, 193.05])
+    always = np.array([True, True, True, False])
+    r = s14.kz_above_zmax(surf, z_hi, always)
+    assert r["n_covered"] == 2
+    assert r["coverage"] == 2 / 3
+    assert r["kz_above_zmax_share"] == 0.5

@@ -16,6 +16,9 @@ Jak to obronić: P5/P95 z LOO (poza próbą), maska LOO = dokładnie piksele z z
   „po, tylko dwustronne” (`zones_after_two_sided_only`, tylko do raportu, nie trafia do rastrów) = kalibracja wyłącznie
   pikseli z obiema granicami skończonymi (tam, gdzie δ zmierzono), potem ta sama reguła KŻ. Wariant serwowany
   kalibruje też granice jednostronne (decyzja użytkownika, ekstrapolacja); raport pokazuje oba.
+  `contour_195_check` (tylko do raportu): pokrycie „zawsze woda” i udział pikseli z rzędną KŻ powyżej surowego z_max
+  satelity dla powierzchni z poziomicą 195,0 m (jak wariant D) i bez niej (powierzchnia serwowana) — uzasadnienie
+  pominięcia poziomicy. To nie jest sprzeczność reguły łączenia (ta uwzględnia P95 i kalibrację: `n_conflict`).
   Użycie: uv run python 14_kz_deep.py
 """
 import hashlib
@@ -29,7 +32,7 @@ import pandas as pd
 import rasterio
 import rasterio.shutil
 
-from mielizna import bottom, calibration, combine, kz, kz_deep
+from mielizna import bottom, calibration, combine, kz, kz_deep, variant_d
 from mielizna.config import data_path
 from mielizna.grid import reference_grid
 
@@ -87,6 +90,16 @@ def calibrate_two_sided_only(z_lo, z_hi, deltas: dict):
     lo_c, hi_c = calibration.apply(z_lo, z_hi, deltas)
     both = np.isfinite(z_lo) & np.isfinite(z_hi)
     return np.where(both, lo_c, z_lo), np.where(both, hi_c, z_hi)
+
+
+def kz_above_zmax(surf, z_hi_raw, always) -> dict:
+    """Pokrycie „zawsze woda” powierzchnią KŻ i udział pokrytych pikseli z rzędną KŻ > surowe z_max satelity."""
+    cov = always & np.isfinite(surf)
+    n_always, n_cov = int(always.sum()), int(cov.sum())
+    with np.errstate(invalid="ignore"):
+        above = int((cov & (surf > z_hi_raw)).sum())
+    return {"coverage": n_cov / n_always if n_always else None, "n_covered": n_cov,
+            "kz_above_zmax_share": above / n_cov if n_cov else None}
 
 
 def zones(z_lo, z_hi, in_model, always):
@@ -152,6 +165,9 @@ def main() -> dict:
     lo2, hi2 = calibrate_two_sided_only(z_lo0, z_hi0, deltas)
     lo2, hi2, _, _ = combine.merge_kz(lo2, hi2, surf, p5, p95)
     summary["zones_after_two_sided_only"] = zones(lo2, hi2, in_model, always)
+    surf_195 = variant_d.kz_surface(spots, contours, grid, gravel=gravel)      # punkty + 192,5 + 195,0 (jak wariant D)
+    summary["contour_195_check"] = {"with_195": kz_above_zmax(surf_195, z_hi0, always),
+                                    "without_195": kz_above_zmax(surf, z_hi0, always)}
     _dump(ev / "kz_deep.json", summary)
     return summary
 
