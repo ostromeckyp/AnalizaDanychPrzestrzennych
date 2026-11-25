@@ -287,11 +287,11 @@ function deepBottomOf(meta: Meta): MethodDeepBottom {
   const kz =
     'Tam, gdzie jezioro nigdy nie odsłoniło dna (strefa „zawsze woda”), satelita wie tylko, że dno leży niżej niż ' +
     'najniższy zaobserwowany poziom wody. W tej strefie dno bierzemy z amatorskiej mapy KŻ Nysa (2023): z punktów ' +
-    'rzędnych i poziomicy 192,5 m, bez poziomicy 195,0 m, która najczęściej przeczyła obrazom satelitarnym. ' +
+    'rzędnych i poziomicy 192,5 m, bez poziomicy 195,0 m, bo bez niej sprzeczności z obrazami satelitarnymi jest mniej więcej o połowę mniej. ' +
     (loo
-      ? `Błąd interpolacji mapy KŻ (każdy punkt odłożony i odtworzony z pozostałych, n = ${fmtNum(loo.n, 0)}): MAE ${fmtM(loo.mae)}. `
-      : '') +
-    'To błąd mapy sprawdzonej samą sobą, a nie całkowity błąd dna: nie obejmuje błędu pomiaru ani układu wysokości mapy. ' +
+      ? `Błąd interpolacji mapy KŻ (każdy punkt odłożony i odtworzony z pozostałych, n = ${fmtNum(loo.n, 0)}): MAE ${fmtM(loo.mae)}. ` +
+        'To błąd mapy sprawdzonej samą sobą, a nie całkowity błąd dna: nie obejmuje błędu pomiaru ani układu wysokości mapy. '
+      : 'Błąd tej mapy liczymy, sprawdzając ją samą ze sobą; to nie jest całkowity błąd dna. ') +
     'Gdzie mapa przeczy satelicie, pokazujemy tylko satelitę. Na mapie ten obszar pokazuje warstwa „Dno wg mapy KŻ”.';
   const acc = meta.accuracy;
   const before = acc.holdout_in_bounds;
@@ -300,7 +300,8 @@ function deepBottomOf(meta: Meta): MethodDeepBottom {
     'Przedziały dna z satelity poszerzyliśmy na podstawie rocznego hold-outu' +
     (typeof after === 'number'
       ? `: obejmują teraz dno w ok. ${fmtPct(after * 100, 0)} sprawdzonych przypadków` +
-        (typeof before === 'number' ? ` (przed poszerzeniem ${fmtPct(before * 100, 0)})` : '')
+        (typeof before === 'number' ? ` (przed poszerzeniem ${fmtPct(before * 100, 0)})` : '') +
+        '; ten wynik wynika z konstrukcji, bo poszerzenie dopasowaliśmy na tych samych resztach hold-outu, na których je sprawdzamy'
       : '') +
     '. Poszerzenie zmierzyliśmy na pikselach z obiema granicami dna, a stosujemy też tam, gdzie znana jest tylko jedna ' +
     '(np. „zawsze woda”) — to ekstrapolacja. Skutek: więcej stref ryzykownych przy typowych poziomach wody.';

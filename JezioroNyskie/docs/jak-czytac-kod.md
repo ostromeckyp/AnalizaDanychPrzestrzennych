@@ -125,7 +125,7 @@ Piksel „zawsze woda” ma tylko górną granicę dna (ok. 193,05 m, a po kalib
 jak głęboko jest. Tam bierzemy dno z amatorskiej mapy KŻ Nysa (2023).
 
 1. `kz_deep.deep_surface` rozpina powierzchnię (siatka trójkątów, TIN) na punktach rzędnych KŻ i poziomicy 192,5 m.
-   Poziomicy 195,0 m celowo nie używa, bo to ona dawała większość sprzeczności z obrazami satelitarnymi.
+   Poziomicy 195,0 m celowo nie używa: bez niej sprzeczności z obrazami satelitarnymi jest mniej więcej o połowę mniej.
 2. `kz_deep.loo` sprawdza tę powierzchnię: usuwa po kolei jeden punkt, buduje powierzchnię z pozostałych i patrzy,
    o ile chybia w miejscu usuniętego punktu (błąd = odczyt − rzędna punktu; dodatni = powierzchnia płycej).
    Z tych błędów bierze P5 (ok. −2,0 m) i P95 (ok. +3,0 m). To **błąd interpolacji mapy KŻ**, nie całkowity błąd:

@@ -492,8 +492,8 @@ jest wyraźnie zawyżony względem hold-outu, który sam jest optymistyczny (RF 
 klasyfikacji: referencją jest ta sama maska RF ∧ Otsu, więc jeśli przy wysokiej wodzie zalana roślinność jest klasyfikowana jako ląd
 (hipoteza 1 z §5.2), to model i referencja mylą się tak samo. Pierścienia +1,43<!-- eval:bottom_vs_nmt.json:all_z_ge_196.bias --> m względem NMT ta kontrola nie może zobaczyć.
 
-**Eksperyment: czy błąd pochodzi z poziomów wody scen treningowych?** Skoro hold-out ≈ w próbie, błąd siedzi raczej
-w wejściach modelu, a najsłabszym wejściem są poziomy C (z krzywej powierzchnia–poziom) i A. Powtórzyliśmy hold-out
+**Eksperyment: czy błąd pochodzi z poziomów wody scen treningowych?** Skoro hold-out ≈ w próbie, przypuszczamy (wniosek
+pośredni, nie pomiar), że błąd siedzi raczej w wejściach modelu, a najsłabszym wejściem są poziomy C (z krzywej powierzchnia–poziom) i A. Powtórzyliśmy hold-out
 w trzech wariantach scen **budujących** model: wszystkie (`all`, jak wyżej), bez scen C (`no_c`) i tylko B i R
 (`b_r_only`). Fałdy i sceny testowe są te same we wszystkich wariantach; zmienia się tylko trening (np. w fałdzie 2020:
 189<!-- eval:holdout_level_sources.json:variants.all.n_train_scenes.2020 -->, 164<!-- eval:holdout_level_sources.json:variants.no_c.n_train_scenes.2020 --> i
@@ -509,8 +509,8 @@ w trzech wariantach scen **budujących** model: wszystkie (`all`, jak wyżej), b
 **Wynik: brak poprawy.** Bez scen C MAE jest takie samo, a tylko z B i R mniejsze o mniej niż 0,01 m. W pasmach różnice idą
 w przeciwne strony: w 192,9–194,8 m `b_r_only` ma MAE 0,79<!-- eval:holdout_level_sources.json:variants.b_r_only.by_band.[192.9-194.8].vertical.mae --> m wobec
 0,77<!-- eval:holdout_level_sources.json:variants.all.by_band.[192.9-194.8].vertical.mae --> m, a w ≥ 194,8 m 1,01<!-- eval:holdout_level_sources.json:variants.b_r_only.by_band.[194.8+].vertical.mae --> m wobec
-1,04<!-- eval:holdout_level_sources.json:variants.all.by_band.[194.8+].vertical.mae --> m. Wniosek: źródło poziomu wody w treningu nie jest głównym składnikiem
-błędu na linii wody. Porównanie ma jedno zakłócenie: mniej scen treningowych to mniej pikseli z obiema granicami, więc udział
+1,04<!-- eval:holdout_level_sources.json:variants.all.by_band.[194.8+].vertical.mae --> m. Wniosek (z zastrzeżeniem poniżej): w tym eksperymencie nie widać, żeby źródło
+poziomu wody w treningu było głównym składnikiem błędu na linii wody. Porównanie ma jedno zakłócenie: mniej scen treningowych to mniej pikseli z obiema granicami, więc udział
 pikseli bez przewidywania rośnie z 21,6 %<!-- eval:holdout_level_sources.json:variants.all.vertical.share_no_pred --> do 24,5 %<!-- eval:holdout_level_sources.json:variants.no_c.vertical.share_no_pred -->,
 a warianty liczą MAE na nieco innych pikselach. Nie wiemy, czy na wspólnych pikselach różnica byłaby inna; tak małe różnice
 MAE nie uzasadniają zmiany modelu. Serwowany model zostaje bez zmian (decyzja należy do autora).
@@ -749,13 +749,13 @@ bezwzględne (m n.p.m.), więc głębokość = bieżący poziom − rzędna, bez
 `model/all_kz/` i w `eval/kz_loo.json`, `eval/kz_deep.json`.
 
 **Powierzchnia.** TIN z punktów KŻ po kontroli ręcznej (§6.2) i z poziomicy 192,5 m, **bez poziomicy 195,0 m**; żwirownia
-wycięta jak w wariancie D. Poziomica 195,0 m opisuje głównie brzegi wysp, które satelita i tak zna, a w analizie projektu
-odpowiadała za większość sprzeczności: z nią rzędna KŻ wypada powyżej `z_max` satelity w
+wycięta jak w wariancie D. Poziomica 195,0 m opisuje głównie brzegi wysp, które satelita i tak zna, a jej usunięcie zmniejsza
+sprzeczności mniej więcej o połowę: z nią rzędna KŻ wypada powyżej `z_max` satelity w
 13,6 %<!-- eval:kz_deep.json:contour_195_check.with_195.kz_above_zmax_share --> pokrytych pikseli „zawsze woda”, bez niej w
 6,8 %<!-- eval:kz_deep.json:contour_195_check.without_195.kz_above_zmax_share -->; pokrycie strefy spada przy tym tylko z
 82,9 %<!-- eval:kz_deep.json:contour_195_check.with_195.coverage --> do 81,9 %<!-- eval:kz_deep.json:contour_195_check.without_195.coverage -->. W analizie
-projektu (2026-11-25; liczby poza plikami oceny) sprzeczności skupiały się blisko poziomicy 195,0 m (do 100 m od niej 67 %
-pikseli sprzecznych, dalej niż 300 m 2,4 %). Wyjaśnienie, że to artefakt TIN rozpiętego między poziomicą wyspy a głębokimi
+projektu (2026-11-25; liczby poza plikami oceny) sprzeczności skupiały się blisko poziomicy 195,0 m: w pasie do 100 m od niej sprzecznych było 67 %
+pikseli, a dalej niż 300 m od niej 2,4 % pikseli (to udziały w pasach odległości, nie udziały we wszystkich sprzecznościach). Wyjaśnienie, że to artefakt TIN rozpiętego między poziomicą wyspy a głębokimi
 punktami, jest hipotezą; nie sprawdzaliśmy go osobno.
 
 **Błąd interpolacji mapy KŻ (punkt odłożony, LOO).** Dla każdego punktu KŻ w pikselu „zawsze woda” (poza żwirownią) budujemy

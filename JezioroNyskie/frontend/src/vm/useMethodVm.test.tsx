@@ -234,7 +234,9 @@ describe('useMethodVm', () => {
     expect(kz).toContain('nie całkowity błąd dna');
     expect(kz).toContain('„Dno wg mapy KŻ”');
     expect(kz).not.toMatch(/dokładnoś/i);
-    expect(cal).toContain('ok. 90% sprawdzonych przypadków (przed poszerzeniem 17%)');
+    expect(cal).toContain('ok. 90% sprawdzonych przypadków (przed poszerzeniem 17%); ten wynik wynika z konstrukcji');
+    expect(kz).toContain('mniej więcej o połowę mniej');
+    expect(kz).not.toMatch(/najczęściej|większoś/);
     expect(cal).toContain('ekstrapolacja');
   });
 
@@ -244,6 +246,9 @@ describe('useMethodVm', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'));
     const text = result.current.deepBottom!.paragraphs.join(' ');
     expect(text).not.toMatch(/MAE|NaN|undefined|—%/);
+    const kz = result.current.deepBottom!.paragraphs[0];
+    expect(kz).toContain('Błąd tej mapy liczymy, sprawdzając ją samą ze sobą; to nie jest całkowity błąd dna.');
+    expect(kz).not.toContain('To błąd mapy sprawdzonej samą sobą');
   });
 
   it('sources list the KŻ deep-bottom layer with the UWAGA terms', async () => {
