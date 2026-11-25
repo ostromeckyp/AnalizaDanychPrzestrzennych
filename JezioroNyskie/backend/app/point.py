@@ -8,7 +8,8 @@ Dlaczego tak: strefa pochodzi z `depth.classify` liczonego na tablicach 1×1, wi
 Wejście → wyjście: `point_info(products, lon, lat, h, draft, margin)` → słownik zgodny z `PointResponse`.
   Wariant (kolejno): poza siatką lub poza modelem → `outside`; h ≤ z_lo → `land`; z_lo = −∞ →
   `always_water`; inaczej `model`. Pola `bottom_source`, `kz_conflict`, `kz_interp` mówią, czy dno piksela
-  pochodzi z mapy KŻ (`kz_interp` = p5/p95 błędu interpolacji), czy KŻ przeczy satelicie.
+  pochodzi z mapy KŻ (`kz_interp` = p5/p95 błędu interpolacji), czy KŻ przeczy satelicie. `z_max_sat` to surowa
+  górna granica satelity (przed kalibracją); `z_max` to granica serwowana (po kalibracji, gdy wczytano rastry łączone).
 Jak to obronić: D_lo = h − z_hi (najpłycej), D_hi = h − z_lo (najgłębiej); prześwit to głębokość minus
   zanurzenie. Piksel wybiera `rasterio.transform.rowcol` na współrzędnych siatki (EPSG:2180).
 """
@@ -67,7 +68,7 @@ def point_info(products: Products, lon: float, lat: float, h: float, draft: floa
            "clearance_max": None, "z_min": None, "z_max": None, "z": None, "unc": None,
            "bottom_above_water_min": None, "bottom_above_water_max": None, "obs_count": None,
            "gravel": in_gravel(products, lon, lat),
-           "bottom_source": "satellite", "kz_conflict": False, "kz_interp": None}
+           "bottom_source": "satellite", "kz_conflict": False, "kz_interp": None, "z_max_sat": None}
     px = _pixel(products, lon, lat)
     if px is None:
         return out
@@ -88,6 +89,8 @@ def point_info(products: Products, lon: float, lat: float, h: float, draft: floa
     out.update(depth_min=_r(max(d_lo, 0.0)), depth_max=_r(d_hi),
                clearance_min=_r(d_lo - draft), clearance_max=_r(d_hi - draft),
                z_min=_r(z_lo), z_max=_r(z_hi), z=_r(products.z[r, c]), unc=_r(products.unc[r, c]))
+    if products.z_hi_sat is not None:                  # surowa górna granica satelity (przed kalibracją), np. „zawsze woda"
+        out["z_max_sat"] = _r(products.z_hi_sat[r, c])
     if out["kind"] == "land":
         out.update(bottom_above_water_min=_r(z_lo - h), bottom_above_water_max=_r(z_hi - h))
     return out

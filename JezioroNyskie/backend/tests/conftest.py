@@ -121,6 +121,7 @@ def make_dataset(root: Path, with_eval: bool = True) -> Path:
 
 KZ_PIXELS = (slice(0, 10), slice(12, 15))     # wiersze 0-9, kolumny 12-14: dno z mapy KŻ (zawsze woda w satelicie)
 KZ_CONFLICT_PIXEL = (15, 16)                  # wiersz, kolumna: KŻ przeczy satelicie (źródło = satelita, bit 1)
+KZ_DELTA_HI = 2.0                             # testowe poszerzenie górnej granicy „zawsze woda" (jak δ_hi kalibracji)
 KZ_META = {"period": "all", "p5": -2.0, "p95": 3.0, "deltas": {}, "inputs": [], "inputs_sha1": "abc123"}
 
 
@@ -133,6 +134,7 @@ def write_kz(root: Path, period: str = "all") -> None:
     z_hi = np.where(np.isnan(sat["z_max"]), np.inf, sat["z_max"]).astype(np.float32)
     outside = (sat["obs_count"] == 0) | (sat["obs_count"] == 65535) | (sat["flags"] == 255)
     z_lo[outside] = z_hi[outside] = np.nan
+    z_hi[:, 10:20] += KZ_DELTA_HI                 # kalibracja: „zawsze woda" (kol. 10-19) ma górną granicę wyżej niż surowy satelita
     src = np.zeros((H, W), np.uint8)
     z_lo[KZ_PIXELS], z_hi[KZ_PIXELS], src[KZ_PIXELS] = 193.0, 194.0, 1
     src[KZ_CONFLICT_PIXEL] = 2

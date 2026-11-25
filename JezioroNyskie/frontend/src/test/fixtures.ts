@@ -48,6 +48,7 @@ export const meta: Meta = {
     levels_mae_ab: null,
     variant_d_within_0_2: null,
     calibration_coverage: 0.9,
+    combined_bounds: true,
   },
   area_level: {
     nodes_area_km2: [10.5, 12.0, 14.0],
@@ -101,7 +102,7 @@ export function zones(h: number, draft: number, margin: number): Zones {
 }
 
 const base = { lon: 17.05, lat: 50.45, h: 195.0, draft: 1.2, margin: 0.3, gravel: false,
-  bottom_source: "satellite" as const, kz_conflict: false, kz_interp: null };
+  bottom_source: "satellite" as const, kz_conflict: false, kz_interp: null, z_max_sat: null };
 
 export const pointModel: Point = {
   ...base,
@@ -113,6 +114,7 @@ export const pointModel: Point = {
   clearance_max: 0.8,
   z_min: 193.0,
   z_max: 194.0,
+  z_max_sat: 194.0,
   z: 193.5,
   unc: 0.2,
   bottom_above_water_min: null,
@@ -130,6 +132,7 @@ export const pointAlwaysWater: Point = {
   clearance_max: null,
   z_min: null,
   z_max: 193.05,
+  z_max_sat: 193.05,
   z: 193.0,
   unc: 0.3,
   bottom_above_water_min: null,

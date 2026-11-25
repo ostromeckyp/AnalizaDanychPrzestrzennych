@@ -109,3 +109,33 @@ def test_version_changes_with_combined_raster_bytes(dataset_kz):
     meta.write_text(meta.read_text(encoding="utf-8") + " ", encoding="utf-8")
     c = load_products(dataset_kz, "all", use_kz=True)
     assert b.version != c.version
+
+
+def test_meta_flags_combined_bounds_and_hides_coverage_without_them(dataset_kz):
+    """Pokrycie po kalibracji tylko wtedy, gdy backend faktycznie serwuje granice łączone (skalibrowane)."""
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.settings import Settings
+
+    def acc(use_kz):
+        p = load_products(dataset_kz, "all", use_kz=use_kz)
+        return TestClient(create_app(Settings(data_dir=dataset_kz, live=False), p)).get("/api/meta").json()["accuracy"]
+    on, off = acc(True), acc(False)
+    assert on["combined_bounds"] is True and on["calibration_coverage"] == 0.9
+    assert off["combined_bounds"] is False and off["calibration_coverage"] is None
+
+
+def test_point_always_water_without_kz_has_raw_satellite_z_max(client_kz, products_kz):
+    b = _point(client_kz, products_kz, (12, 11), 195.0)      # zawsze woda, poza mapą KŻ, bez sprzeczności
+    assert b["kind"] == "always_water" and b["bottom_source"] == "satellite" and b["kz_conflict"] is False
+    assert b["z_max_sat"] == 193.05                            # surowy satelita: najniższy zaobserwowany stan
+    assert b["z_max"] == round(193.05 + 2.0, 2)                # skalibrowana górna granica (wyżej niż h)
+    assert b["depth_min"] == 0.0 and b["zone"] == "risk"       # strefy bez zmian
+
+
+def test_point_z_max_sat_other_variants(client_kz, products_kz, client, products):
+    assert _point(client_kz, products_kz, (3, 13), 195.0)["z_max_sat"] == 193.05   # piksel KŻ: surowy satelita
+    assert _point(client_kz, products_kz, (5, 22), 195.0)["z_max_sat"] is None     # zawsze ląd: +∞ → None
+    assert _point(client_kz, products_kz, (5, 28), 195.0)["z_max_sat"] is None     # poza modelem
+    b = _point(client, products, (5, 3), 195.0)                                    # bez rastrów łączonych: równe z_max
+    assert b["z_max_sat"] == b["z_max"] == 194.0

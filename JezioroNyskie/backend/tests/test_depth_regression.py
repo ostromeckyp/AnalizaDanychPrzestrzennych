@@ -50,7 +50,7 @@ def test_zones_match_baseline(products, key):
 def test_point_info_matches_baseline(products, case):
     out = compute_point(products, case["lon"], case["lat"], case["h"], case["draft"], case["margin"])
     # pola KŻ doszły po zamrożeniu referencji; przy wyłączonym KŻ muszą mieć wartości „tylko satelita"
-    new = {k: out.pop(k) for k in ("bottom_source", "kz_conflict", "kz_interp")}
-    if os.environ.get("MIELIZNA_NO_KZ", "0") not in ("", "0"):
-        assert new == {"bottom_source": "satellite", "kz_conflict": False, "kz_interp": None}
+    new = {k: out.pop(k) for k in ("bottom_source", "kz_conflict", "kz_interp", "z_max_sat")}
+    if not products.combined:           # sam satelita: surowa granica = serwowana granica
+        assert new == {"bottom_source": "satellite", "kz_conflict": False, "kz_interp": None, "z_max_sat": out["z_max"]}
     assert out == case["out"]

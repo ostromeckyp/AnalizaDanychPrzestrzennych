@@ -710,6 +710,11 @@
        }
       ],
       "title": "Calibration Coverage"
+     },
+     "combined_bounds": {
+      "type": "boolean",
+      "title": "Combined Bounds",
+      "default": false
      }
     },
     "type": "object",
@@ -2155,6 +2160,17 @@
         "type": "null"
        }
       ]
+     },
+     "z_max_sat": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Z Max Sat"
      }
     },
     "type": "object",

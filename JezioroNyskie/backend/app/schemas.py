@@ -111,7 +111,8 @@ class Accuracy(BaseModel):
     holdout_bias: float | None = None
     holdout_in_bounds: float | None = None   # udział pikseli brzegowych, dla których predykcja mieści się w granicach
     holdout_n_scenes: int | None = None
-    calibration_coverage: float | None = None   # pokrycie granic dna po kalibracji (udział pikseli kontrolnych w granicach), null bez `eval/calibration.json`
+    calibration_coverage: float | None = None   # pokrycie granic dna po kalibracji (udział pikseli kontrolnych w granicach); null bez `eval/calibration.json` albo bez granic łączonych
+    combined_bounds: bool = False   # backend serwuje granice łączone (satelita skalibrowany + mapa KŻ); False = surowy satelita
 
 
 class ValidationCheck(BaseModel):
@@ -230,6 +231,7 @@ class PointResponse(BaseModel):
     bottom_source: Literal["satellite", "kz"]   # skąd pochodzi dno piksela: satelita (skalibrowany) albo mapa KŻ
     kz_conflict: bool               # mapa KŻ przeczy satelicie w tym pikselu (dno zostaje satelitarne)
     kz_interp: "KzInterp | None"    # percentyle błędu interpolacji mapy KŻ [m]; tylko gdy bottom_source = kz
+    z_max_sat: float | None = None  # surowa górna granica dna z satelity [m n.p.m.] (przed kalibracją); null dla +∞ i poza modelem
 
 
 class GravelProperties(BaseModel):

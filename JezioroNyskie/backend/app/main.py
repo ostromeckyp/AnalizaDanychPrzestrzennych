@@ -145,7 +145,9 @@ def eval_accuracy(products: Products) -> dict:
             "holdout_bias": _num(ev.get("holdout"), "holdout", "vertical", "bias"),
             "holdout_in_bounds": _num(ev.get("holdout"), "holdout", "vertical", "share_in_bounds"),
             "holdout_n_scenes": _int(ev.get("holdout"), "n_test_scenes"),
-            "calibration_coverage": _num(ev.get("calibration"), "coverage_after", "overall")}
+            # pokrycie po kalibracji tylko wtedy, gdy serwujemy skalibrowane granice; bez nich liczba by kłamała
+            "calibration_coverage": _num(ev.get("calibration"), "coverage_after", "overall") if products.combined else None,
+            "combined_bounds": products.combined}
 
 
 def _int(d, *keys) -> int | None:

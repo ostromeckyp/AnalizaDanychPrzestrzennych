@@ -326,6 +326,11 @@ export interface components {
             holdout_n_scenes?: number | null;
             /** Calibration Coverage */
             calibration_coverage?: number | null;
+            /**
+             * Combined Bounds
+             * @default false
+             */
+            combined_bounds: boolean;
         };
         /** AreaLevel */
         AreaLevel: {
@@ -791,6 +796,8 @@ export interface components {
             /** Kz Conflict */
             kz_conflict: boolean;
             kz_interp: components["schemas"]["KzInterp"] | null;
+            /** Z Max Sat */
+            z_max_sat?: number | null;
         };
         /** SceneOut */
         SceneOut: {
