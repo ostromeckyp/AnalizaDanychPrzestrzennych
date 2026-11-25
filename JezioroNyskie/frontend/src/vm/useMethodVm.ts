@@ -281,8 +281,12 @@ export function useMethodVm(): MethodVm {
   };
 }
 
-/** Akapity o dnie z mapy KŻ i o kalibracji przedziałów; liczby tylko z meta (bez nich zdanie bez liczby). */
-function deepBottomOf(meta: Meta): MethodDeepBottom {
+/**
+ * Akapity o dnie z mapy KŻ i o kalibracji przedziałów; liczby tylko z meta (bez nich zdanie bez liczby).
+ * Bez granic łączonych (MIELIZNA_NO_KZ albo brak `model/<okres>_kz`) backend serwuje surowy satelita: sekcji nie ma.
+ */
+function deepBottomOf(meta: Meta): MethodDeepBottom | undefined {
+  if (!meta.accuracy.combined_bounds) return undefined;
   const loo = meta.validation?.bands.find((b) => b.kz_loo)?.kz_loo;
   const kz =
     'Tam, gdzie jezioro nigdy nie odsłoniło dna (strefa „zawsze woda”), satelita wie tylko, że dno leży niżej niż ' +

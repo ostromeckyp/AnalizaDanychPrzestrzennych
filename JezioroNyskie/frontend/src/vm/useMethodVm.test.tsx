@@ -251,6 +251,13 @@ describe('useMethodVm', () => {
     expect(kz).not.toContain('To błąd mapy sprawdzonej samą sobą');
   });
 
+  it('deep-bottom section is hidden when the backend serves raw satellite bounds', async () => {
+    metaMock.mockResolvedValue({ ...meta, accuracy: { ...meta.accuracy, combined_bounds: false, calibration_coverage: null } });
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.deepBottom).toBeUndefined();
+  });
+
   it('sources list the KŻ deep-bottom layer with the UWAGA terms', async () => {
     metaMock.mockResolvedValue(meta);
     const { result } = setup();
